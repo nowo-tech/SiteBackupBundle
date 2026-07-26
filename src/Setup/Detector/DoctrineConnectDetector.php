@@ -7,6 +7,8 @@ namespace Nowo\SiteBackupBundle\Setup\Detector;
 use Nowo\SiteBackupBundle\Setup\SetupNeedDetectorInterface;
 use Throwable;
 
+use function is_object;
+
 /**
  * Optional: when a DBAL Connection is available, failed connect ⇒ setup required.
  */
@@ -20,19 +22,19 @@ final class DoctrineConnectDetector implements SetupNeedDetectorInterface
 
     public function isSetupRequired(): bool
     {
-        if (!$this->enabled || !\is_object($this->connection)) {
+        if (!$this->enabled || !is_object($this->connection)) {
             return false;
         }
 
         $connection = $this->connection;
 
         try {
-            if (\method_exists($connection, 'executeQuery')) {
+            if (method_exists($connection, 'executeQuery')) {
                 $connection->executeQuery('SELECT 1');
 
                 return false;
             }
-            if (\method_exists($connection, 'connect')) {
+            if (method_exists($connection, 'connect')) {
                 $connection->connect();
 
                 return false;

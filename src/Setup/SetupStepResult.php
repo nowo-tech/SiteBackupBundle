@@ -22,7 +22,7 @@ final class SetupStepResult
      */
     public static function ok(string $message = '', array $log = []): self
     {
-        /** @var list<string> $log */
+        /* @var list<string> $log */
         return new self(true, $message, $log);
     }
 
@@ -31,7 +31,7 @@ final class SetupStepResult
      */
     public static function fail(string $message, array $log = []): self
     {
-        /** @var list<string> $log */
+        /* @var list<string> $log */
         return new self(false, $message, $log);
     }
 

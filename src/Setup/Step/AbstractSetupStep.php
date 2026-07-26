@@ -14,7 +14,7 @@ abstract class AbstractSetupStep implements SetupStepInterface
     public function __construct(
         protected readonly string $id,
         protected readonly string $label,
-        /** @var 'auto'|'form'|'confirm' */
+        /** @var 'auto'|'confirm'|'form' */
         protected readonly string $uiKind = 'auto',
     ) {
     }
@@ -31,7 +31,7 @@ abstract class AbstractSetupStep implements SetupStepInterface
 
     public function getUiKind(): string
     {
-        /** @var 'auto'|'form'|'confirm' */
+        /* @var 'auto'|'form'|'confirm' */
         return $this->uiKind;
     }
 

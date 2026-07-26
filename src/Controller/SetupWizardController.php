@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Controller;
 
+use JsonException;
 use Nowo\SiteBackupBundle\Model\SetupProgress;
 use Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator;
 use Nowo\SiteBackupBundle\Setup\SetupOrchestrator;
@@ -18,6 +19,7 @@ use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
 use Twig\Environment;
 
 use function hash_equals;
+use function is_array;
 use function is_string;
 use function json_decode;
 use function rtrim;
@@ -146,10 +148,10 @@ final class SetupWizardController
             try {
                 /** @var mixed $decoded */
                 $decoded = json_decode($content, true, 512, JSON_THROW_ON_ERROR);
-                if (\is_array($decoded)) {
+                if (is_array($decoded)) {
                     $payload = $decoded;
                 }
-            } catch (\JsonException) {
+            } catch (JsonException) {
                 // keep form/request bag
             }
         }

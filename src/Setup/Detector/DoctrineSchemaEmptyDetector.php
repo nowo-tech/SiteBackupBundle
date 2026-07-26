@@ -7,6 +7,9 @@ namespace Nowo\SiteBackupBundle\Setup\Detector;
 use Nowo\SiteBackupBundle\Setup\SetupNeedDetectorInterface;
 use Throwable;
 
+use function is_array;
+use function is_object;
+
 /**
  * Optional: connected DB with zero tables ⇒ setup required.
  */
@@ -20,7 +23,7 @@ final class DoctrineSchemaEmptyDetector implements SetupNeedDetectorInterface
 
     public function isSetupRequired(): bool
     {
-        if (!$this->enabled || !\is_object($this->connection)) {
+        if (!$this->enabled || !is_object($this->connection)) {
             return false;
         }
 
@@ -28,21 +31,21 @@ final class DoctrineSchemaEmptyDetector implements SetupNeedDetectorInterface
 
         try {
             $tables = [];
-            if (\method_exists($connection, 'createSchemaManager')) {
+            if (method_exists($connection, 'createSchemaManager')) {
                 /** @var mixed $manager */
                 $manager = $connection->createSchemaManager();
-                if (\is_object($manager) && \method_exists($manager, 'listTableNames')) {
+                if (is_object($manager) && method_exists($manager, 'listTableNames')) {
                     /** @var mixed $listed */
                     $listed = $manager->listTableNames();
-                    $tables = \is_array($listed) ? $listed : [];
+                    $tables = is_array($listed) ? $listed : [];
                 }
-            } elseif (\method_exists($connection, 'getSchemaManager')) {
+            } elseif (method_exists($connection, 'getSchemaManager')) {
                 /** @var mixed $manager */
                 $manager = $connection->getSchemaManager();
-                if (\is_object($manager) && \method_exists($manager, 'listTableNames')) {
+                if (is_object($manager) && method_exists($manager, 'listTableNames')) {
                     /** @var mixed $listed */
                     $listed = $manager->listTableNames();
-                    $tables = \is_array($listed) ? $listed : [];
+                    $tables = is_array($listed) ? $listed : [];
                 }
             } else {
                 return false;
