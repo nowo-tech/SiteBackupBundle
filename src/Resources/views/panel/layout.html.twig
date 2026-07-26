@@ -27,8 +27,8 @@
     <a href="{{ pathPrefix }}/history">History</a>
 </header>
 <main>
-    {% if error %}<div class="flash err">{{ error }}</div>{% endif %}
-    {% if success %}<div class="flash ok">{{ success }}</div>{% endif %}
+    {% if error is defined and error %}<div class="flash err">{{ error }}</div>{% endif %}
+    {% if success is defined and success %}<div class="flash ok">{{ success }}</div>{% endif %}
     {% block body %}{% endblock %}
 </main>
 </body>
