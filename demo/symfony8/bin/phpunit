@@ -1,0 +1,11 @@
+#!/usr/bin/env php
+<?php
+
+declare(strict_types=1);
+
+if (!is_file(dirname(__DIR__) . '/vendor/phpunit/phpunit/phpunit')) {
+    fwrite(STDERR, "Unable to find PHPUnit. Run composer install.\n");
+    exit(1);
+}
+
+require dirname(__DIR__) . '/vendor/phpunit/phpunit/phpunit';

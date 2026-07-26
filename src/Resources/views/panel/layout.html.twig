@@ -1,0 +1,35 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block title %}Site Backup{% endblock %}</title>
+    <style>
+        body { font-family: system-ui, sans-serif; margin: 0; background: #f8fafc; color: #0f172a; }
+        header { background: #0f172a; color: #fff; padding: 1rem 1.5rem; display: flex; gap: 1rem; align-items: center; }
+        header a { color: #93c5fd; text-decoration: none; }
+        main { max-width: 960px; margin: 1.5rem auto; padding: 0 1rem; }
+        .flash { padding: .75rem 1rem; border-radius: 8px; margin-bottom: 1rem; }
+        .flash.ok { background: #dcfce7; }
+        .flash.err { background: #fee2e2; }
+        table { width: 100%; border-collapse: collapse; background: #fff; }
+        th, td { border-bottom: 1px solid #e2e8f0; padding: .65rem .5rem; text-align: left; font-size: .92rem; }
+        form.inline { display: inline; }
+        button, .btn { background: #2563eb; color: #fff; border: 0; border-radius: 8px; padding: .45rem .8rem; cursor: pointer; }
+        button.danger { background: #dc2626; }
+        .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1rem; margin-bottom: 1rem; }
+    </style>
+</head>
+<body>
+<header>
+    <strong>Site Backup</strong>
+    <a href="{{ pathPrefix }}">Panel</a>
+    <a href="{{ pathPrefix }}/history">History</a>
+</header>
+<main>
+    {% if error %}<div class="flash err">{{ error }}</div>{% endif %}
+    {% if success %}<div class="flash ok">{{ success }}</div>{% endif %}
+    {% block body %}{% endblock %}
+</main>
+</body>
+</html>

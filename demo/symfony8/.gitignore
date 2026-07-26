@@ -1,0 +1,26 @@
+###> symfony/framework-bundle ###
+/.env.local
+/.env.local.php
+/.env.*.local
+/config/secrets/prod/prod.decrypt.private.php
+/public/bundles/
+/var/
+/vendor/
+###< symfony/framework-bundle ###
+
+.phpunit.cache/
+.phpunit.result.cache
+/coverage/
+composer.lock.bak
+
+###> phpunit/phpunit ###
+/phpunit.xml
+/.phpunit.cache/
+###< phpunit/phpunit ###
+
+# Env policy (REQ-DEMO-003 / REQ-ENV-001)
+.env
+.env.dev
+!.env.example
+!.env.test
+composer.lock

@@ -1,0 +1,39 @@
+# Configuration
+
+Root key: `nowo_site_backup`.
+
+| Key | Default | Notes |
+| --- | --- | --- |
+| `enabled` | `true` | Master switch for the restore loading page |
+| `default_message` | Restoring… | Public loading page copy |
+| `status_code` | `503` | HTTP status while restore is active |
+| `subscriber_priority` | `31` | After router (exclusions / attributes) |
+| `process_timeout` | `600` | Seconds for `tar` / dump processes (REQ-RUNTIME-001) |
+| `backup.include_paths` | config, public, templates, … | Relative to `kernel.project_dir` |
+| `backup.exclude_patterns` | cache/log/vendor/… | `fnmatch` against relative paths |
+| `backup.storage_dir` | `%kernel.project_dir%/var/site-backup/archives` | Archives + `.meta.json` |
+| `backup.database_dump_command` | `null` | Shell command writing SQL to stdout |
+| `restore.progress_file` | `var/site-backup/restore-progress.json` | Polled by the loading UI |
+| `restore.protected_paths` | `.env.local`, `var/site-backup` | Never overwritten on apply |
+| `panel.path_prefix` | `/_site_backup` | Auto-excluded from loading page |
+| `security.password_hash` | `null` | Prefer env `SITE_BACKUP_PASSWORD_HASH` |
+| `templates.*` | `@NowoSiteBackupBundle/...` | Overrideable Twig templates |
+
+Profiles (`default_profile` / `profiles`) are **not** used for backup state: backup state is global (REQ-CFG-001 N/A for backups).
+
+**Setup wizard profiles** (`setup.profiles.*`) are documented in [SETUP-WIZARD.md](SETUP-WIZARD.md) (`fresh_install`, `post_restore`, `minimal`, custom).
+
+## Example
+
+```yaml
+nowo_site_backup:
+    process_timeout: 900
+    backup:
+        include_paths: [config, public/uploads, templates, src, composer.json]
+        database_dump_command: 'mysqldump --single-transaction -u$DB_USER -p$DB_PASSWORD $DB_NAME'
+    restore:
+        protected_paths: ['.env.local', 'var/site-backup', 'config/secrets']
+    exclusions:
+        paths: ['/health']
+        path_prefixes: ['/api/health']
+```

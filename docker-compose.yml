@@ -1,0 +1,28 @@
+name: site-backup-bundle
+services:
+  php:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: site-backup-bundle-php
+    working_dir: /app
+    volumes:
+      - .:/app
+      - composer-cache:/root/.composer/cache
+      - coverage-data:/app/coverage
+    environment:
+      - COMPOSER_ALLOW_SUPERUSER=1
+      - COMPOSER_ROOT_VERSION=1.0.0-dev
+    command: ["tail", "-f", "/dev/null"]
+    networks:
+      - site-backup-bundle-network
+
+volumes:
+  composer-cache:
+    driver: local
+  coverage-data:
+    driver: local
+
+networks:
+  site-backup-bundle-network:
+    driver: bridge

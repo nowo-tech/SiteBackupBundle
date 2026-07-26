@@ -1,0 +1,40 @@
+# Default config reference (applications override via config/packages/nowo_site_backup.yaml)
+nowo_site_backup:
+    enabled: true
+    panel:
+        path_prefix: '/_site_backup'
+    backup:
+        include_paths:
+            - config
+            - public
+            - templates
+            - translations
+            - src
+            - migrations
+            - composer.json
+            - composer.lock
+            - .env
+        exclude_patterns:
+            - 'var/cache/*'
+            - 'var/log/*'
+            - 'var/site-backup/*'
+            - 'vendor/*'
+            - 'node_modules/*'
+            - '.git/*'
+        # database_dump_command: 'mysqldump -u$DB_USER -p$DB_PASSWORD $DB_NAME'
+    security:
+        password_protection: true
+        # password_hash: '%env(SITE_BACKUP_PASSWORD_HASH)%'
+    setup:
+        enabled: true
+        path_prefix: '/_setup'
+        # require_done_marker: true   # force wizard until setup.done exists
+        brand_name: 'Site Setup'
+        # setup_token: '%env(SITE_SETUP_TOKEN)%'
+        # admin_provisioner: App\Setup\AdminUserProvisioner
+        detectors:
+            marker: true
+            doctrine_connect: false
+            doctrine_schema_empty: false
+        default_profile: fresh_install
+        # Customize profiles / steps — see docs/SETUP-WIZARD.md

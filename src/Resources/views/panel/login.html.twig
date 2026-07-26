@@ -1,0 +1,19 @@
+{% extends '@NowoSiteBackupBundle/panel/layout.html.twig' %}
+
+{% block title %}Login — Site Backup{% endblock %}
+
+{% block body %}
+<section class="card">
+    <h2>Site Backup panel</h2>
+    {% if not protectionEnabled %}
+        <p>Password protection is disabled. Open the panel after enabling a hash in config.</p>
+    {% else %}
+        <form method="post">
+            <input type="hidden" name="_csrf_token" value="{{ csrfToken }}">
+            <input type="hidden" name="action" value="login">
+            <label>Password <input type="password" name="password" required autofocus></label>
+            <button type="submit">Sign in</button>
+        </form>
+    {% endif %}
+</section>
+{% endblock %}

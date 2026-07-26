@@ -1,0 +1,25 @@
+{% extends '@NowoSiteBackupBundle/panel/layout.html.twig' %}
+
+{% block title %}History — Site Backup{% endblock %}
+
+{% block body %}
+<section class="card">
+    <h2>History</h2>
+    <table>
+        <thead><tr><th>When</th><th>Action</th><th>Backup</th><th>Actor</th><th>Message</th></tr></thead>
+        <tbody>
+        {% for h in history %}
+            <tr>
+                <td>{{ h.occurredAt|date('Y-m-d H:i:s') }}</td>
+                <td>{{ h.action }}</td>
+                <td>{{ h.backupId }}</td>
+                <td>{{ h.actor }}</td>
+                <td>{{ h.message }}</td>
+            </tr>
+        {% else %}
+            <tr><td colspan="5">No history.</td></tr>
+        {% endfor %}
+        </tbody>
+    </table>
+</section>
+{% endblock %}

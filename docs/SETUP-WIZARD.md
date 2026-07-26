@@ -1,0 +1,348 @@
+# Setup Wizard (cold start & post-restore)
+
+## Table of contents
+
+- [Problem](#problem)
+- [Product idea](#product-idea)
+- [Modes and site gate](#modes-and-site-gate)
+- [UI flows](#ui-flows)
+- [Wizard engine](#wizard-engine)
+- [Built-in step types](#built-in-step-types)
+- [Configuration (polyvalent)](#configuration-polyvalent)
+- [Profiles](#profiles)
+- [Security](#security)
+- [Idempotency contract](#idempotency-contract)
+- [Integration with backup / restore](#integration-with-backup--restore)
+- [Twig overrides](#twig-overrides)
+- [CLI](#cli)
+- [Events](#events)
+- [Implementation roadmap](#implementation-roadmap)
+
+## Problem
+
+Two situations leave the site **unusable** if you only show a static loading page:
+
+1. **Fresh install** — no database (or empty schema), no admin user, no seed data.
+2. **Restore from scratch** — files restored, but DB missing / dump not imported / migrations not applied.
+
+Operators need a **guided UI** that can create the DB, run schema/migrations, load minimal SQL, run idempotent loaders, create a super-admin, and optionally load demo data — without SSH for every project.
+
+## Product idea
+
+Extend Site Backup with a **Setup Wizard** (same bundle, separate subsystem under `setup:`):
+
+| Concern | UI | Goal |
+| --- | --- | --- |
+| **Restore** | Loading page (progress bar) | Don’t serve a half-restored app |
+| **Setup** | Multi-step wizard | Bring an empty/broken DB to a bootable app |
+
+One **site gate** decides what visitors see. The wizard is **declarative and pluggable** so each app defines its own pipeline (Doctrine, SQL files, custom commands, own User entity).
+
+```mermaid
+flowchart TD
+  req[HTTP request] --> gate{Site gate}
+  gate -->|restore active| load[Restore loading page 503]
+  gate -->|setup required| wiz[Setup wizard /_setup]
+  gate -->|ready| app[Normal application]
+  wiz --> steps[Step pipeline]
+  steps --> done[Write setup.done]
+  done --> app
+```
+
+## Modes and site gate
+
+Priority (first match wins):
+
+1. **Restore mode** — `RestoreProgress.active` → restore loading page (existing behaviour).
+2. **Setup mode** — any `SetupNeedDetectorInterface` says “needed” **and** `setup.lock` / `setup.done` allow it → wizard.
+3. **Ready** — normal kernel.
+
+Detectors (all optional, tagged `nowo.site_backup.setup_detector`):
+
+| Detector | When it triggers |
+| --- | --- |
+| `MarkerFileDetector` | `var/site-backup/setup.required` exists or `setup.done` missing (configurable) |
+| `DoctrineConnectDetector` | DBAL cannot connect |
+| `DoctrineSchemaEmptyDetector` | connected but no tables / no `doctrine_migration_versions` |
+| Custom | App-specific health |
+
+After a successful wizard finish: write `setup.done`, remove `setup.required`, emit `SetupCompletedEvent`.
+
+During setup, the gate **blocks** the rest of the site (503 or soft redirect to `/_setup`) except:
+
+- wizard routes (`/_setup`, `/_setup/api/*`)
+- health exclusions
+- optional restore panel (ops)
+
+## UI flows
+
+### A — Fresh install (no DB)
+
+```
+/_setup
+  1. Welcome + requirements checklist (PHP ext, tar, writable var/)
+  2. Database DSN form (optional; skip if DATABASE_URL already works)
+  3. Run pipeline (auto steps with live progress)
+  4. Create initial super-admin (form)
+  5. Optional: “Load sample data?” (yes/no)
+  6. Done → link to login / homepage
+```
+
+### B — Post-restore (files OK, DB cold)
+
+Same wizard, **profile** `post_restore`:
+
+- Prefer `import_sql` from `var/site-backup/last-restore-dump.sql` when present
+- Then migrations (if dump was schema-only) or skip schema when dump is full
+- Skip sample data by default
+- Still offer “create admin” only if no users table row matches provisioner check
+
+### C — Headless / CI
+
+```bash
+php bin/console nowo:site-backup:setup --profile=fresh_install --no-interaction \
+  --admin-email=ops@example.com --admin-password=...
+```
+
+Same pipeline as the UI; interactive steps fail unless options are passed.
+
+### UI chrome (single composition)
+
+Public setup surface (not a dashboard of cards):
+
+- Brand / app name (from config)
+- One headline + one short line
+- Step indicator (1…N)
+- Main panel = current step only
+- Footer: Back / Continue (or auto-advance on runner steps)
+
+Templates under `@NowoSiteBackupBundle/setup/…` (REQ-TWIG-001 overridable).
+
+Progress for long steps: poll `GET /_setup/api/progress` (same pattern as restore `progress.json`).
+
+## Wizard engine
+
+### Contracts
+
+```php
+interface SetupStepInterface
+{
+    public function getId(): string;
+    public function getLabel(): string;
+    /** @return 'auto'|'form'|'confirm' */
+    public function getUiKind(): string;
+    public function isEnabled(SetupContext $ctx): bool;
+    public function isComplete(SetupContext $ctx): bool; // idempotent skip
+    public function run(SetupContext $ctx, SetupStepInput $input): SetupStepResult;
+}
+
+interface SetupNeedDetectorInterface
+{
+    public function isSetupRequired(): bool;
+    public function getReason(): string;
+}
+
+interface AdminUserProvisionerInterface
+{
+    public function adminExists(): bool;
+    /** @param array{email: string, password: string, roles?: list<string>} $data */
+    public function createAdmin(array $data): void;
+}
+```
+
+`SetupContext` holds: profile name, project dir, progress storage, bag of answers (DSN, flags), selected options (sample data yes/no).
+
+`SetupOrchestrator`:
+
+1. Resolve profile → ordered step ids
+2. Skip steps where `isComplete()` is true
+3. Run next step; persist progress JSON
+4. On form steps, wait for POST input
+5. On failure: mark failed, keep UI on that step with error (retryable)
+
+Steps registered via:
+
+- YAML declarations (built-in types), and/or
+- Tagged services `nowo.site_backup.setup_step`
+
+## Built-in step types
+
+| Type | What it runs | Notes |
+| --- | --- | --- |
+| `requirements` | PHP version, extensions, writable dirs | Form = checklist UI only |
+| `database_url` | Validate / optionally write `.env.local` | Never commit secrets; optional |
+| `console` | `Process` → `php bin/console …` | Timeout = `process_timeout` |
+| `database_create` | `doctrine:database:create --if-not-exists` | Shortcut over `console` |
+| `cache_clear` | `cache:clear` | Always before schema when configured |
+| `schema_update` | `doctrine:schema:update --force` | Mutually exclusive with migrate in same profile (or ordered explicitly) |
+| `migrations` | `doctrine:migrations:migrate --no-interaction` | Preferred for apps that ship migrations |
+| `sql_file` | Execute `.sql` paths (glob) | For minimal seed / dump import |
+| `admin_user` | Calls `AdminUserProvisionerInterface` | Interactive form in UI |
+| `sample_data` | Runs configured console commands | Only if user opted in |
+| `marker` | Write/remove lock files | `setup.done`, clear `setup.required` |
+
+Generic **`console`** is the escape hatch: any idempotent app command (`app:load-taxonomy`, `app:seed-roles`, …).
+
+## Configuration (polyvalent)
+
+```yaml
+nowo_site_backup:
+    setup:
+        enabled: true
+        path_prefix: '/_setup'
+        # When true, missing setup.done forces wizard (good for fresh clones)
+        require_done_marker: true
+        brand_name: '%env(default:APP_NAME:APP_NAME)%'
+        process_timeout: 600
+        # App must bind a provisioner (or disable admin_user steps)
+        admin_provisioner: App\Setup\AdminUserProvisioner
+        detectors:
+            marker: true
+            doctrine_connect: true
+            doctrine_schema_empty: true
+        default_profile: fresh_install
+        profiles:
+            fresh_install:
+                steps:
+                    - { type: requirements }
+                    - { type: database_url, optional: true }
+                    - { type: database_create }
+                    - { type: cache_clear }
+                    - { type: migrations }          # or schema_update
+                    - { type: sql_file, paths: ['%kernel.project_dir%/data/seed/minimal/*.sql'] }
+                    - { type: console, command: 'app:seed-roles', idempotent: true }
+                    - { type: admin_user, roles: ['ROLE_SUPER_ADMIN'] }
+                    - { type: sample_data, when: 'opt_in', commands: ['app:load-fixtures --group=demo'] }
+                    - { type: marker, write_done: true }
+            post_restore:
+                steps:
+                    - { type: requirements }
+                    - { type: database_create }
+                    - { type: cache_clear }
+                    - { type: sql_file, paths: ['%kernel.project_dir%/var/site-backup/last-restore-dump.sql'], if_exists: true }
+                    - { type: migrations }          # no-op if already at latest
+                    - { type: console, command: 'app:seed-roles', idempotent: true }
+                    - { type: admin_user, skip_if_admin_exists: true }
+                    - { type: marker, write_done: true }
+            minimal:
+                steps:
+                    - { type: database_create }
+                    - { type: migrations }
+                    - { type: admin_user }
+                    - { type: marker, write_done: true }
+```
+
+### App-owned pieces (required for full wizard)
+
+1. **`AdminUserProvisionerInterface`** — knows your User entity / hasher / roles.
+2. **Idempotent console commands** — e.g. `app:seed-roles` upserts; safe to re-run.
+3. **Optional SQL seeds** under `data/seed/minimal/`.
+4. **Optional fixtures command** for sample data.
+
+The bundle does **not** hardcode a User class (polyvalent).
+
+## Profiles
+
+| Profile | Typical use |
+| --- | --- |
+| `fresh_install` | Empty project / first deploy |
+| `post_restore` | After Site Backup restore (auto-suggested when `last-restore-dump.sql` exists) |
+| `minimal` | CI smoke / slim bootstrap |
+| Custom | Apps add `profiles.my_cloud: …` |
+
+Restore orchestrator can set `setup.required` + preferred profile `post_restore` when finishing a restore that left DB cold.
+
+## Security
+
+- Wizard routes are public **only while setup is required**; once `setup.done` exists, `/_setup` returns 404 or redirects home.
+- Optional **setup token** (`?token=` / env `SITE_SETUP_TOKEN`) for internet-facing first boot.
+- Admin password never logged; CSRF on all POSTs.
+- `database_url` step must not echo password back in HTML.
+- `console` commands are **config-defined only** (no free-form HTTP command execution).
+- Document in `docs/SECURITY.md` (attack surface: setup endpoints).
+
+## Idempotency contract
+
+Every auto step must be safe to retry:
+
+| Step | Idempotent behaviour |
+| --- | --- |
+| `database_create` | `--if-not-exists` |
+| `migrations` | migrate to latest; already-applied = success |
+| `schema_update` | `--force` on empty/partial; prefer migrations when possible |
+| `sql_file` | Prefer `INSERT … ON CONFLICT` / guarded inserts; or “run once” marker per file hash |
+| `console` | App command must upsert; declare `idempotent: true` |
+| `admin_user` | `skip_if_admin_exists` or provisioner `adminExists()` |
+| `sample_data` | Fixtures purge+load only when opted in; loaders upsert |
+
+Progress storage records `completed_steps[]` so a refresh resumes at the next incomplete step.
+
+## Integration with backup / restore
+
+```mermaid
+sequenceDiagram
+  participant Ops
+  participant Restore as Restore loading UI
+  participant Setup as Setup wizard
+  participant App
+  Ops->>Restore: restore archive
+  Restore->>Restore: apply files + copy dump.sql
+  Restore->>Setup: set setup.required + profile=post_restore
+  Restore-->>Ops: restore completed
+  Note over App: visitors still gated
+  Ops->>Setup: open /_setup
+  Setup->>Setup: import dump / migrate / roles / admin
+  Setup->>App: setup.done
+  App-->>Ops: site ready
+```
+
+Changes vs current restore behaviour:
+
+- After restore, **do not** drop the gate immediately if detectors still say “not ready”.
+- Transition: restore loading → (optional short message) → redirect to `/_setup?profile=post_restore`.
+
+## Twig overrides
+
+| Subpath | Role |
+| --- | --- |
+| `setup/layout.html.twig` | Wizard chrome |
+| `setup/welcome.html.twig` | Step welcome |
+| `setup/runner.html.twig` | Auto steps + progress |
+| `setup/database.html.twig` | DSN form |
+| `setup/admin.html.twig` | Super-admin form |
+| `setup/sample_data.html.twig` | Opt-in sample data |
+| `setup/done.html.twig` | Success |
+
+## CLI
+
+| Command | Purpose |
+| --- | --- |
+| `nowo:site-backup:setup` | Run profile headless |
+| `nowo:site-backup:setup-status` | Detectors + completed steps |
+| `nowo:site-backup:setup-reset` | Remove `setup.done` (dev only; gated) |
+
+## Events
+
+- `SetupStartedEvent`
+- `SetupStepCompletedEvent`
+- `SetupStepFailedEvent`
+- `SetupCompletedEvent`
+
+Apps can hook mailers, telemetry, or cache warmers.
+
+## Implementation roadmap
+
+| Phase | Deliverable | Status |
+| --- | --- | --- |
+| **P0** | Spec + config tree + detectors + gate + wizard shell | ✅ |
+| **P1** | Built-in steps: `console`, `cache_clear`, `database_create`, `migrations` / `schema_update`, `sql_file`, `marker` | ✅ |
+| **P2** | Interactive: `admin_user` + `sample_data` + progress API | ✅ |
+| **P3** | Auto-link from restore completion → `post_restore` profile | ✅ |
+| **P4** | Demo Symfony8 walks full wizard; expand coverage | Partial |
+
+### Non-goals (keep polyvalent)
+
+- Shipping a concrete User entity or Security firewall
+- Replacing Doctrine Migrations with a proprietary migrator
+- Remote agent installers / multi-tenant SaaS onboarding
+- Free-form shell from the browser

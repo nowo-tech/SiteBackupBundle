@@ -1,0 +1,8 @@
+controllers:
+    resource:
+        path: ../src/Controller/
+        namespace: App\Controller
+    type: attribute
+
+nowo_site_backup:
+    resource: '@NowoSiteBackupBundle/Resources/config/routes.yaml'

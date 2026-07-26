@@ -1,0 +1,2 @@
+nowo_site_backup:
+    resource: '@NowoSiteBackupBundle/Resources/config/routes.yaml'

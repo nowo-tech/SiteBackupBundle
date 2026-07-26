@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>Site Backup Bundle demo</title>
+    <style>
+        body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
+        code { background: #f1f5f9; padding: .1rem .35rem; border-radius: 4px; }
+        a { color: #2563eb; }
+    </style>
+</head>
+<body>
+    <h1>Site Backup Bundle — demo</h1>
+    <p>Create an integral backup, verify checksums, restore safely, and finish cold bootstrap with the setup wizard.</p>
+    <ul>
+        <li><a href="/_site_backup">Backup panel</a> (password: <code>password</code>)</li>
+        <li><a href="/_setup">Setup wizard</a> (when <code>setup.required</code> is present)</li>
+        <li>CLI: <code>php bin/console nowo:site-backup:create -l demo</code></li>
+        <li>Health exclusion: <a href="/health">/health</a></li>
+    </ul>
+    <p>FrankenPHP worker mode is on by default (<code>FRANKENPHP_MODE=worker</code>). See <code>docs/DEMO-FRANKENPHP.md</code>.</p>
+</body>
+</html>

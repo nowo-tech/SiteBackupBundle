@@ -1,0 +1,26 @@
+restore:
+  page:
+    title: 'Restoring site'
+    done: 'Restore finished. Reloading…'
+panel:
+  title: 'Site Backup'
+setup:
+  wizard:
+    title: 'Set up this site'
+    subtitle: 'We will create the database, apply schema, and prepare an admin account.'
+    continue: 'Continue'
+    retry: 'Retry'
+    running: 'Running the next setup step…'
+  admin:
+    create: 'Create admin'
+  sample:
+    prompt: 'Load sample / demo data?'
+    load: 'Yes, load sample data'
+    skip: 'No, skip'
+  database:
+    save: 'Save DATABASE_URL'
+    skip: 'Skip (use existing env)'
+  done:
+    title: 'Setup complete'
+    body: 'The site is ready. You can sign in with the admin account you created.'
+    home: 'Go to homepage'

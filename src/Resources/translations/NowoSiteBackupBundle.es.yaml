@@ -1,0 +1,26 @@
+restore:
+  page:
+    title: 'Restaurando el sitio'
+    done: 'Restauración terminada. Recargando…'
+panel:
+  title: 'Copia de seguridad del sitio'
+setup:
+  wizard:
+    title: 'Configura este sitio'
+    subtitle: 'Crearemos la base de datos, el esquema y una cuenta de administrador.'
+    continue: 'Continuar'
+    retry: 'Reintentar'
+    running: 'Ejecutando el siguiente paso…'
+  admin:
+    create: 'Crear administrador'
+  sample:
+    prompt: '¿Cargar datos de ejemplo?'
+    load: 'Sí, cargar datos de ejemplo'
+    skip: 'No, omitir'
+  database:
+    save: 'Guardar DATABASE_URL'
+    skip: 'Omitir (usar env existente)'
+  done:
+    title: 'Configuración completada'
+    body: 'El sitio está listo. Puedes iniciar sesión con la cuenta de administrador.'
+    home: 'Ir al inicio'

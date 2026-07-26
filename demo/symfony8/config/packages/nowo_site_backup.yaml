@@ -1,0 +1,32 @@
+nowo_site_backup:
+    enabled: true
+    default_message: 'Restoring this demo from a verified backup. Please wait…'
+    process_timeout: 300
+    backup:
+        include_paths:
+            - config
+            - templates
+            - public
+            - composer.json
+        exclude_patterns:
+            - 'var/cache/*'
+            - 'var/log/*'
+            - 'var/site-backup/*'
+            - 'vendor/*'
+        storage_dir: '%kernel.project_dir%/var/site-backup/archives'
+    panel:
+        path_prefix: '/_site_backup'
+    security:
+        password_protection: true
+        # Demo only — password: password (Laravel sample hash; regenerate for real apps)
+        password_hash: '$2y$13$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi'
+    exclusions:
+        paths: ['/health']
+        path_prefixes: ['/api/health']
+
+    setup:
+        enabled: true
+        brand_name: 'Site Backup Demo'
+        require_done_marker: false
+        detectors:
+            marker: true

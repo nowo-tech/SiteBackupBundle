@@ -1,0 +1,78 @@
+{% extends '@NowoSiteBackupBundle/panel/layout.html.twig' %}
+
+{% block title %}Site Backup panel{% endblock %}
+
+{% block body %}
+<section class="card">
+    <h2>Create backup</h2>
+    <form method="post">
+        <input type="hidden" name="_csrf_token" value="{{ csrfToken }}">
+        <input type="hidden" name="action" value="create">
+        <label>Label <input type="text" name="label" placeholder="pre-deploy"></label>
+        <button type="submit">Create integral backup</button>
+    </form>
+</section>
+
+<section class="card">
+    <h2>Restore progress</h2>
+    <p>Phase: <strong>{{ progress.phase }}</strong> — {{ progress.percent|number_format(1) }}%</p>
+    <p>{{ progress.message }}</p>
+    {% if progress.error %}<p style="color:#b91c1c">{{ progress.error }}</p>{% endif %}
+    {% if progress.phase in ['completed', 'failed'] %}
+        <form method="post">
+            <input type="hidden" name="_csrf_token" value="{{ csrfToken }}">
+            <input type="hidden" name="action" value="clear_restore">
+            <button type="submit">Clear status</button>
+        </form>
+    {% endif %}
+</section>
+
+<section class="card">
+    <h2>Archives</h2>
+    {% if backups is empty %}
+        <p>No backups yet.</p>
+    {% else %}
+        <table>
+            <thead>
+            <tr><th>ID</th><th>Created</th><th>Size</th><th>Label</th><th>Actions</th></tr>
+            </thead>
+            <tbody>
+            {% for b in backups %}
+                <tr>
+                    <td><code>{{ b.id }}</code></td>
+                    <td>{{ b.createdAt|date('Y-m-d H:i') }}</td>
+                    <td>{{ b.sizeBytes }}</td>
+                    <td>{{ b.label }}</td>
+                    <td>
+                        <form class="inline" method="post">
+                            <input type="hidden" name="_csrf_token" value="{{ csrfToken }}">
+                            <input type="hidden" name="action" value="verify">
+                            <input type="hidden" name="backup_id" value="{{ b.id }}">
+                            <button type="submit">Verify</button>
+                        </form>
+                        <form class="inline" method="post" onsubmit="return confirm('Restore this backup now? Visitors will see the loading page.');">
+                            <input type="hidden" name="_csrf_token" value="{{ csrfToken }}">
+                            <input type="hidden" name="action" value="restore">
+                            <input type="hidden" name="backup_id" value="{{ b.id }}">
+                            <button type="submit">Restore</button>
+                        </form>
+                        <form class="inline" method="post" onsubmit="return confirm('Delete backup?');">
+                            <input type="hidden" name="_csrf_token" value="{{ csrfToken }}">
+                            <input type="hidden" name="action" value="delete">
+                            <input type="hidden" name="backup_id" value="{{ b.id }}">
+                            <button class="danger" type="submit">Delete</button>
+                        </form>
+                    </td>
+                </tr>
+            {% endfor %}
+            </tbody>
+        </table>
+    {% endif %}
+</section>
+
+<form method="post">
+    <input type="hidden" name="_csrf_token" value="{{ csrfToken }}">
+    <input type="hidden" name="action" value="logout">
+    <button type="submit">Logout</button>
+</form>
+{% endblock %}

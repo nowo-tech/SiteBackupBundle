@@ -1,0 +1,6 @@
+  Site Backup Bundle installed.
+
+  * Panel: /_site_backup
+  * Create a password hash:
+      php bin/console nowo:site-backup:hash-password
+  * Docs: https://github.com/nowo-tech/SiteBackupBundle/tree/main/docs

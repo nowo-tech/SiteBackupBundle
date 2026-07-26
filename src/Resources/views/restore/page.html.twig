@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <meta http-equiv="refresh" content="8">
+    <title>{{ 'restore.page.title'|trans({}, 'NowoSiteBackupBundle') }}</title>
+    <style>
+        :root {
+            --bg: #0f172a;
+            --card: #1e293b;
+            --text: #e2e8f0;
+            --muted: #94a3b8;
+            --accent: #38bdf8;
+            --ok: #4ade80;
+            --err: #f87171;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            min-height: 100vh;
+            display: grid;
+            place-items: center;
+            font-family: "Segoe UI", system-ui, sans-serif;
+            background: radial-gradient(1200px 600px at 20% 0%, #1d4ed8 0%, transparent 55%),
+                        radial-gradient(900px 500px at 90% 100%, #0ea5e9 0%, transparent 50%),
+                        var(--bg);
+            color: var(--text);
+        }
+        .card {
+            width: min(520px, 92vw);
+            background: color-mix(in srgb, var(--card) 88%, transparent);
+            backdrop-filter: blur(10px);
+            border: 1px solid #334155;
+            border-radius: 16px;
+            padding: 2rem 1.75rem;
+            box-shadow: 0 24px 60px rgba(0,0,0,.35);
+        }
+        h1 { margin: 0 0 .5rem; font-size: 1.45rem; letter-spacing: -.02em; }
+        p { margin: 0 0 1.25rem; color: var(--muted); line-height: 1.5; }
+        .bar {
+            height: 12px;
+            background: #0b1220;
+            border-radius: 999px;
+            overflow: hidden;
+            border: 1px solid #334155;
+        }
+        .bar > span {
+            display: block;
+            height: 100%;
+            width: {{ progress.percent }}%;
+            background: linear-gradient(90deg, var(--accent), #818cf8);
+            transition: width .4s ease;
+        }
+        .meta {
+            display: flex;
+            justify-content: space-between;
+            margin-top: .75rem;
+            font-size: .9rem;
+            color: var(--muted);
+        }
+        .phase { color: var(--accent); text-transform: uppercase; letter-spacing: .06em; font-size: .75rem; font-weight: 700; }
+        .err { color: var(--err); margin-top: 1rem; }
+        .ok { color: var(--ok); }
+        .spinner {
+            width: 28px; height: 28px; border-radius: 50%;
+            border: 3px solid #334155; border-top-color: var(--accent);
+            animation: spin 1s linear infinite; margin-bottom: 1rem;
+        }
+        @keyframes spin { to { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+<main class="card" role="status" aria-live="polite">
+    {% if progress.phase != 'completed' and progress.phase != 'failed' %}
+        <div class="spinner" aria-hidden="true"></div>
+    {% endif %}
+    <div class="phase">{{ progress.phase }}</div>
+    <h1>{{ 'restore.page.title'|trans({}, 'NowoSiteBackupBundle') }}</h1>
+    <p>{{ progress.message|default(defaultMessage) }}</p>
+    <div class="bar" aria-hidden="true"><span></span></div>
+    <div class="meta">
+        <span>{{ progress.percent|number_format(0) }}%</span>
+        <span>{% if progress.backupId %}#{{ progress.backupId }}{% endif %}</span>
+    </div>
+    {% if progress.error %}
+        <p class="err">{{ progress.error }}</p>
+    {% endif %}
+    {% if progress.phase == 'completed' %}
+        <p class="ok">{{ 'restore.page.done'|trans({}, 'NowoSiteBackupBundle') }}</p>
+    {% endif %}
+</main>
+<script>
+(function () {
+  var url = {{ progressUrl|json_encode|raw }};
+  function tick() {
+    fetch(url, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
+      .then(function (r) { return r.json(); })
+      .then(function (data) {
+        if (data.phase === 'completed') {
+          setTimeout(function () { window.location.reload(); }, 1500);
+        }
+      })
+      .catch(function () {});
+  }
+  setInterval(tick, 2500);
+})();
+</script>
+</body>
+</html>

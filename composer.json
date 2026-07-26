@@ -1,0 +1,108 @@
+{
+    "name": "nowo-tech/site-backup-bundle",
+    "description": "Symfony bundle for integral website backups with checksum integrity and a safe restore UI (loading page) that does not break the app mid-restore.",
+    "type": "symfony-bundle",
+    "license": "MIT",
+    "keywords": [
+        "symfony",
+        "symfony-bundle",
+        "backup",
+        "restore",
+        "snapshot",
+        "disaster-recovery"
+    ],
+    "homepage": "https://github.com/nowo-tech/SiteBackupBundle",
+    "support": {
+        "issues": "https://github.com/nowo-tech/SiteBackupBundle/issues",
+        "source": "https://github.com/nowo-tech/SiteBackupBundle",
+        "docs": "https://github.com/nowo-tech/SiteBackupBundle/tree/main/docs",
+        "changelog": "https://github.com/nowo-tech/SiteBackupBundle/blob/main/docs/CHANGELOG.md"
+    },
+    "authors": [
+        {
+            "name": "Héctor Franco Aceituno",
+            "email": "hectorfranco@nowo.tech",
+            "homepage": "https://github.com/HecFranco",
+            "role": "Developer"
+        },
+        {
+            "name": "Nowo.tech",
+            "homepage": "https://nowo.tech"
+        }
+    ],
+    "require": {
+        "php": ">=8.2 <8.6",
+        "symfony/config": "^7.0 || ^8.0",
+        "symfony/console": "^7.0 || ^8.0",
+        "symfony/dependency-injection": "^7.0 || ^8.0",
+        "symfony/event-dispatcher": "^7.0 || ^8.0",
+        "symfony/filesystem": "^7.0 || ^8.0",
+        "symfony/finder": "^7.0 || ^8.0",
+        "symfony/http-foundation": "^7.0 || ^8.0",
+        "symfony/http-kernel": "^7.0 || ^8.0",
+        "symfony/process": "^7.0 || ^8.0",
+        "symfony/routing": "^7.0 || ^8.0",
+        "symfony/security-csrf": "^7.0 || ^8.0",
+        "symfony/yaml": "^7.0 || ^8.0"
+    },
+    "require-dev": {
+        "friendsofphp/php-cs-fixer": "^3.0",
+        "nowo-tech/phpstan-frankenphp": "^1.0",
+        "phpstan/extension-installer": "^1.4",
+        "phpstan/phpstan": "^2.0",
+        "phpstan/phpstan-phpunit": "^2.0",
+        "phpstan/phpstan-symfony": "^2.0",
+        "phpunit/phpunit": "^10.0",
+        "rector/rector": "^2.0",
+        "symfony/framework-bundle": "^7.0 || ^8.0",
+        "symfony/twig-bundle": "^7.0 || ^8.0",
+        "twig/twig": "^3.12"
+    },
+    "suggest": {
+        "symfony/twig-bundle": "Required to render the restore loading page and admin panel",
+        "symfony/translation": "Required for |trans in panel and restore templates",
+        "symfony/security-bundle": "Optional; wire a custom SiteBackupAccessGateInterface",
+        "symfony/flex": "For automatic recipe installation",
+        "doctrine/dbal": "Optional; used when database dump_command is not set and a DBAL connection is available"
+    },
+    "autoload": {
+        "psr-4": {
+            "Nowo\\SiteBackupBundle\\": "src/"
+        }
+    },
+    "autoload-dev": {
+        "psr-4": {
+            "Nowo\\SiteBackupBundle\\Tests\\": "tests/"
+        }
+    },
+    "archive": {
+        "exclude": [
+            "/demo",
+            "/.cursor"
+        ]
+    },
+    "config": {
+        "sort-packages": true,
+        "root-version": "1.0.0-dev",
+        "allow-plugins": {
+            "phpstan/extension-installer": true
+        }
+    },
+    "minimum-stability": "stable",
+    "prefer-stable": true,
+    "scripts": {
+        "test": "phpunit --color=always",
+        "test-coverage": "phpunit --color=always --coverage-html coverage --coverage-clover coverage.xml --coverage-text",
+        "cs-check": "php-cs-fixer fix --dry-run --diff",
+        "cs-fix": "php-cs-fixer fix",
+        "rector": "rector process",
+        "rector-dry": "rector process --dry-run --no-progress-bar",
+        "phpstan": "phpstan analyse --memory-limit=512M",
+        "update": "composer update --no-interaction",
+        "validate": "composer validate --strict",
+        "qa": [
+            "@cs-check",
+            "@test"
+        ]
+    }
+}

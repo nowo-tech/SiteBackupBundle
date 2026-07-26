@@ -1,0 +1,73 @@
+services:
+    _defaults:
+        autowire: true
+        autoconfigure: true
+        public: false
+
+    Nowo\SiteBackupBundle\:
+        resource: '../../*'
+        exclude:
+            - '../../DependencyInjection/'
+            - '../../Model/'
+            - '../../Event/'
+            - '../../Attribute/'
+            - '../../Resources/'
+            - '../../Setup/Step/'
+            - '../../NowoSiteBackupBundle.php'
+
+    Nowo\SiteBackupBundle\Storage\FilesystemRestoreProgressStorage:
+        arguments:
+            $filePath: '%kernel.project_dir%/var/site-backup/restore-progress.json'
+
+    Nowo\SiteBackupBundle\Storage\FilesystemBackupHistoryStorage:
+        arguments:
+            $filePath: '%kernel.project_dir%/var/site-backup/history.jsonl'
+
+    Nowo\SiteBackupBundle\Setup\Storage\FilesystemSetupProgressStorage:
+        arguments:
+            $filePath: '%kernel.project_dir%/var/site-backup/setup-progress.json'
+
+    Nowo\SiteBackupBundle\Setup\Storage\SetupMarkerManager:
+        arguments:
+            $requiredFile: '%kernel.project_dir%/var/site-backup/setup.required'
+            $doneFile: '%kernel.project_dir%/var/site-backup/setup.done'
+
+    Nowo\SiteBackupBundle\Exclusion\SiteBackupExclusionMatcher: ~
+
+    Nowo\SiteBackupBundle\Security\PasswordSiteBackupAccessGate: ~
+
+    Nowo\SiteBackupBundle\Backup\BackupArchiver: ~
+
+    Nowo\SiteBackupBundle\Restore\RestoreOrchestrator: ~
+
+    Nowo\SiteBackupBundle\Service\SiteBackupManager: ~
+
+    Nowo\SiteBackupBundle\Twig\SiteBackupExtension: ~
+
+    Nowo\SiteBackupBundle\Setup\NullAdminUserProvisioner: ~
+
+    Nowo\SiteBackupBundle\Setup\ConsoleProcessRunner: ~
+
+    Nowo\SiteBackupBundle\Setup\SetupStepFactory: ~
+
+    Nowo\SiteBackupBundle\Setup\SetupOrchestrator: ~
+
+    Nowo\SiteBackupBundle\Setup\Detector\MarkerFileDetector: ~
+
+    Nowo\SiteBackupBundle\Setup\Detector\DoctrineConnectDetector: ~
+
+    Nowo\SiteBackupBundle\Setup\Detector\DoctrineSchemaEmptyDetector: ~
+
+    Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator: ~
+
+    Nowo\SiteBackupBundle\EventSubscriber\RestoreRequestSubscriber: ~
+
+    Nowo\SiteBackupBundle\EventSubscriber\SetupRequestSubscriber: ~
+
+    Nowo\SiteBackupBundle\Controller\SiteBackupPanelController:
+        public: true
+        tags: ['controller.service_arguments']
+
+    Nowo\SiteBackupBundle\Controller\SetupWizardController:
+        public: true
+        tags: ['controller.service_arguments']
