@@ -58,7 +58,7 @@ final class SetupStepFactoryTest extends TestCase
         $steps = $this->factory->createAll($configs);
         self::assertCount(count($configs), $steps);
         self::assertSame('requirements_0', $steps[0]->getId());
-        self::assertSame('Check requirements', $steps[0]->getLabel());
+        self::assertSame('setup.tab.requirements', $steps[0]->getLabel());
     }
 
     public function testMissingTypeThrows(): void

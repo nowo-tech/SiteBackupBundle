@@ -12,6 +12,30 @@ setup:
     continue: 'Weiter'
     retry: 'Erneut versuchen'
     running: 'Nächster Einrichtungsschritt läuft…'
+  bootstrap:
+    prompt: 'Choose how to bootstrap this site'
+    guided: 'Guided setup (create admin)'
+    full_database: 'Load full database dump'
+    sql_path: 'SQL dump path (relative to project)'
+    sql_hint: 'Required for full dump. Defaults: var/site-backup/full-import.sql or last-restore-dump.sql. Migrations and idempotent loaders still run; admin form is skipped if users already exist.'
+  tab:
+    requirements: 'Voraussetzungen'
+    bootstrap_mode: 'Startmodus'
+    database_url: 'Datenbank-URL'
+    database_create: 'Datenbank erstellen'
+    cache_clear: 'Cache leeren'
+    schema_update: 'Schema aktualisieren'
+    migrations: 'Migrationen'
+    sql_file: 'SQL importieren'
+    console: 'Befehl ausführen'
+    admin_user: 'Admin-Benutzer'
+    sample_data: 'Beispieldaten'
+    marker: 'Abschließen'
+    custom: 'Eigener Schritt'
+  check:
+    ok: 'OK'
+    needs_input: 'Warte auf Eingabe'
+    blocked: 'Blockiert'
   admin:
     create: 'Administrator erstellen'
   sample:

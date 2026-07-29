@@ -11,6 +11,7 @@ use Symfony\Component\Finder\Finder;
 use Throwable;
 
 use function array_unique;
+use function array_unshift;
 use function array_values;
 use function count;
 use function file_get_contents;
@@ -18,6 +19,7 @@ use function glob;
 use function is_dir;
 use function is_file;
 use function is_object;
+use function is_string;
 use function ltrim;
 use function rtrim;
 use function sprintf;
@@ -92,8 +94,14 @@ final class SqlFileStep extends AbstractSetupStep
      */
     private function resolveFiles(SetupContext $ctx): array
     {
+        $paths      = $this->paths;
+        $fromAnswer = $ctx->getAnswer('sql_import_path');
+        if (is_string($fromAnswer) && $fromAnswer !== '') {
+            array_unshift($paths, $fromAnswer);
+        }
+
         $resolved = [];
-        foreach ($this->paths as $path) {
+        foreach ($paths as $path) {
             $path = $this->absolute($ctx, $path);
             if (str_contains($path, '*') || str_contains($path, '?')) {
                 $matches = glob($path) ?: [];

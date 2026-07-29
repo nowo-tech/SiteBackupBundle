@@ -5,8 +5,11 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\DependencyInjection;
 
 use Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition;
+use Symfony\Component\Config\Definition\Builder\NodeBuilder;
 use Symfony\Component\Config\Definition\Builder\TreeBuilder;
 use Symfony\Component\Config\Definition\ConfigurationInterface;
+
+use function in_array;
 
 /**
  * Bundle configuration tree under alias `nowo_site_backup`.
@@ -210,72 +213,172 @@ final class Configuration implements ConfigurationInterface
                             ->end()
                         ->end()
                         ->scalarNode('default_profile')->defaultValue('fresh_install')->end()
-                        ->arrayNode('profiles')
-                            ->useAttributeAsKey('name')
-                            ->arrayPrototype()
-                                ->children()
-                                    ->arrayNode('steps')
-                                        ->arrayPrototype()
-                                            ->ignoreExtraKeys(false)
-                                            ->children()
-                                                ->scalarNode('type')->isRequired()->end()
-                                                ->scalarNode('id')->defaultNull()->end()
-                                                ->scalarNode('label')->defaultNull()->end()
-                                                ->variableNode('command')->defaultNull()->end()
-                                                ->variableNode('commands')->defaultNull()->end()
-                                                ->variableNode('paths')->defaultNull()->end()
-                                                ->variableNode('roles')->defaultNull()->end()
-                                                ->variableNode('extensions')->defaultNull()->end()
-                                                ->variableNode('writable')->defaultNull()->end()
-                                                ->booleanNode('optional')->defaultNull()->end()
-                                                ->booleanNode('if_exists')->defaultNull()->end()
-                                                ->booleanNode('require_tar')->defaultNull()->end()
-                                                ->booleanNode('write_done')->defaultNull()->end()
-                                                ->booleanNode('skip_if_admin_exists')->defaultNull()->end()
-                                                ->scalarNode('when')->defaultNull()->end()
-                                            ->end()
-                                        ->end()
-                                        ->defaultValue([])
-                                    ->end()
-                                ->end()
-                            ->end()
-                            ->defaultValue([
-                                'fresh_install' => [
-                                    'steps' => [
-                                        ['type' => 'requirements'],
-                                        ['type' => 'database_url', 'optional' => true],
-                                        ['type' => 'database_create'],
-                                        ['type' => 'cache_clear'],
-                                        ['type' => 'migrations'],
-                                        ['type' => 'admin_user', 'roles' => ['ROLE_SUPER_ADMIN']],
-                                        ['type' => 'marker', 'write_done' => true],
-                                    ],
-                                ],
-                                'post_restore' => [
-                                    'steps' => [
-                                        ['type' => 'requirements'],
-                                        ['type' => 'database_create'],
-                                        ['type' => 'cache_clear'],
-                                        ['type' => 'sql_file', 'paths' => ['var/site-backup/last-restore-dump.sql'], 'if_exists' => true],
-                                        ['type' => 'migrations'],
-                                        ['type' => 'admin_user', 'skip_if_admin_exists' => true],
-                                        ['type' => 'marker', 'write_done' => true],
-                                    ],
-                                ],
-                                'minimal' => [
-                                    'steps' => [
-                                        ['type' => 'database_create'],
-                                        ['type' => 'migrations'],
-                                        ['type' => 'admin_user'],
-                                        ['type' => 'marker', 'write_done' => true],
-                                    ],
-                                ],
-                            ])
+                        ->enumNode('advance_mode')
+                            ->values(['automatic', 'manual'])
+                            ->info('automatic = chain auto tabs until interaction; manual = one auto tab per Continuar.')
+                            ->defaultValue('automatic')
                         ->end()
+                        ->append($this->setupProfilesNode())
                     ->end()
                 ->end()
             ->end();
 
         return $treeBuilder;
+    }
+
+    private function setupProfilesNode(): ArrayNodeDefinition
+    {
+        $node = new ArrayNodeDefinition('profiles');
+        $node
+            ->useAttributeAsKey('name')
+            ->defaultValue($this->defaultSetupProfiles());
+
+        $profile         = $node->arrayPrototype();
+        $profileChildren = $profile->children();
+        $profileChildren
+            ->scalarNode('advance_mode')
+                ->info('Override setup.advance_mode for this profile (automatic|manual).')
+                ->defaultNull()
+                ->validate()
+                    ->ifTrue(static fn (mixed $v): bool => $v !== null && !in_array($v, ['automatic', 'manual'], true))
+                    ->thenInvalid('advance_mode must be "automatic" or "manual".')
+                ->end()
+            ->end();
+
+        $steps = $profileChildren->arrayNode('steps');
+        $steps
+            ->info('Legacy step list. Ignored when tabs is non-empty.')
+            ->defaultValue([]);
+        $this->addSetupStepKeys($steps->arrayPrototype()->ignoreExtraKeys(false)->children(), true);
+
+        $tabs = $profileChildren->arrayNode('tabs');
+        $tabs
+            ->info('Ordered wizard tabs (preferred). Each may bind checker/template/runner.')
+            ->defaultValue([]);
+        $tabChildren = $tabs->arrayPrototype()->ignoreExtraKeys(false)->children();
+        $this->addSetupStepKeys($tabChildren, true);
+        $tabChildren
+            ->scalarNode('checker')
+                ->info('Service id / FQCN implementing SetupTabCheckerInterface.')
+                ->defaultNull()
+            ->end()
+            ->scalarNode('template')
+                ->info('Twig template for custom waiting_input UI.')
+                ->defaultNull()
+            ->end()
+            ->scalarNode('label_domain')
+                ->info('Translation domain for label/description (default NowoSiteBackupBundle).')
+                ->defaultNull()
+            ->end()
+            ->scalarNode('description')
+                ->info('Optional translation id for tab subtitle.')
+                ->defaultNull()
+            ->end();
+        $runner = $tabChildren->arrayNode('runner');
+        $runner
+            ->info('Optional nested step config when type is custom (e.g. console / sql_file).')
+            ->addDefaultsIfNotSet();
+        $this->addSetupStepKeys($runner->children(), false);
+
+        return $node;
+    }
+
+    private function addSetupStepKeys(NodeBuilder $children, bool $typeRequired): void
+    {
+        if ($typeRequired) {
+            $children->scalarNode('type')->isRequired()->end();
+        } else {
+            $children->scalarNode('type')->defaultNull()->end();
+        }
+
+        $children
+            ->scalarNode('id')->defaultNull()->end()
+            ->scalarNode('label')->defaultNull()->end()
+            ->variableNode('command')->defaultNull()->end()
+            ->variableNode('commands')->defaultNull()->end()
+            ->variableNode('paths')->defaultNull()->end()
+            ->variableNode('roles')->defaultNull()->end()
+            ->variableNode('extensions')->defaultNull()->end()
+            ->variableNode('writable')->defaultNull()->end()
+            ->booleanNode('optional')->defaultNull()->end()
+            ->booleanNode('if_exists')->defaultNull()->end()
+            ->booleanNode('require_tar')->defaultNull()->end()
+            ->booleanNode('write_done')->defaultNull()->end()
+            ->booleanNode('skip_if_admin_exists')->defaultNull()->end()
+            ->scalarNode('when')->defaultNull()->end()
+            ->variableNode('when_answer')
+                ->info('Map of answer key => required value; step is skipped unless all match.')
+                ->defaultNull()
+            ->end();
+    }
+
+    /**
+     * @return array<string, array<string, mixed>>
+     */
+    private function defaultSetupProfiles(): array
+    {
+        return [
+            'fresh_install' => [
+                'steps' => [
+                    ['type' => 'requirements'],
+                    ['type' => 'bootstrap_mode'],
+                    ['type' => 'database_url', 'optional' => true],
+                    ['type' => 'database_create'],
+                    ['type' => 'cache_clear'],
+                    [
+                        'type'  => 'sql_file',
+                        'id'    => 'full_database_import',
+                        'paths' => [
+                            'var/site-backup/full-import.sql',
+                            'var/site-backup/last-restore-dump.sql',
+                        ],
+                        'if_exists'   => false,
+                        'when_answer' => ['bootstrap_mode' => 'full_database'],
+                    ],
+                    ['type' => 'migrations'],
+                    ['type' => 'admin_user', 'roles' => ['ROLE_SUPER_ADMIN'], 'skip_if_admin_exists' => true],
+                    ['type' => 'marker', 'write_done' => true],
+                ],
+            ],
+            'post_restore' => [
+                'steps' => [
+                    ['type' => 'requirements'],
+                    ['type' => 'database_create'],
+                    ['type' => 'cache_clear'],
+                    ['type' => 'sql_file', 'paths' => ['var/site-backup/last-restore-dump.sql'], 'if_exists' => true],
+                    ['type' => 'migrations'],
+                    ['type' => 'admin_user', 'skip_if_admin_exists' => true],
+                    ['type' => 'marker', 'write_done' => true],
+                ],
+            ],
+            'full_database' => [
+                'steps' => [
+                    ['type' => 'requirements'],
+                    ['type' => 'database_url', 'optional' => true],
+                    ['type' => 'database_create'],
+                    ['type' => 'cache_clear'],
+                    [
+                        'type'  => 'sql_file',
+                        'id'    => 'full_database_import',
+                        'paths' => [
+                            'var/site-backup/full-import.sql',
+                            'var/site-backup/last-restore-dump.sql',
+                        ],
+                        'if_exists' => false,
+                    ],
+                    ['type' => 'migrations'],
+                    ['type' => 'admin_user', 'skip_if_admin_exists' => true],
+                    ['type' => 'marker', 'write_done' => true],
+                ],
+            ],
+            'minimal' => [
+                'steps' => [
+                    ['type' => 'database_create'],
+                    ['type' => 'migrations'],
+                    ['type' => 'admin_user'],
+                    ['type' => 'marker', 'write_done' => true],
+                ],
+            ],
+        ];
     }
 }

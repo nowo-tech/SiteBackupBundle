@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.0] - 2026-07-30
+
+### Added
+
+- Setup step **`bootstrap_mode`**: choose **guided** (create admin) or **full database** dump import; answer `sql_import_path`; step filter `when_answer`.
+- Default `fresh_install` profile: bootstrap choice → optional SQL import when `full_database` → migrations → `admin_user` (`skip_if_admin_exists`) → marker.
+- Profile **`full_database`** for deep-link `?profile=full_database`.
+- Starting the wizard marks `setup.required` so the site gate stays on until `setup.done` (FR-SETUP-005).
+- Setup **`profiles.*.tabs`**: ordered YAML tabs with optional `checker` (`SetupTabCheckerInterface`), `template`, `runner`, and i18n `label` / `description`; legacy `steps` still work.
+- `setup.advance_mode` / per-profile override: `automatic` (default) or `manual` (one auto tab per Continuar); CLI forces automatic.
+- `#[AsSetupTabChecker]` autoconfigures checker services (tag `nowo.site_backup.setup_tab_checker`).
+- Built-in type **`custom`** for app-owned tab bodies; translation keys `setup.tab.*` / `setup.check.*` in all bundle locales.
+
+### Documentation
+
+- Spec US-7 / US-8 / US-9; [SETUP-WIZARD.md](SETUP-WIZARD.md) / [UPGRADING.md](UPGRADING.md) / [CONFIGURATION.md](CONFIGURATION.md) updated; inventory 106/106.
+
 ## [1.2.0] - 2026-07-29
 
 ### Added

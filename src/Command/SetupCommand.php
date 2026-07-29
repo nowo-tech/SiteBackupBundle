@@ -67,7 +67,7 @@ final class SetupCommand extends Command
         try {
             // Loop: form steps need another advance with filled input
             $guard    = 0;
-            $progress = $this->orchestrator->advance($profile, new SetupStepInput($data));
+            $progress = $this->orchestrator->advance($profile, new SetupStepInput($data), true);
             while ($progress->getPhase() === SetupProgress::PHASE_WAITING && $guard < 20) {
                 ++$guard;
                 if ($data === []) {
@@ -75,7 +75,7 @@ final class SetupCommand extends Command
 
                     return Command::FAILURE;
                 }
-                $progress = $this->orchestrator->advance($profile, new SetupStepInput($data));
+                $progress = $this->orchestrator->advance($profile, new SetupStepInput($data), true);
             }
         } catch (Throwable $e) {
             $io->error($e->getMessage());

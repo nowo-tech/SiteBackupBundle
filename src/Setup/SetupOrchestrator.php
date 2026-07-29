@@ -23,8 +23,12 @@ use function sprintf;
 
 final class SetupOrchestrator
 {
+    public const ADVANCE_AUTOMATIC = 'automatic';
+
+    public const ADVANCE_MANUAL = 'manual';
+
     /**
-     * @param array<string, array{steps: list<array<string, mixed>>}> $profiles
+     * @param array<string, array{steps: list<array<string, mixed>>, advance_mode?: string}> $profiles
      */
     public function __construct(
         private readonly string $projectDir,
@@ -34,6 +38,7 @@ final class SetupOrchestrator
         private readonly array $profiles,
         private readonly string $defaultProfile = 'fresh_install',
         private readonly ?EventDispatcherInterface $eventDispatcher = null,
+        private readonly string $defaultAdvanceMode = self::ADVANCE_AUTOMATIC,
     ) {
     }
 
@@ -71,10 +76,25 @@ final class SetupOrchestrator
         return $this->defaultProfile;
     }
 
+    public function getAdvanceMode(?string $profile = null): string
+    {
+        $profile = $this->resolveProfileName($profile);
+        $mode    = $this->profiles[$profile]['advance_mode'] ?? null;
+        if (is_string($mode) && ($mode === self::ADVANCE_AUTOMATIC || $mode === self::ADVANCE_MANUAL)) {
+            return $mode;
+        }
+
+        return $this->defaultAdvanceMode === self::ADVANCE_MANUAL
+            ? self::ADVANCE_MANUAL
+            : self::ADVANCE_AUTOMATIC;
+    }
+
     /**
      * Start or resume wizard; advances through auto steps until form input is needed or done.
+     *
+     * @param bool $forceAutomatic when true (CLI), ignore profile manual advance_mode and chain auto tabs
      */
-    public function advance(?string $profile = null, ?SetupStepInput $input = null): SetupProgress
+    public function advance(?string $profile = null, ?SetupStepInput $input = null, bool $forceAutomatic = false): SetupProgress
     {
         $profile = $this->resolveProfileName($profile);
         $steps   = $this->stepFactory->createAll($this->profileSteps($profile));
@@ -91,6 +111,10 @@ final class SetupOrchestrator
         );
 
         if ($progress->getPhase() === SetupProgress::PHASE_IDLE || $progress->getPhase() === SetupProgress::PHASE_FAILED) {
+            // Keep the site gate on until marker writes setup.done (FR-SETUP-005).
+            if (!$this->markers->isDone()) {
+                $this->markers->markRequired($profile);
+            }
             $this->eventDispatcher?->dispatch(new SetupStartedEvent($profile));
             $now      = new DateTimeImmutable();
             $progress = new SetupProgress(
@@ -108,6 +132,7 @@ final class SetupOrchestrator
 
         $total = count($steps);
         $input ??= new SetupStepInput();
+        $advanceMode = $forceAutomatic ? self::ADVANCE_AUTOMATIC : $this->getAdvanceMode($profile);
 
         foreach ($steps as $index => $step) {
             if (!$step->isEnabled($ctx)) {
@@ -170,6 +195,20 @@ final class SetupOrchestrator
             );
             $this->progressStorage->save($progress);
             $this->eventDispatcher?->dispatch(new SetupStepCompletedEvent($profile, $step->getId()));
+
+            // Manual UI: pause after one successful auto tab so the operator presses Continuar.
+            // CLI / forceAutomatic keeps chaining (FR-SETUP-009).
+            if ($advanceMode === self::ADVANCE_MANUAL && $step->getUiKind() === 'auto') {
+                $progress = $progress->with(
+                    phase: SetupProgress::PHASE_RUNNING,
+                    currentStepId: $step->getId(),
+                    message: $result->getMessage() !== '' ? $result->getMessage() : $step->getLabel(),
+                    updatedAt: new DateTimeImmutable(),
+                );
+                $this->progressStorage->save($progress);
+
+                return $progress;
+            }
 
             // After a form step was satisfied, continue to next auto steps with empty input
             $input = new SetupStepInput();

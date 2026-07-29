@@ -92,12 +92,19 @@ During setup, the gate **blocks** the rest of the site (503 or soft redirect to 
 ```
 /_setup
   1. Welcome + requirements checklist (PHP ext, tar, writable var/)
-  2. Database DSN form (optional; skip if DATABASE_URL already works)
-  3. Run pipeline (auto steps with live progress)
-  4. Create initial super-admin (form)
-  5. Optional: “Load sample data?” (yes/no)
-  6. Done → link to login / homepage
+  2. Bootstrap mode:
+       • Guided — create admin later in the wizard
+       • Full database — import a .sql dump (skips admin form if users exist)
+  3. Database DSN form (optional; skip if DATABASE_URL already works)
+  4. Create DB + cache clear
+  5. If full database: import SQL (path or var/site-backup/full-import.sql)
+  6. Migrations (idempotent) + optional app console/SQL loaders (menus, breadcrumbs, …)
+  7. Create initial super-admin (form) — skipped when skip_if_admin_exists and users present
+  8. Optional: “Load sample data?” (yes/no) when configured
+  9. Done → link to login / homepage
 ```
+
+Starting the wizard marks `setup.required` so visitors stay on `/_setup` until `setup.done` is written. For greenfield apps that must never serve the app before setup, set `require_done_marker: true`.
 
 ### B — Post-restore (files OK, DB cold)
 
@@ -187,12 +194,29 @@ Steps registered via:
 | `cache_clear` | `cache:clear` | Always before schema when configured |
 | `schema_update` | `doctrine:schema:update --force` | Mutually exclusive with migrate in same profile (or ordered explicitly) |
 | `migrations` | `doctrine:migrations:migrate --no-interaction` | Preferred for apps that ship migrations |
-| `sql_file` | Execute `.sql` paths (glob) | For minimal seed / dump import |
-| `admin_user` | Calls `AdminUserProvisionerInterface` | Interactive form in UI |
+| `sql_file` | Execute `.sql` paths (glob); honour answer `sql_import_path` | Seed / full dump import |
+| `bootstrap_mode` | Form: `guided` \| `full_database` (+ optional path) | Sets answers for `when_answer` |
+| `admin_user` | Calls `AdminUserProvisionerInterface` | Skipped when admin exists |
 | `sample_data` | Runs configured console commands | Only if user opted in |
 | `marker` | Write/remove lock files | `setup.done`, clear `setup.required` |
+| `custom` | App Twig + optional `runner` / `checker` | Declared under `profiles.*.tabs` |
 
 Generic **`console`** is the escape hatch: any idempotent app command (`app:load-taxonomy`, `app:seed-roles`, …).
+
+## Tabs, checkers, and advance mode
+
+Prefer **`setup.profiles.<name>.tabs`** (ordered). When `tabs` is non-empty it replaces `steps` for that profile. Each tab may set:
+
+| Field | Role |
+| --- | --- |
+| `label` / `description` | Translation ids (`label_domain` default `NowoSiteBackupBundle`) |
+| `checker` | Service id / FQCN implementing `SetupTabCheckerInterface` (`ok` / `needs_input` / `blocked`) |
+| `template` | Twig body for `waiting_input` (`custom` or override) |
+| `runner` | Nested built-in step (e.g. `console`) when `type: custom` |
+
+`#[AsSetupTabChecker]` tags the service; YAML still binds it with `checker: …`.
+
+`advance_mode: automatic|manual` (global `setup.advance_mode` or per profile): automatic chains auto tabs until interaction; manual runs one auto tab per Continuar. Interactive tabs always pause. Headless CLI always behaves as automatic.
 
 ## Configuration (polyvalent)
 
@@ -216,10 +240,14 @@ nowo_site_backup:
             doctrine_schema_empty: true
             incomplete_progress: true   # gate while wizard is mid-flight
         default_profile: fresh_install
+        advance_mode: automatic   # or manual (one auto tab per Continuar in UI)
         profiles:
             fresh_install:
+                # Prefer tabs when composing app-owned steps (checker/template/runner).
+                # tabs: ...
                 steps:
                     - { type: requirements }
+                    - { type: bootstrap_mode }
                     - { type: database_url, optional: true }
                     - { type: database_create }
                     - { type: cache_clear }

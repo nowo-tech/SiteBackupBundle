@@ -63,6 +63,29 @@ final class SetupOrchestratorExtendedTest extends TestCase
         self::assertSame('post_restore', $orch->resolveProfileName());
     }
 
+    public function testAdvanceMarksSetupRequiredUntilDone(): void
+    {
+        $markers  = new SetupMarkerManager($this->dir . '/_setup.required', $this->dir . '/_setup.done');
+        $progress = new FilesystemSetupProgressStorage($this->dir . '/_setup-progress.json');
+        $factory  = new SetupStepFactory(new ConsoleProcessRunner($this->dir, PHP_BINARY, 30), $markers, new NullAdminUserProvisioner());
+        $orch     = new SetupOrchestrator(
+            projectDir: $this->dir,
+            stepFactory: $factory,
+            progressStorage: $progress,
+            markers: $markers,
+            profiles: [
+                'fresh_install' => ['steps' => [['type' => 'marker', 'write_done' => true]]],
+            ],
+            defaultProfile: 'fresh_install',
+        );
+
+        self::assertFalse($markers->isRequiredMarked());
+        $result = $orch->advance('fresh_install');
+        self::assertTrue($markers->isDone());
+        self::assertFalse($markers->isRequiredMarked());
+        self::assertSame(SetupProgress::PHASE_COMPLETED, $result->getPhase());
+    }
+
     public function testAdvanceDispatchesEventsAndFails(): void
     {
         $failStep = new class implements SetupStepInterface {
