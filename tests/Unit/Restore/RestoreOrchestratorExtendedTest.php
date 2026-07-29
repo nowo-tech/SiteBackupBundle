@@ -75,7 +75,7 @@ final class RestoreOrchestratorExtendedTest extends TestCase
         );
         $artifact = $archiver->create('with-db', 'phpunit');
 
-        $markers      = new SetupMarkerManager($this->projectDir . '/setup.required', $this->projectDir . '/setup.done');
+        $markers      = new SetupMarkerManager($this->projectDir . '/_setup.required', $this->projectDir . '/_setup.done');
         $storage      = new FilesystemRestoreProgressStorage($this->progressFile);
         $orchestrator = new RestoreOrchestrator(
             projectDir: $this->projectDir,

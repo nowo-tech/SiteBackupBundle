@@ -1,4 +1,6 @@
 # Prefer Compose V2 plugin (GitHub Actions / modern Docker Desktop); fall back to docker-compose V1 (REQ-MAKE-010).
+# Bash: /bin/sh + Docker Desktop CLI symlink on WSL can yield "Permission denied" (Error 127).
+SHELL := /bin/bash
 COMPOSE ?= $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
 
 .PHONY: help up down build install shell logs test cache-clear update-bundle ensure-up verify
@@ -66,7 +68,7 @@ verify: ensure-up
 	@PORT=$$(grep "^PORT=" .env 2>/dev/null | cut -d= -f2 | tr -d '\r'); \
 	[ -z "$$PORT" ] && PORT=8056; \
 	code=$$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$$PORT/" 2>/dev/null || echo "000"); \
-	if [ "$$code" != "200" ]; then echo "Healthcheck failed: $$code"; exit 1; fi; \
+	if [ "$$code" != "200" ] && [ "$$code" != "302" ]; then echo "Healthcheck failed: $$code"; exit 1; fi; \
 	echo "Healthcheck OK ($$code)"
 
 # REQ-MAKE-008: update-deps

@@ -18,11 +18,14 @@ use Nowo\SiteBackupBundle\Setup\AdminUserProvisionerInterface;
 use Nowo\SiteBackupBundle\Setup\ConsoleProcessRunner;
 use Nowo\SiteBackupBundle\Setup\Detector\DoctrineConnectDetector;
 use Nowo\SiteBackupBundle\Setup\Detector\DoctrineSchemaEmptyDetector;
+use Nowo\SiteBackupBundle\Setup\Detector\IncompleteSetupProgressDetector;
 use Nowo\SiteBackupBundle\Setup\Detector\MarkerFileDetector;
 use Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator;
 use Nowo\SiteBackupBundle\Setup\NullAdminUserProvisioner;
 use Nowo\SiteBackupBundle\Setup\SetupOrchestrator;
 use Nowo\SiteBackupBundle\Setup\SetupStepFactory;
+use Nowo\SiteBackupBundle\Setup\Storage\ChainSetupProgressStorage;
+use Nowo\SiteBackupBundle\Setup\Storage\DoctrineDbalSetupProgressStorage;
 use Nowo\SiteBackupBundle\Setup\Storage\FilesystemSetupProgressStorage;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupMarkerManager;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupProgressStorageInterface;
@@ -57,6 +60,7 @@ final class SiteBackupExtension extends Extension
         $container->setParameter('nowo.site_backup.backup', $config['backup']);
         $container->setParameter('nowo.site_backup.restore', $config['restore']);
         $container->setParameter('nowo.site_backup.panel.path_prefix', $config['panel']['path_prefix']);
+        $container->setParameter('nowo.site_backup.setup.path_prefix', $config['setup']['path_prefix']);
         $container->setParameter('nowo.site_backup.templates', $config['templates']);
         $container->setParameter('nowo.site_backup.setup', $config['setup']);
 
@@ -248,9 +252,25 @@ final class SiteBackupExtension extends Extension
             ->setArgument('$requiredFile', $setup['required_marker_file'])
             ->setArgument('$doneFile', $setup['done_marker_file']);
 
+        $dbalRef = new Reference('doctrine.dbal.default_connection', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE);
+
         $container->getDefinition(FilesystemSetupProgressStorage::class)
             ->setArgument('$filePath', $setup['progress_file']);
-        $container->setAlias(SetupProgressStorageInterface::class, FilesystemSetupProgressStorage::class)->setPublic(false);
+
+        $container->getDefinition(DoctrineDbalSetupProgressStorage::class)
+            ->setArgument('$connection', $dbalRef)
+            ->setArgument('$tableName', (string) ($setup['progress_table'] ?? DoctrineDbalSetupProgressStorage::TABLE));
+
+        $container->getDefinition(ChainSetupProgressStorage::class)
+            ->setArgument('$filesystem', new Reference(FilesystemSetupProgressStorage::class))
+            ->setArgument('$doctrine', new Reference(DoctrineDbalSetupProgressStorage::class));
+
+        $progressStorage = match ((string) ($setup['progress_storage'] ?? 'filesystem')) {
+            'doctrine' => DoctrineDbalSetupProgressStorage::class,
+            'chain'    => ChainSetupProgressStorage::class,
+            default    => FilesystemSetupProgressStorage::class,
+        };
+        $container->setAlias(SetupProgressStorageInterface::class, $progressStorage)->setPublic(false);
 
         $container->getDefinition(ConsoleProcessRunner::class)
             ->setArgument('$projectDir', '%kernel.project_dir%')
@@ -263,8 +283,6 @@ final class SiteBackupExtension extends Extension
         } else {
             $container->setAlias(AdminUserProvisionerInterface::class, NullAdminUserProvisioner::class)->setPublic(false);
         }
-
-        $dbalRef = new Reference('doctrine.dbal.default_connection', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE);
 
         $container->getDefinition(MarkerFileDetector::class)
             ->setArgument('$markers', new Reference(SetupMarkerManager::class))
@@ -279,11 +297,17 @@ final class SiteBackupExtension extends Extension
             ->setArgument('$connection', $dbalRef)
             ->setArgument('$enabled', (bool) ($setup['detectors']['doctrine_schema_empty'] ?? false));
 
+        $container->getDefinition(IncompleteSetupProgressDetector::class)
+            ->setArgument('$progressStorage', new Reference(SetupProgressStorageInterface::class))
+            ->setArgument('$markers', new Reference(SetupMarkerManager::class))
+            ->setArgument('$enabled', (bool) ($setup['detectors']['incomplete_progress'] ?? true));
+
         $container->getDefinition(SetupNeedEvaluator::class)
             ->setArgument('$detectors', [
                 new Reference(MarkerFileDetector::class),
                 new Reference(DoctrineConnectDetector::class),
                 new Reference(DoctrineSchemaEmptyDetector::class),
+                new Reference(IncompleteSetupProgressDetector::class),
             ])
             ->setArgument('$setupEnabled', (bool) $setup['enabled']);
 

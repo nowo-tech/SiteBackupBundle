@@ -7,6 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.2.0] - 2026-07-29
+
+### Added
+
+- Setup progress **Doctrine DBAL** storage + **`chain`** mode (`setup.progress_storage`: `filesystem` \| `doctrine` \| `chain`; load prefers DB so wiping `var/` keeps the current step).
+- `IncompleteSetupProgressDetector` (`setup.detectors.incomplete_progress`, default `true`) — site gate while phase is `running` / `waiting_input` / `failed`.
+- Progress fields `started_at` / `completed_at` (JSON + DB columns); `setup-status` CLI shows them.
+
+### Fixed
+
+- Restored Symfony component constraints to `^7.0 || ^8.0` on `main` (had drifted to `^7.4` only for some packages after 1.1.0).
+- Route loaders use `%nowo.site_backup.panel.path_prefix%` / `%nowo.site_backup.setup.path_prefix%` so config overrides apply to imported routes.
+
+### Documentation
+
+- [SETUP-WIZARD.md](SETUP-WIZARD.md) / [CONFIGURATION.md](CONFIGURATION.md) / [UPGRADING.md](UPGRADING.md) updated for `progress_storage` and incomplete detector.
+- Spec baseline amended (US-4–US-6); inventory refreshed (97/97).
+
 ## [1.1.0] - 2026-07-29
 
 ### Security
@@ -76,6 +94,7 @@ First stable release of **Site Backup Bundle**.
 - Symfony `^7.0 || ^8.0` (CI / mandatory minors: **7.4**, **8.0**, **8.1**)
 - System `tar` required for archive create/extract
 
-[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.1.0...HEAD
+[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.2.0...HEAD
+[1.2.0]: https://github.com/nowo-tech/SiteBackupBundle/releases/tag/v1.2.0
 [1.1.0]: https://github.com/nowo-tech/SiteBackupBundle/releases/tag/v1.1.0
 [1.0.0]: https://github.com/nowo-tech/SiteBackupBundle/releases/tag/v1.0.0

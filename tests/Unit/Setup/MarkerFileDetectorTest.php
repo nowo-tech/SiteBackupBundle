@@ -29,7 +29,7 @@ final class MarkerFileDetectorTest extends TestCase
 
     public function testRequiredMarkerTriggers(): void
     {
-        $markers = new SetupMarkerManager($this->dir . '/setup.required', $this->dir . '/setup.done');
+        $markers = new SetupMarkerManager($this->dir . '/_setup.required', $this->dir . '/_setup.done');
         $markers->markRequired('post_restore');
 
         $detector = new MarkerFileDetector($markers, requireDoneMarker: false);
@@ -39,7 +39,7 @@ final class MarkerFileDetectorTest extends TestCase
 
     public function testRequireDoneMarker(): void
     {
-        $markers  = new SetupMarkerManager($this->dir . '/setup.required', $this->dir . '/setup.done');
+        $markers  = new SetupMarkerManager($this->dir . '/_setup.required', $this->dir . '/_setup.done');
         $detector = new MarkerFileDetector($markers, requireDoneMarker: true);
         self::assertTrue($detector->isSetupRequired());
 
@@ -49,7 +49,7 @@ final class MarkerFileDetectorTest extends TestCase
 
     public function testEvaluatorAny(): void
     {
-        $markers = new SetupMarkerManager($this->dir . '/setup.required', $this->dir . '/setup.done');
+        $markers = new SetupMarkerManager($this->dir . '/_setup.required', $this->dir . '/_setup.done');
         $markers->markRequired();
         $evaluator = new SetupNeedEvaluator([
             new MarkerFileDetector($markers, false, true),

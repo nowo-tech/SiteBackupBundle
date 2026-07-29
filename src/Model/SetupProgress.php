@@ -37,6 +37,8 @@ final class SetupProgress
         private readonly array $log = [],
         private readonly array $answers = [],
         private readonly ?DateTimeImmutable $updatedAt = null,
+        private readonly ?DateTimeImmutable $startedAt = null,
+        private readonly ?DateTimeImmutable $completedAt = null,
     ) {
     }
 
@@ -99,9 +101,30 @@ final class SetupProgress
         return $this->updatedAt;
     }
 
+    public function getStartedAt(): ?DateTimeImmutable
+    {
+        return $this->startedAt;
+    }
+
+    public function getCompletedAt(): ?DateTimeImmutable
+    {
+        return $this->completedAt;
+    }
+
     public function isFinished(): bool
     {
         return $this->phase === self::PHASE_COMPLETED;
+    }
+
+    /**
+     * True when a wizard run is in progress or failed mid-way (resume / gate).
+     */
+    public function isIncomplete(): bool
+    {
+        return match ($this->phase) {
+            self::PHASE_RUNNING, self::PHASE_WAITING, self::PHASE_FAILED => true,
+            default                                                      => false,
+        };
     }
 
     /**
@@ -123,6 +146,10 @@ final class SetupProgress
         ?array $log = null,
         ?array $answers = null,
         ?DateTimeImmutable $updatedAt = null,
+        ?DateTimeImmutable $startedAt = null,
+        bool $clearStartedAt = false,
+        ?DateTimeImmutable $completedAt = null,
+        bool $clearCompletedAt = false,
     ): self {
         /** @var list<string> $resolvedCompleted */
         $resolvedCompleted = $completedStepIds ?? $this->completedStepIds;
@@ -142,6 +169,8 @@ final class SetupProgress
             log: $resolvedLog,
             answers: $resolvedAnswers,
             updatedAt: $updatedAt ?? $this->updatedAt,
+            startedAt: $clearStartedAt ? null : ($startedAt ?? $this->startedAt),
+            completedAt: $clearCompletedAt ? null : ($completedAt ?? $this->completedAt),
         );
     }
 
@@ -161,6 +190,8 @@ final class SetupProgress
             'log'                => $this->log,
             'answers'            => $this->answers,
             'updated_at'         => $this->updatedAt?->format(DATE_ATOM),
+            'started_at'         => $this->startedAt?->format(DATE_ATOM),
+            'completed_at'       => $this->completedAt?->format(DATE_ATOM),
         ];
     }
 
@@ -169,14 +200,6 @@ final class SetupProgress
      */
     public static function fromArray(array $data): self
     {
-        $updatedAt = null;
-        if (is_string($data['updated_at'] ?? null)) {
-            $parsed = DateTimeImmutable::createFromFormat(DATE_ATOM, $data['updated_at']);
-            if ($parsed instanceof DateTimeImmutable) {
-                $updatedAt = $parsed;
-            }
-        }
-
         /** @var list<string> $completed */
         $completed = [];
         if (isset($data['completed_step_ids']) && is_array($data['completed_step_ids'])) {
@@ -212,7 +235,20 @@ final class SetupProgress
             completedStepIds: $completed,
             log: $log,
             answers: $answers,
-            updatedAt: $updatedAt,
+            updatedAt: self::parseAtom($data['updated_at'] ?? null),
+            startedAt: self::parseAtom($data['started_at'] ?? null),
+            completedAt: self::parseAtom($data['completed_at'] ?? null),
         );
+    }
+
+    private static function parseAtom(mixed $value): ?DateTimeImmutable
+    {
+        if (!is_string($value) || $value === '') {
+            return null;
+        }
+
+        $parsed = DateTimeImmutable::createFromFormat(DATE_ATOM, $value);
+
+        return $parsed instanceof DateTimeImmutable ? $parsed : null;
     }
 }

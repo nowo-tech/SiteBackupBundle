@@ -30,7 +30,7 @@ final class SetupCoreTest extends TestCase
 
         $ctx->setOption('k', 'v');
         self::assertSame('v', $ctx->getOption('k'));
-        self::assertNull($ctx->getOption('missing', null));
+        self::assertNull($ctx->getOption('missing'));
     }
 
     public function testSetupStepInput(): void

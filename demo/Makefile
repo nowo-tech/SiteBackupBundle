@@ -1,5 +1,7 @@
 DEMOS := symfony8
 
+SHELL := /bin/bash
+
 .PHONY: help clean test-all verify-all release-check release-verify update-bundle-all
 .PHONY: $(foreach demo,$(DEMOS),up-$(demo) down-$(demo) restart-$(demo) build-$(demo) install-$(demo) update-bundle-$(demo) shell-$(demo) logs-$(demo) test-$(demo) verify-$(demo))
 .PHONY: up down restart build install update-bundle test shell logs verify

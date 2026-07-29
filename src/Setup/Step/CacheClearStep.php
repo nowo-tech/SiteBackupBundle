@@ -17,7 +17,7 @@ final class CacheClearStep extends AbstractSetupStep
         string $label,
         private readonly ConsoleProcessRunner $runner,
     ) {
-        parent::__construct($id, $label, 'auto');
+        parent::__construct($id, $label);
     }
 
     public function run(SetupContext $ctx, SetupStepInput $input): SetupStepResult

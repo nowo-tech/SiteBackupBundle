@@ -52,7 +52,7 @@ final class SetupWizardControllerExtendedTest extends TestCase
 
     public function testWizardRendersWaitingStepWithCurrentStep(): void
     {
-        $setupDir = $this->harnessProjectDir . '/setup';
+        $setupDir = $this->harnessProjectDir . '/_setup';
         $markers  = new SetupMarkerManager($setupDir . '/required', $setupDir . '/done');
         $markers->markRequired('admin_only');
         $evaluator    = new SetupNeedEvaluator([new MarkerFileDetector($markers, false, true)], true);
@@ -99,7 +99,7 @@ final class SetupWizardControllerExtendedTest extends TestCase
 
     public function testWizardWaitingStepAndFailedPost(): void
     {
-        $setupDir = $this->harnessProjectDir . '/setup';
+        $setupDir = $this->harnessProjectDir . '/_setup';
         $markers  = new SetupMarkerManager($setupDir . '/required', $setupDir . '/done');
         $markers->markRequired('waiting_profile');
         $evaluator = new SetupNeedEvaluator([new MarkerFileDetector($markers, false, true)], true);

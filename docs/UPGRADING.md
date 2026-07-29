@@ -1,5 +1,50 @@
 # Upgrading
 
+## To 1.2.0
+
+Durable setup progress (optional DBAL / chain storage) and an incomplete-progress site gate.
+
+### Install / update
+
+```bash
+composer require nowo-tech/site-backup-bundle:^1.2
+php bin/console cache:clear
+```
+
+### Behaviour
+
+- Default storage remains **`filesystem`** (`var/site-backup/setup-progress.json`). No config change required for existing apps.
+- `setup.detectors.incomplete_progress` defaults to **`true`**: if progress phase is `running`, `waiting_input`, or `failed` (and `setup.done` is absent), the site gate sends visitors to `/_setup`. Disable with `incomplete_progress: false` if you do not want mid-wizard gating.
+- `setup.progress_storage: doctrine` or `chain` needs a working Doctrine DBAL default connection (`doctrine.dbal.default_connection`). Soft dependency — see `composer suggest` for `doctrine/dbal`.
+
+### Optional: survive wiping `var/`
+
+```yaml
+nowo_site_backup:
+    setup:
+        progress_storage: chain   # filesystem | doctrine | chain
+        # progress_table: nowo_site_backup_setup_progress
+        detectors:
+            incomplete_progress: true
+```
+
+### Migration notes
+
+| Topic | Before | After |
+| --- | --- | --- |
+| Setup progress storage | JSON file only | Optional `doctrine` / `chain` (`progress_storage`) |
+| Mid-wizard after `var/` wipe | Gate lost if markers/JSON gone | With `chain`/`doctrine` + incomplete detector, gate resumes from DB |
+| Progress timestamps | Not persisted | `started_at` / `completed_at` in JSON + DB; shown by `setup-status` |
+| Default `setup.path_prefix` | `/_setup` | **`/_setup`** (override with `path_prefix: '/_setup'` if you must keep the old URL) |
+| Route prefixes | Hard-coded in `routes.yaml` | `%nowo.site_backup.*.path_prefix%` parameters |
+
+### Breaking / notable changes
+
+- **Default wizard URL** is `/_setup` (was `/_setup`). Update firewalls, bookmarks, and reverse-proxy rules; or set `setup.path_prefix: '/_setup'` to keep the previous path.
+- New detector default (`incomplete_progress: true`) only affects apps that already have unfinished progress state on disk/DB.
+- Composer `require` for `symfony/config`, `dependency-injection`, `http-foundation`, `http-kernel`, and `security-core` is aligned again to `^7.0 || ^8.0` (same as the rest of the bundle).
+- Imported routes honour `panel.path_prefix` / `setup.path_prefix` via container parameters (defaults `/_site_backup` and `/_setup`).
+
 ## To 1.1.0
 
 Security hardening, full-tree include_paths option, restore message i18n default, and coverage gate ≥99%.

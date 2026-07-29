@@ -40,7 +40,7 @@ final class SqlFileStep extends AbstractSetupStep
         private readonly bool $ifExists = false,
         private readonly mixed $connection = null,
     ) {
-        parent::__construct($id, $label, 'auto');
+        parent::__construct($id, $label);
     }
 
     public function isEnabled(SetupContext $ctx): bool

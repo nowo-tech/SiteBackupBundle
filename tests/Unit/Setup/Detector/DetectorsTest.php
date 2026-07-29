@@ -4,12 +4,16 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Tests\Unit\Setup\Detector;
 
+use Nowo\SiteBackupBundle\Model\SetupProgress;
 use Nowo\SiteBackupBundle\Setup\Detector\DoctrineConnectDetector;
 use Nowo\SiteBackupBundle\Setup\Detector\DoctrineSchemaEmptyDetector;
+use Nowo\SiteBackupBundle\Setup\Detector\IncompleteSetupProgressDetector;
 use Nowo\SiteBackupBundle\Setup\Detector\MarkerFileDetector;
 use Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator;
 use Nowo\SiteBackupBundle\Setup\SetupNeedDetectorInterface;
+use Nowo\SiteBackupBundle\Setup\Storage\FilesystemSetupProgressStorage;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupMarkerManager;
+use Nowo\SiteBackupBundle\Setup\Storage\SetupProgressStorageInterface;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use stdClass;
@@ -95,7 +99,7 @@ final class DetectorsTest extends TestCase
         self::assertFalse((new DoctrineConnectDetector($ok, true))->isSetupRequired());
 
         $fail = new class {
-            public function executeQuery(string $sql): void
+            public function executeQuery(string $sql): never
             {
                 throw new RuntimeException('fail');
             }
@@ -163,5 +167,73 @@ final class DetectorsTest extends TestCase
         };
         self::assertFalse((new DoctrineSchemaEmptyDetector($broken, true))->isSetupRequired());
         self::assertFalse((new DoctrineSchemaEmptyDetector(new stdClass(), true))->isSetupRequired());
+    }
+
+    public function testIncompleteSetupProgressDetector(): void
+    {
+        $markers  = new SetupMarkerManager($this->dir . '/req', $this->dir . '/done');
+        $file     = $this->dir . '/progress.json';
+        $storage  = new FilesystemSetupProgressStorage($file);
+        $detector = new IncompleteSetupProgressDetector($storage, $markers, enabled: true);
+
+        self::assertFalse($detector->isSetupRequired());
+        self::assertSame('ok', $detector->getReason());
+
+        $storage->save(new SetupProgress(phase: SetupProgress::PHASE_WAITING, currentStepId: 'admin_user_6', percent: 50.0));
+        self::assertTrue($detector->isSetupRequired());
+        self::assertStringContainsString('incomplete setup progress', $detector->getReason());
+        self::assertStringContainsString('admin_user_6', $detector->getReason());
+
+        $markers->markDone();
+        self::assertFalse($detector->isSetupRequired());
+
+        $disabled = new IncompleteSetupProgressDetector($storage, $markers, enabled: false);
+        self::assertFalse($disabled->isSetupRequired());
+    }
+
+    public function testIncompleteSetupProgressDetectorSwallowsStorageErrors(): void
+    {
+        $markers = new SetupMarkerManager($this->dir . '/req2', $this->dir . '/done2');
+        $broken  = new class implements SetupProgressStorageInterface {
+            public function load(): SetupProgress
+            {
+                throw new RuntimeException('boom');
+            }
+
+            public function save(SetupProgress $progress): void
+            {
+            }
+        };
+        $detector = new IncompleteSetupProgressDetector($broken, $markers, enabled: true);
+        self::assertFalse($detector->isSetupRequired());
+        self::assertSame('ok', $detector->getReason());
+    }
+
+    public function testIncompleteSetupProgressDetectorReasonWhenSecondLoadFails(): void
+    {
+        $markers = new SetupMarkerManager($this->dir . '/req3', $this->dir . '/done3');
+        $flaky   = new class implements SetupProgressStorageInterface {
+            private int $calls = 0;
+
+            public function load(): SetupProgress
+            {
+                ++$this->calls;
+                if ($this->calls === 1) {
+                    return new SetupProgress(
+                        phase: SetupProgress::PHASE_FAILED,
+                        currentStepId: 'x',
+                    );
+                }
+
+                throw new RuntimeException('second load fails');
+            }
+
+            public function save(SetupProgress $progress): void
+            {
+            }
+        };
+        $detector = new IncompleteSetupProgressDetector($flaky, $markers, enabled: true);
+        // getReason → isSetupRequired (load #1 incomplete) → load #2 throws
+        self::assertSame('incomplete setup progress', $detector->getReason());
     }
 }

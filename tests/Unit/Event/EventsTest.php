@@ -26,7 +26,7 @@ final class EventsTest extends TestCase
         self::assertSame($artifact, $created->getArtifact());
         self::assertSame('cli', $created->getActor());
 
-        $deleted = new BackupDeletedEvent($artifact, null);
+        $deleted = new BackupDeletedEvent($artifact);
         self::assertNull($deleted->getActor());
     }
 
@@ -41,7 +41,7 @@ final class EventsTest extends TestCase
         $completed = new RestoreCompletedEvent($artifact, $progress, 'panel');
         self::assertSame($progress, $completed->getProgress());
 
-        $failed = new RestoreFailedEvent($artifact, 'boom', null);
+        $failed = new RestoreFailedEvent($artifact, 'boom');
         self::assertSame('boom', $failed->getError());
     }
 

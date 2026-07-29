@@ -1,0 +1,385 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Nowo\SiteBackupBundle\Tests\Unit\Setup\Storage;
+
+use DateTimeImmutable;
+use Nowo\SiteBackupBundle\Model\SetupProgress;
+use Nowo\SiteBackupBundle\Setup\Storage\ChainSetupProgressStorage;
+use Nowo\SiteBackupBundle\Setup\Storage\DoctrineDbalSetupProgressStorage;
+use Nowo\SiteBackupBundle\Setup\Storage\FilesystemSetupProgressStorage;
+use PHPUnit\Framework\TestCase;
+use RuntimeException;
+use Symfony\Component\Filesystem\Filesystem;
+
+final class DoctrineAndChainStorageTest extends TestCase
+{
+    private string $dir;
+    private Filesystem $fs;
+
+    protected function setUp(): void
+    {
+        $this->fs  = new Filesystem();
+        $this->dir = sys_get_temp_dir() . '/nowo-sbb-doc-store-' . uniqid('', true);
+        $this->fs->mkdir($this->dir);
+    }
+
+    protected function tearDown(): void
+    {
+        $this->fs->remove($this->dir);
+    }
+
+    public function testDoctrineStorageRoundTripWithFakeConnection(): void
+    {
+        $conn    = new FakeDbalConnection();
+        $storage = new DoctrineDbalSetupProgressStorage($conn);
+
+        self::assertTrue($storage->isUsable());
+        self::assertSame(SetupProgress::PHASE_IDLE, $storage->load()->getPhase());
+
+        $progress = new SetupProgress(
+            phase: SetupProgress::PHASE_WAITING,
+            profile: 'fresh_install',
+            currentStepId: 'admin_user_6',
+            percent: 66.7,
+            updatedAt: new DateTimeImmutable('2026-07-29T10:05:00+00:00'),
+            startedAt: new DateTimeImmutable('2026-07-29T10:00:00+00:00'),
+        );
+        $storage->save($progress);
+
+        $loaded = $storage->load();
+        self::assertSame(SetupProgress::PHASE_WAITING, $loaded->getPhase());
+        self::assertSame('admin_user_6', $loaded->getCurrentStepId());
+        self::assertSame(66.7, $loaded->getPercent());
+        self::assertNotNull($loaded->getStartedAt());
+
+        $progress2 = $progress->with(phase: SetupProgress::PHASE_COMPLETED, percent: 100.0, completedAt: new DateTimeImmutable('2026-07-29T10:10:00+00:00'));
+        $storage->save($progress2);
+        self::assertTrue($storage->load()->isFinished());
+    }
+
+    public function testDoctrineStorageUnusableWithoutConnection(): void
+    {
+        $storage = new DoctrineDbalSetupProgressStorage();
+        self::assertFalse($storage->isUsable());
+        self::assertSame(SetupProgress::PHASE_IDLE, $storage->load()->getPhase());
+
+        $this->expectException(RuntimeException::class);
+        $storage->save(new SetupProgress(phase: SetupProgress::PHASE_RUNNING));
+    }
+
+    public function testChainPrefersDoctrineOverFilesystem(): void
+    {
+        $file  = $this->dir . '/progress.json';
+        $fs    = new FilesystemSetupProgressStorage($file);
+        $db    = new DoctrineDbalSetupProgressStorage(new FakeDbalConnection());
+        $chain = new ChainSetupProgressStorage($fs, $db);
+
+        $fs->save(new SetupProgress(phase: SetupProgress::PHASE_RUNNING, currentStepId: 'from_file', percent: 10.0));
+        $db->save(new SetupProgress(phase: SetupProgress::PHASE_WAITING, currentStepId: 'from_db', percent: 50.0, startedAt: new DateTimeImmutable()));
+
+        $loaded = $chain->load();
+        self::assertSame('from_db', $loaded->getCurrentStepId());
+        self::assertSame(SetupProgress::PHASE_WAITING, $loaded->getPhase());
+
+        // Wipe file; chain still loads from DB
+        @unlink($file);
+        self::assertSame('from_db', $chain->load()->getCurrentStepId());
+    }
+
+    public function testChainFallsBackToFilesystemWhenDoctrineIdle(): void
+    {
+        $file  = $this->dir . '/progress2.json';
+        $fs    = new FilesystemSetupProgressStorage($file);
+        $db    = new DoctrineDbalSetupProgressStorage(new FakeDbalConnection());
+        $chain = new ChainSetupProgressStorage($fs, $db);
+
+        $fs->save(new SetupProgress(phase: SetupProgress::PHASE_RUNNING, currentStepId: 'file_only', percent: 20.0));
+        self::assertSame('file_only', $chain->load()->getCurrentStepId());
+    }
+
+    public function testChainSaveWritesFilesystemAndDoctrine(): void
+    {
+        $file  = $this->dir . '/progress3.json';
+        $fs    = new FilesystemSetupProgressStorage($file);
+        $db    = new DoctrineDbalSetupProgressStorage(new FakeDbalConnection());
+        $chain = new ChainSetupProgressStorage($fs, $db);
+
+        $chain->save(new SetupProgress(phase: SetupProgress::PHASE_RUNNING, currentStepId: 'via_chain', percent: 33.0, startedAt: new DateTimeImmutable()));
+        self::assertSame('via_chain', $fs->load()->getCurrentStepId());
+        self::assertSame('via_chain', $db->load()->getCurrentStepId());
+    }
+
+    public function testChainSaveSkipsDoctrineWhenUnusable(): void
+    {
+        $file  = $this->dir . '/progress4.json';
+        $fs    = new FilesystemSetupProgressStorage($file);
+        $db    = new DoctrineDbalSetupProgressStorage();
+        $chain = new ChainSetupProgressStorage($fs, $db);
+
+        $chain->save(new SetupProgress(phase: SetupProgress::PHASE_RUNNING, currentStepId: 'fs_only', percent: 10.0));
+        self::assertSame('fs_only', $chain->load()->getCurrentStepId());
+    }
+
+    public function testChainLoadFallsBackWhenDoctrineThrows(): void
+    {
+        $file = $this->dir . '/progress5.json';
+        $fs   = new FilesystemSetupProgressStorage($file);
+        $fs->save(new SetupProgress(phase: SetupProgress::PHASE_RUNNING, currentStepId: 'fallback', percent: 5.0));
+
+        $throwing = new class {
+            public function executeQuery(string $sql): never
+            {
+                throw new RuntimeException('db down');
+            }
+
+            /** @param list<mixed> $params */
+            public function executeStatement(string $sql, array $params = []): never
+            {
+                throw new RuntimeException('db down');
+            }
+        };
+        $db    = new DoctrineDbalSetupProgressStorage($throwing);
+        $chain = new ChainSetupProgressStorage($fs, $db);
+
+        self::assertSame('fallback', $chain->load()->getCurrentStepId());
+    }
+
+    public function testChainSaveIgnoresDoctrineWriteFailure(): void
+    {
+        $file = $this->dir . '/progress6.json';
+        $fs   = new FilesystemSetupProgressStorage($file);
+        $conn = new class {
+            public function executeQuery(string $sql): object
+            {
+                return new class {
+                    public function fetchAssociative(): false
+                    {
+                        return false;
+                    }
+                };
+            }
+
+            /** @param list<mixed> $params */
+            public function executeStatement(string $sql, array $params = []): never
+            {
+                throw new RuntimeException('cannot write');
+            }
+        };
+        $db    = new DoctrineDbalSetupProgressStorage($conn);
+        $chain = new ChainSetupProgressStorage($fs, $db);
+
+        $chain->save(new SetupProgress(phase: SetupProgress::PHASE_RUNNING, currentStepId: 'fs_ok', percent: 1.0));
+        self::assertSame('fs_ok', $fs->load()->getCurrentStepId());
+    }
+
+    public function testDoctrineLoadInvalidPayloadAndEmptyPayload(): void
+    {
+        $conn = new FakeDbalConnection();
+        $conn->seedRow(['phase' => 'running', 'profile' => 'x', 'current_step_id' => null, 'percent' => 1, 'started_at' => null, 'updated_at' => null, 'completed_at' => null, 'payload' => '{not-json']);
+        $storage = new DoctrineDbalSetupProgressStorage($conn);
+        self::assertSame(SetupProgress::PHASE_IDLE, $storage->load()->getPhase());
+
+        $conn2 = new FakeDbalConnection();
+        $conn2->seedRow(['phase' => 'running', 'profile' => 'x', 'current_step_id' => null, 'percent' => 1, 'started_at' => null, 'updated_at' => null, 'completed_at' => null, 'payload' => '']);
+        $storage2 = new DoctrineDbalSetupProgressStorage($conn2);
+        self::assertSame(SetupProgress::PHASE_IDLE, $storage2->load()->getPhase());
+    }
+
+    public function testDoctrineExecuteQueryOnlyConnection(): void
+    {
+        $conn = new class {
+            /** @var array<string, mixed>|null */
+            private ?array $row = null;
+
+            /**
+             * @param list<mixed> $params
+             */
+            public function executeQuery(string $sql, array $params = []): object
+            {
+                $normalized = strtolower($sql);
+                if (str_contains($normalized, 'create table')) {
+                    return new class {
+                        public function fetchAssociative(): false
+                        {
+                            return false;
+                        }
+                    };
+                }
+
+                if (str_starts_with($normalized, 'insert')) {
+                    $this->row = ['payload' => (string) ($params[8] ?? '')];
+
+                    return new class {
+                        public function fetchAssociative(): false
+                        {
+                            return false;
+                        }
+                    };
+                }
+
+                if (str_starts_with($normalized, 'update')) {
+                    $this->row = ['payload' => (string) ($params[7] ?? '')];
+
+                    return new class {
+                        public function fetchAssociative(): false
+                        {
+                            return false;
+                        }
+                    };
+                }
+
+                $row = $this->row;
+
+                return new class($row) {
+                    /** @param array<string, mixed>|null $row */
+                    public function __construct(private readonly ?array $row)
+                    {
+                    }
+
+                    /** @return array<string, mixed>|false */
+                    public function fetchAssociative(): array|false
+                    {
+                        return $this->row ?? false;
+                    }
+                };
+            }
+        };
+
+        $storage = new DoctrineDbalSetupProgressStorage($conn);
+        $storage->save(new SetupProgress(phase: SetupProgress::PHASE_RUNNING, currentStepId: 'q', percent: 1.0));
+        self::assertSame('q', $storage->load()->getCurrentStepId());
+    }
+
+    public function testDoctrineSavePersistFailure(): void
+    {
+        $conn = new class {
+            public function executeQuery(string $sql): object
+            {
+                return new class {
+                    public function fetchAssociative(): false
+                    {
+                        return false;
+                    }
+                };
+            }
+
+            /** @param list<mixed> $params */
+            public function executeStatement(string $sql, array $params = []): never
+            {
+                throw new RuntimeException('write fail');
+            }
+        };
+        $storage = new DoctrineDbalSetupProgressStorage($conn);
+        $this->expectException(RuntimeException::class);
+        $storage->save(new SetupProgress(phase: SetupProgress::PHASE_RUNNING));
+    }
+
+    public function testDoctrineCustomTableName(): void
+    {
+        $conn    = new FakeDbalConnection();
+        $storage = new DoctrineDbalSetupProgressStorage($conn, 'custom_setup_progress');
+        $storage->save(new SetupProgress(phase: SetupProgress::PHASE_RUNNING, currentStepId: 't', percent: 2.0));
+        self::assertSame('t', $storage->load()->getCurrentStepId());
+    }
+}
+
+/**
+ * Minimal DBAL-like connection for unit tests (no doctrine/dbal required).
+ */
+final class FakeDbalConnection
+{
+    /** @var array<int, array<string, mixed>> */
+    private array $rows = [];
+
+    private bool $tableReady = false;
+
+    /**
+     * @param array<string, mixed> $row
+     */
+    public function seedRow(array $row): void
+    {
+        $this->tableReady = true;
+        $this->rows[1]    = $row;
+    }
+
+    /**
+     * @param list<mixed> $params
+     */
+    public function executeStatement(string $sql, array $params = []): int
+    {
+        $normalized = strtolower($sql);
+        if (str_contains($normalized, 'create table')) {
+            $this->tableReady = true;
+
+            return 0;
+        }
+
+        if (str_starts_with($normalized, 'insert')) {
+            $this->rows[1] = [
+                'phase'           => $params[1],
+                'profile'         => $params[2],
+                'current_step_id' => $params[3],
+                'percent'         => $params[4],
+                'started_at'      => $params[5],
+                'updated_at'      => $params[6],
+                'completed_at'    => $params[7],
+                'payload'         => $params[8],
+            ];
+
+            return 1;
+        }
+
+        if (str_starts_with($normalized, 'update')) {
+            $this->rows[1] = [
+                'phase'           => $params[0],
+                'profile'         => $params[1],
+                'current_step_id' => $params[2],
+                'percent'         => $params[3],
+                'started_at'      => $params[4],
+                'updated_at'      => $params[5],
+                'completed_at'    => $params[6],
+                'payload'         => $params[7],
+            ];
+
+            return 1;
+        }
+
+        return 0;
+    }
+
+    public function executeQuery(string $sql): FakeDbalResult
+    {
+        $normalized = strtolower($sql);
+        if (str_contains($normalized, 'create table')) {
+            $this->tableReady = true;
+
+            return new FakeDbalResult(null);
+        }
+
+        if (str_contains($normalized, 'select') && $this->tableReady && isset($this->rows[1])) {
+            return new FakeDbalResult($this->rows[1]);
+        }
+
+        return new FakeDbalResult(null);
+    }
+}
+
+final class FakeDbalResult
+{
+    /**
+     * @param array<string, mixed>|null $row
+     */
+    public function __construct(private readonly ?array $row)
+    {
+    }
+
+    /**
+     * @return array<string, mixed>|false
+     */
+    public function fetchAssociative(): array|false
+    {
+        return $this->row ?? false;
+    }
+}

@@ -17,7 +17,7 @@ final class MarkerStep extends AbstractSetupStep
         private readonly SetupMarkerManager $markers,
         private readonly bool $writeDone = true,
     ) {
-        parent::__construct($id, $label, 'auto');
+        parent::__construct($id, $label);
     }
 
     public function run(SetupContext $ctx, SetupStepInput $input): SetupStepResult

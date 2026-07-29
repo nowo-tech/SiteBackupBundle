@@ -1027,6 +1027,8 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *         brand_name?: scalar|Param|null, // Default: "Site Setup"
  *         setup_token?: scalar|Param|null, // Optional shared secret for /_setup (?token= or X-Setup-Token). // Default: null
  *         progress_file?: scalar|Param|null, // Default: "%kernel.project_dir%/var/site-backup/setup-progress.json"
+ *         progress_storage?: "filesystem"|"doctrine"|"chain"|Param, // filesystem = JSON in var/; doctrine = DBAL table; chain = write both, prefer DB on load (survives var/ wipe). // Default: "filesystem"
+ *         progress_table?: scalar|Param|null, // DBAL table name when progress_storage is doctrine or chain. // Default: "nowo_site_backup_setup_progress"
  *         required_marker_file?: scalar|Param|null, // Default: "%kernel.project_dir%/var/site-backup/setup.required"
  *         done_marker_file?: scalar|Param|null, // Default: "%kernel.project_dir%/var/site-backup/setup.done"
  *         php_binary?: scalar|Param|null, // Default: "php"
@@ -1037,6 +1039,7 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *             marker?: bool|Param, // Default: true
  *             doctrine_connect?: bool|Param, // Default: false
  *             doctrine_schema_empty?: bool|Param, // Default: false
+ *             incomplete_progress?: bool|Param, // When true, unfinished setup progress (running/waiting/failed) forces the site gate to /_setup. // Default: true
  *         },
  *         default_profile?: scalar|Param|null, // Default: "fresh_install"
  *         profiles?: array<string, array{ // Default: {"fresh_install":{"steps":[{"type":"requirements"},{"type":"database_url","optional":true},{"type":"database_create"},{"type":"cache_clear"},{"type":"migrations"},{"type":"admin_user","roles":["ROLE_SUPER_ADMIN"]},{"type":"marker","write_done":true}]},"post_restore":{"steps":[{"type":"requirements"},{"type":"database_create"},{"type":"cache_clear"},{"type":"sql_file","paths":["var/site-backup/last-restore-dump.sql"],"if_exists":true},{"type":"migrations"},{"type":"admin_user","skip_if_admin_exists":true},{"type":"marker","write_done":true}]},"minimal":{"steps":[{"type":"database_create"},{"type":"migrations"},{"type":"admin_user"},{"type":"marker","write_done":true}]}}

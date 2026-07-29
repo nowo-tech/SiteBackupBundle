@@ -61,8 +61,8 @@ final class SiteBackupPanelControllerExtendedTest extends TestCase
     public function testLoginFailureInvalidPasswordAndCsrf(): void
     {
         $controller = $this->controller();
-        $session    = new Session(new MockArraySessionStorage());
-        $badLogin   = Request::create('/', 'POST', ['action' => 'login', 'password' => 'wrong', '_csrf_token' => 'token']);
+        new Session(new MockArraySessionStorage());
+        $badLogin = Request::create('/', 'POST', ['action' => 'login', 'password' => 'wrong', '_csrf_token' => 'token']);
         $badLogin->setSession(new Session(new MockArraySessionStorage()));
         self::assertSame(401, $controller->index($badLogin)->getStatusCode());
 

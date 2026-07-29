@@ -35,7 +35,7 @@ final class DatabaseUrlStep extends AbstractSetupStep
 
     public function run(SetupContext $ctx, SetupStepInput $input): SetupStepResult
     {
-        $url = $input->getString('database_url', is_string($ctx->getAnswer('database_url')) ? (string) $ctx->getAnswer('database_url') : '');
+        $url = $input->getString('database_url', is_string($ctx->getAnswer('database_url')) ? $ctx->getAnswer('database_url') : '');
 
         if ($url === '') {
             if ($this->optional || $input->getBool('skip') || $input->getString('action') === 'skip') {

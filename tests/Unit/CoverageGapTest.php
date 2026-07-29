@@ -104,7 +104,7 @@ final class CoverageGapTest extends TestCase
 
     public function testSetupOrchestratorGetStepsAndStoredProfile(): void
     {
-        $setupDir = $this->harnessProjectDir . '/setup';
+        $setupDir = $this->harnessProjectDir . '/_setup';
         $storage  = new FilesystemSetupProgressStorage($setupDir . '/progress.json');
         $storage->save(new SetupProgress(profile: 'fresh_install'));
         $orchestrator = $this->createSetupOrchestrator([
@@ -112,7 +112,7 @@ final class CoverageGapTest extends TestCase
             'other'         => ['steps' => [['type' => 'marker']]],
         ]);
         self::assertNotEmpty($orchestrator->getSteps('fresh_install'));
-        self::assertSame('fresh_install', $orchestrator->resolveProfileName(null));
+        self::assertSame('fresh_install', $orchestrator->resolveProfileName());
     }
 
     public function testRequirementsStepTarAndWriteFailure(): void
@@ -150,7 +150,7 @@ final class CoverageGapTest extends TestCase
         self::assertTrue($dir->run($ctx, new SetupStepInput())->isSuccess());
 
         $failConn = new class {
-            public function executeStatement(string $sql): void
+            public function executeStatement(string $sql): never
             {
                 throw new RuntimeException('fail');
             }
@@ -234,7 +234,7 @@ final class CoverageGapTest extends TestCase
         $orchestrator = $this->createSetupOrchestrator([
             'minimal' => ['steps' => [['type' => 'marker']]],
         ]);
-        $setupDir = $this->harnessProjectDir . '/setup';
+        $setupDir = $this->harnessProjectDir . '/_setup';
         $markers  = new SetupMarkerManager($setupDir . '/required', $setupDir . '/done');
 
         $reset = new CommandTester(new SetupResetCommand($orchestrator, $markers));
@@ -261,7 +261,7 @@ final class CoverageGapTest extends TestCase
 
     public function testSetupRequestSubscriberSkips(): void
     {
-        $setupDir  = $this->harnessProjectDir . '/setup';
+        $setupDir  = $this->harnessProjectDir . '/_setup';
         $markers   = new SetupMarkerManager($setupDir . '/required', $setupDir . '/done');
         $evaluator = new SetupNeedEvaluator([new MarkerFileDetector($markers, true, true)], true);
         $manager   = $this->createManager();

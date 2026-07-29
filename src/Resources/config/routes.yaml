@@ -1,9 +1,9 @@
 nowo_site_backup_panel:
     resource: ../../Controller/SiteBackupPanelController.php
     type: attribute
-    prefix: /_site_backup
+    prefix: '%nowo.site_backup.panel.path_prefix%'
 
 nowo_site_backup_setup:
     resource: ../../Controller/SetupWizardController.php
     type: attribute
-    prefix: /_setup
+    prefix: '%nowo.site_backup.setup.path_prefix%'

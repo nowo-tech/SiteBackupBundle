@@ -85,7 +85,7 @@ trait CreatesSiteBackupTestHarness
      */
     protected function createSetupOrchestrator(array $profiles): SetupOrchestrator
     {
-        $setupDir = $this->harnessProjectDir . '/setup';
+        $setupDir = $this->harnessProjectDir . '/_setup';
         $markers  = new SetupMarkerManager($setupDir . '/required', $setupDir . '/done');
         $progress = new FilesystemSetupProgressStorage($setupDir . '/progress.json');
         $factory  = new SetupStepFactory(
