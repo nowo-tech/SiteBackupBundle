@@ -34,8 +34,8 @@ final class SetupOrchestratorTest extends TestCase
 
     public function testMarkerOnlyProfileCompletes(): void
     {
-        $markers  = new SetupMarkerManager($this->dir . '/setup.required', $this->dir . '/setup.done');
-        $progress = new FilesystemSetupProgressStorage($this->dir . '/setup-progress.json');
+        $markers  = new SetupMarkerManager($this->dir . '/_setup.required', $this->dir . '/_setup.done');
+        $progress = new FilesystemSetupProgressStorage($this->dir . '/_setup-progress.json');
         $runner   = new ConsoleProcessRunner($this->dir, 'php', 30);
         $factory  = new SetupStepFactory($runner, $markers, new NullAdminUserProvisioner());
         $orch     = new SetupOrchestrator(
@@ -61,8 +61,8 @@ final class SetupOrchestratorTest extends TestCase
 
     public function testAdminUserNeedsInput(): void
     {
-        $markers  = new SetupMarkerManager($this->dir . '/setup.required', $this->dir . '/setup.done');
-        $progress = new FilesystemSetupProgressStorage($this->dir . '/setup-progress.json');
+        $markers  = new SetupMarkerManager($this->dir . '/_setup.required', $this->dir . '/_setup.done');
+        $progress = new FilesystemSetupProgressStorage($this->dir . '/_setup-progress.json');
         $runner   = new ConsoleProcessRunner($this->dir, 'php', 30);
         $factory  = new SetupStepFactory($runner, $markers, new NullAdminUserProvisioner());
         $orch     = new SetupOrchestrator(

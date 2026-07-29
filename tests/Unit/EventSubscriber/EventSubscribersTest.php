@@ -37,7 +37,7 @@ final class EventSubscribersTest extends TestCase
 
     public function testSetupRequestSubscriberRedirects(): void
     {
-        $setupDir  = $this->harnessProjectDir . '/setup';
+        $setupDir  = $this->harnessProjectDir . '/_setup';
         $markers   = new SetupMarkerManager($setupDir . '/required', $setupDir . '/done');
         $evaluator = new SetupNeedEvaluator([new MarkerFileDetector($markers, true, true)], true);
         $manager   = $this->createManager();

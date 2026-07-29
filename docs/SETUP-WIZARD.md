@@ -57,14 +57,25 @@ Priority (first match wins):
 2. **Setup mode** — any `SetupNeedDetectorInterface` says “needed” **and** `setup.lock` / `setup.done` allow it → wizard.
 3. **Ready** — normal kernel.
 
-Detectors (all optional, tagged `nowo.site_backup.setup_detector`):
+Detectors (wired in `SetupNeedEvaluator`; each can be toggled under `setup.detectors`):
 
 | Detector | When it triggers |
 | --- | --- |
-| `MarkerFileDetector` | `var/site-backup/setup.required` exists or `setup.done` missing (configurable) |
+| `MarkerFileDetector` | `var/site-backup/setup.required` exists or `setup.done` missing (when `require_done_marker: true`) |
 | `DoctrineConnectDetector` | DBAL cannot connect |
-| `DoctrineSchemaEmptyDetector` | connected but no tables / no `doctrine_migration_versions` |
-| Custom | App-specific health |
+| `DoctrineSchemaEmptyDetector` | connected but no tables |
+| `IncompleteSetupProgressDetector` | progress phase is `running` / `waiting_input` / `failed` (and `setup.done` is absent) — resumes mid-wizard even if markers/`var/` were wiped when using Doctrine/`chain` storage |
+| Custom | App-specific health (implement `SetupNeedDetectorInterface`) |
+
+### Progress storage
+
+| `setup.progress_storage` | Behaviour |
+| --- | --- |
+| `filesystem` (default) | JSON at `setup.progress_file` (`var/site-backup/setup-progress.json`) |
+| `doctrine` | Singleton row in DBAL table `setup.progress_table` (default `nowo_site_backup_setup_progress`); table auto-created on first write |
+| `chain` | Write JSON **and** DB when possible; **load prefers DB** so wiping `var/` does not lose the current step |
+
+Progress payload includes `started_at`, `current_step_id`, `phase`, `percent`, `completed_at`, plus log/answers.
 
 After a successful wizard finish: write `setup.done`, remove `setup.required`, emit `SetupCompletedEvent`.
 
@@ -196,10 +207,14 @@ nowo_site_backup:
         process_timeout: 600
         # App must bind a provisioner (or disable admin_user steps)
         admin_provisioner: App\Setup\AdminUserProvisioner
+        # Survive wiping var/ (e.g. container rebuild) once DB exists:
+        progress_storage: chain   # filesystem | doctrine | chain
+        # progress_table: nowo_site_backup_setup_progress
         detectors:
             marker: true
             doctrine_connect: true
             doctrine_schema_empty: true
+            incomplete_progress: true   # gate while wizard is mid-flight
         default_profile: fresh_install
         profiles:
             fresh_install:

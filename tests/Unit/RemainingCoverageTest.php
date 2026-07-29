@@ -243,7 +243,7 @@ final class RemainingCoverageTest extends TestCase
 
     public function testSetupProgressStorageEncodeFailure(): void
     {
-        $storage = new FilesystemSetupProgressStorage(sys_get_temp_dir() . '/setup-' . uniqid('', true) . '.json');
+        $storage = new FilesystemSetupProgressStorage(sys_get_temp_dir() . '/_setup-' . uniqid('', true) . '.json');
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage('encode setup progress');
         $storage->save(new SetupProgress(message: "\xC3\x28"));
@@ -345,14 +345,14 @@ final class RemainingCoverageTest extends TestCase
 
     public function testSetupOrchestratorResolveProfileAndDisabledStep(): void
     {
-        $setupDir = $this->harnessProjectDir . '/setup';
+        $setupDir = $this->harnessProjectDir . '/_setup';
         $storage  = new FilesystemSetupProgressStorage($setupDir . '/progress.json');
         $storage->save(new SetupProgress(profile: 'ghost_profile'));
         $orchestrator = $this->createSetupOrchestrator([
             'fresh_install' => ['steps' => [['type' => 'marker']]],
             'other'         => ['steps' => [['type' => 'marker']]],
         ]);
-        self::assertSame('fresh_install', $orchestrator->resolveProfileName(null));
+        self::assertSame('fresh_install', $orchestrator->resolveProfileName());
 
         $disabled = $this->createSetupOrchestrator([
             'sql_optional' => [
@@ -468,7 +468,7 @@ final class RemainingCoverageTest extends TestCase
      */
     private function createOrchestratorWithProvisioner(AdminUserProvisionerInterface $provisioner, array $profiles): SetupOrchestrator
     {
-        $setupDir = $this->harnessProjectDir . '/setup';
+        $setupDir = $this->harnessProjectDir . '/_setup';
         $markers  = new SetupMarkerManager($setupDir . '/required', $setupDir . '/done');
         $progress = new FilesystemSetupProgressStorage($setupDir . '/progress.json');
         $factory  = new SetupStepFactory(

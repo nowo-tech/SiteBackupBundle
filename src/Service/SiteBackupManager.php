@@ -67,7 +67,7 @@ final class SiteBackupManager
     public function deleteBackup(string $id, ?string $actor = null): void
     {
         $artifact = $this->archiver->find($id);
-        if ($artifact === null) {
+        if (!$artifact instanceof BackupArtifact) {
             throw new RuntimeException(sprintf('Backup "%s" not found.', $id));
         }
         if (!$this->archiver->delete($id)) {
@@ -88,7 +88,7 @@ final class SiteBackupManager
     public function verifyBackup(string $id): array
     {
         $artifact = $this->archiver->find($id);
-        if ($artifact === null) {
+        if (!$artifact instanceof BackupArtifact) {
             return ['ok' => false, 'errors' => [sprintf('Backup "%s" not found.', $id)], 'checksums' => []];
         }
 
@@ -108,7 +108,7 @@ final class SiteBackupManager
     public function restore(string $backupId, ?string $actor = null): RestoreProgress
     {
         $artifact = $this->archiver->find($backupId);
-        if ($artifact === null) {
+        if (!$artifact instanceof BackupArtifact) {
             throw new RuntimeException(sprintf('Backup "%s" not found.', $backupId));
         }
 

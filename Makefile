@@ -1,6 +1,8 @@
 # Makefile for Site Backup Mode Bundle
 # All dev targets use the root docker-compose.yml.
 
+SHELL := /bin/bash
+
 COMPOSE_FILE := docker-compose.yml
 # Prefer Compose V2 plugin (GitHub Actions / modern Docker Desktop); fall back to docker-compose V1 (REQ-MAKE-010).
 COMPOSE_BIN := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")

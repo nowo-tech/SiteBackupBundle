@@ -181,7 +181,7 @@ final class BackupArchiver
     public function delete(string $id): bool
     {
         $artifact = $this->find($id);
-        if ($artifact === null) {
+        if (!$artifact instanceof BackupArtifact) {
             return false;
         }
 

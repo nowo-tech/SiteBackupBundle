@@ -77,7 +77,7 @@ final class LastMileCoverageTest extends TestCase
 
     public function testSetupRequestSubscriberAllEarlyReturns(): void
     {
-        $setupDir = $this->harnessProjectDir . '/setup';
+        $setupDir = $this->harnessProjectDir . '/_setup';
         $markers  = new SetupMarkerManager($setupDir . '/required', $setupDir . '/done');
         $markers->markDone();
         $evaluator  = new SetupNeedEvaluator([new MarkerFileDetector($markers, true, true)], true);
@@ -207,7 +207,7 @@ final class LastMileCoverageTest extends TestCase
 
     public function testRemainingStepAndFactoryBranches(): void
     {
-        $setupDir = $this->harnessProjectDir . '/setup';
+        $setupDir = $this->harnessProjectDir . '/_setup';
         $markers  = new SetupMarkerManager($setupDir . '/required', $setupDir . '/done');
         $factory  = new SetupStepFactory(
             new ConsoleProcessRunner($this->harnessProjectDir, PHP_BINARY, 30),
@@ -298,7 +298,7 @@ final class LastMileCoverageTest extends TestCase
 
     public function testDetectorAndEventGetters(): void
     {
-        $setupDir = $this->harnessProjectDir . '/setup';
+        $setupDir = $this->harnessProjectDir . '/_setup';
         $markers  = new SetupMarkerManager($setupDir . '/required', $setupDir . '/done');
         $markers->markDone();
         $markerDetector = new MarkerFileDetector($markers, true, true);

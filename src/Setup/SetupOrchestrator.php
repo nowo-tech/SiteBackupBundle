@@ -92,6 +92,7 @@ final class SetupOrchestrator
 
         if ($progress->getPhase() === SetupProgress::PHASE_IDLE || $progress->getPhase() === SetupProgress::PHASE_FAILED) {
             $this->eventDispatcher?->dispatch(new SetupStartedEvent($profile));
+            $now      = new DateTimeImmutable();
             $progress = new SetupProgress(
                 phase: SetupProgress::PHASE_RUNNING,
                 profile: $profile,
@@ -99,7 +100,8 @@ final class SetupOrchestrator
                 message: 'Setup started',
                 completedStepIds: $ctx->getCompletedStepIds(),
                 answers: $ctx->getAnswers(),
-                updatedAt: new DateTimeImmutable(),
+                updatedAt: $now,
+                startedAt: $progress->getStartedAt() ?? $now,
             );
             $this->progressStorage->save($progress);
         }
@@ -159,11 +161,11 @@ final class SetupOrchestrator
             $ctx->markCompleted($step->getId());
             $log      = $this->appendLog($progress->getLog(), $result->getLog(), $result->getMessage());
             $progress = $progress->with(
+                percent: $this->percent($index + 1, $total),
+                message: $result->getMessage(),
                 completedStepIds: $ctx->getCompletedStepIds(),
                 log: $log,
-                message: $result->getMessage(),
                 answers: $ctx->getAnswers(),
-                percent: $this->percent($index + 1, $total),
                 updatedAt: new DateTimeImmutable(),
             );
             $this->progressStorage->save($progress);
@@ -173,15 +175,18 @@ final class SetupOrchestrator
             $input = new SetupStepInput();
         }
 
+        $now      = new DateTimeImmutable();
         $progress = $progress->with(
             phase: SetupProgress::PHASE_COMPLETED,
             clearCurrentStepId: true,
             percent: 100.0,
             message: 'Setup completed.',
             clearError: true,
-            answers: $ctx->getAnswers(),
             completedStepIds: $ctx->getCompletedStepIds(),
-            updatedAt: new DateTimeImmutable(),
+            answers: $ctx->getAnswers(),
+            updatedAt: $now,
+            startedAt: $progress->getStartedAt() ?? $now,
+            completedAt: $now,
         );
         $this->progressStorage->save($progress);
         $this->eventDispatcher?->dispatch(new SetupCompletedEvent($profile));

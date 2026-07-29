@@ -26,9 +26,7 @@ final class MarkerFileDetector implements SetupNeedDetectorInterface
             return true;
         }
 
-        return (bool) ($this->requireDoneMarker && !$this->markers->isDone())
-
-        ;
+        return $this->requireDoneMarker && !$this->markers->isDone();
     }
 
     public function getReason(): string

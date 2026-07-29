@@ -27,15 +27,17 @@
 | US-04 | Show a loading/progress UI while restore runs | USAGE |
 | US-05 | Manage backups via Twig panel with optional password | USAGE, SECURITY |
 | US-06 | Exclude health/API/panel paths during restore | CONFIGURATION |
-| US-07 | Detect missing/empty DB and open a setup wizard | SETUP-WIZARD |
+| US-07 | Detect missing/empty DB and open a setup wizard | SETUP-WIZARD, `001-baseline` US-4 |
 | US-08 | Create DB, cache clear, schema/migrations, minimal SQL | SETUP-WIZARD |
 | US-09 | Run idempotent data-load commands from the wizard | SETUP-WIZARD |
 | US-10 | Create initial super-admin + optional sample data | SETUP-WIZARD |
 | US-11 | Post-restore profile: import dump then finish bootstrap | SETUP-WIZARD |
+| US-12 | Durable setup progress (filesystem / doctrine / chain) + incomplete gate | SETUP-WIZARD, `001-baseline` US-5 |
+| US-13 | Configurable `setup.path_prefix` (default `/_setup`) | SETUP-WIZARD, CONFIGURATION, `001-baseline` US-6 |
 
 ## Functional scope
 
-**In scope:** backup archiver, MANIFEST integrity, restore orchestrator, restore request subscriber, **setup detectors + step pipeline + wizard UI**, filesystem progress/history, password gate, Twig panel, CLI, overrideable templates/translations.
+**In scope:** backup archiver, MANIFEST integrity, restore orchestrator, restore request subscriber, **setup detectors (including incomplete progress) + step pipeline + wizard UI**, filesystem **and optional Doctrine/chain** setup progress, password gate, Twig panel, CLI, overrideable templates/translations, configurable `/_setup` path prefix.
 
 **Non-goals:** multi-tenant profiles for backup state (REQ-CFG-001 N/A for backups; setup uses named **wizard profiles**), shipping a concrete User entity, free-form shell from the browser, coupling to a single SecurityBundle setup, shipping FrankenPHP as a runtime dependency.
 

@@ -23,5 +23,7 @@ final class ConfigurationTest extends TestCase
         self::assertArrayHasKey('fresh_install', $config['setup']['profiles']);
         self::assertArrayHasKey('post_restore', $config['setup']['profiles']);
         self::assertFalse($config['setup']['require_done_marker']);
+        self::assertSame('filesystem', $config['setup']['progress_storage']);
+        self::assertTrue($config['setup']['detectors']['incomplete_progress']);
     }
 }

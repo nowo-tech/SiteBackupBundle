@@ -43,8 +43,8 @@ final class SetupOrchestratorExtendedTest extends TestCase
 
     public function testResolveProfileFromMarkerAndStored(): void
     {
-        $markers  = new SetupMarkerManager($this->dir . '/setup.required', $this->dir . '/setup.done');
-        $progress = new FilesystemSetupProgressStorage($this->dir . '/setup-progress.json');
+        $markers  = new SetupMarkerManager($this->dir . '/_setup.required', $this->dir . '/_setup.done');
+        $progress = new FilesystemSetupProgressStorage($this->dir . '/_setup-progress.json');
         $factory  = new SetupStepFactory(new ConsoleProcessRunner($this->dir, PHP_BINARY, 30), $markers, new NullAdminUserProvisioner());
         $orch     = new SetupOrchestrator(
             projectDir: $this->dir,
@@ -60,7 +60,7 @@ final class SetupOrchestratorExtendedTest extends TestCase
 
         self::assertSame('fresh_install', $orch->resolveProfileName('fresh_install'));
         $markers->markRequired('post_restore');
-        self::assertSame('post_restore', $orch->resolveProfileName(null));
+        self::assertSame('post_restore', $orch->resolveProfileName());
     }
 
     public function testAdvanceDispatchesEventsAndFails(): void

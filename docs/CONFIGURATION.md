@@ -15,9 +15,14 @@ Root key: `nowo_site_backup`.
 | `backup.database_dump_command` | `null` | Shell command writing SQL to stdout |
 | `restore.progress_file` | `var/site-backup/restore-progress.json` | Polled by the loading UI |
 | `restore.protected_paths` | `.env.local`, `var/site-backup` | Never overwritten on apply |
-| `panel.path_prefix` | `/_site_backup` | Auto-excluded from loading page |
+| `panel.path_prefix` | `/_site_backup` | Auto-excluded from loading page; drives imported panel routes |
 | `security.password_hash` | `null` | Prefer env `SITE_BACKUP_PASSWORD_HASH` |
 | `templates.*` | `@NowoSiteBackupBundle/...` | Overrideable Twig templates |
+| `setup.path_prefix` | `/_setup` | Wizard URL prefix; drives imported setup routes + site-gate exclusions |
+| `setup.progress_storage` | `filesystem` | `filesystem` \| `doctrine` \| `chain` (prefer DB on load) |
+| `setup.progress_table` | `nowo_site_backup_setup_progress` | DBAL table for doctrine/chain |
+| `setup.progress_file` | `%kernel.project_dir%/var/site-backup/setup-progress.json` | JSON progress when filesystem/chain |
+| `setup.detectors.incomplete_progress` | `true` | Gate when progress phase is running/waiting/failed |
 
 Profiles (`default_profile` / `profiles`) are **not** used for backup state: backup state is global (REQ-CFG-001 N/A for backups).
 

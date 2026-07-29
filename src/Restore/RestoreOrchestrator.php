@@ -21,6 +21,7 @@ use function dirname;
 use function implode;
 use function is_dir;
 use function is_file;
+use function is_string;
 use function min;
 use function rtrim;
 use function sprintf;
@@ -77,14 +78,18 @@ final class RestoreOrchestrator
             throw new RuntimeException('A restore is already in progress.');
         }
 
-        $now = new DateTimeImmutable();
+        $now        = new DateTimeImmutable();
+        $startedLog = 'Restore started for backup ' . $artifact->getId();
+        if (is_string($actor) && $actor !== '') {
+            $startedLog .= ' (actor=' . $actor . ')';
+        }
         $this->writeProgress(new RestoreProgress(
             active: true,
             phase: RestoreProgress::PHASE_PREPARING,
             percent: 1.0,
             message: 'Preparing restore…',
             backupId: $artifact->getId(),
-            log: [$this->logLine('Restore started for backup ' . $artifact->getId())],
+            log: [$this->logLine($startedLog)],
             startedAt: $now,
             updatedAt: $now,
         ));
@@ -216,9 +221,7 @@ final class RestoreOrchestrator
         }
 
         // Never overwrite live restore progress / history / storage during apply
-        return (bool) str_starts_with($relative, 'var/site-backup/')
-
-        ;
+        return str_starts_with($relative, 'var/site-backup/');
     }
 
     private function advance(string $phase, float $percent, string $message): void

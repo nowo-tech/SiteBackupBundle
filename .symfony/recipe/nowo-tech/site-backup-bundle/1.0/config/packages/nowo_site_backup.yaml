@@ -33,9 +33,11 @@ nowo_site_backup:
         brand_name: 'Site Setup'
         # setup_token: '%env(SITE_SETUP_TOKEN)%'
         # admin_provisioner: App\Setup\AdminUserProvisioner
+        # progress_storage: chain   # filesystem | doctrine | chain (DB survives var/ wipe)
         detectors:
             marker: true
             doctrine_connect: false
             doctrine_schema_empty: false
+            incomplete_progress: true
         default_profile: fresh_install
         # Customize profiles / steps — see docs/SETUP-WIZARD.md

@@ -186,7 +186,7 @@ final class FinalCoverageTest extends TestCase
 
     public function testSetupRequestSubscriberWhenSetupNotRequired(): void
     {
-        $setupDir = $this->harnessProjectDir . '/setup';
+        $setupDir = $this->harnessProjectDir . '/_setup';
         $markers  = new SetupMarkerManager($setupDir . '/required', $setupDir . '/done');
         $markers->markDone();
         $evaluator = new SetupNeedEvaluator(

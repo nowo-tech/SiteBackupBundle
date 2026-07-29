@@ -20,4 +20,6 @@ return RectorConfig::configure()
     ->withSkip([
         __DIR__ . '/demo',
         __DIR__ . '/vendor',
+        // Keep classic AbstractExtension registration for broad Twig/Symfony compatibility.
+        __DIR__ . '/src/Twig/SiteBackupExtension.php',
     ]);

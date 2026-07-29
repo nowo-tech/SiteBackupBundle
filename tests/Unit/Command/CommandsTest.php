@@ -101,7 +101,7 @@ final class CommandsTest extends TestCase
         $orchestrator = $this->createSetupOrchestrator([
             'minimal' => ['steps' => [['type' => 'marker']]],
         ]);
-        $setupDir = $this->harnessProjectDir . '/setup';
+        $setupDir = $this->harnessProjectDir . '/_setup';
         $markers  = new SetupMarkerManager($setupDir . '/required', $setupDir . '/done');
 
         $tester = new CommandTester(new SetupResetCommand($orchestrator, $markers));
@@ -126,7 +126,7 @@ final class CommandsTest extends TestCase
         $orchestrator = $this->createSetupOrchestrator([
             'minimal' => ['steps' => [['type' => 'marker']]],
         ]);
-        $setupDir = $this->harnessProjectDir . '/setup';
+        $setupDir = $this->harnessProjectDir . '/_setup';
         $markers  = new SetupMarkerManager($setupDir . '/required', $setupDir . '/done');
 
         $tester = new CommandTester(new SetupStatusCommand($evaluator, $orchestrator, $markers));

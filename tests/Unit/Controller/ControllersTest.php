@@ -141,7 +141,7 @@ final class ControllersTest extends TestCase
 
     public function testSetupWizardController(): void
     {
-        $setupDir = $this->harnessProjectDir . '/setup';
+        $setupDir = $this->harnessProjectDir . '/_setup';
         $markers  = new SetupMarkerManager($setupDir . '/required', $setupDir . '/done');
         $markers->markRequired('fresh_install');
         $evaluator    = new SetupNeedEvaluator([new MarkerFileDetector($markers, false, true)], true);

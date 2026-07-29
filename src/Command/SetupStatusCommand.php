@@ -15,6 +15,8 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 
 use function implode;
 
+use const DATE_ATOM;
+
 #[AsCommand(name: 'nowo:site-backup:setup-status', description: 'Show setup detectors and progress')]
 final class SetupStatusCommand extends Command
 {
@@ -40,6 +42,8 @@ final class SetupStatusCommand extends Command
             ['profile'        => $progress->getProfile()],
             ['percent'        => (string) $progress->getPercent()],
             ['step'           => $progress->getCurrentStepId() ?? '—'],
+            ['started_at'     => $progress->getStartedAt()?->format(DATE_ATOM) ?? '—'],
+            ['completed_at'   => $progress->getCompletedAt()?->format(DATE_ATOM) ?? '—'],
         );
 
         return $this->evaluator->isSetupRequired() ? 2 : Command::SUCCESS;

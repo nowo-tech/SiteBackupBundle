@@ -2,13 +2,13 @@
 
 **Baseline spec**: [`spec.md`](spec.md)
 **Package**: `nowo-tech/site-backup-bundle`
-**Last audited**: 2026-07-29
+**Last audited**: 2026-07-29 (FR-SETUP-002/003/004)
 
 Every production source under `src/` is listed below (REQ-SPECKIT-001 / REQ-SPECKIT-003).
 
 | Source files | Count |
 | --- | --- |
-| Total | **94** |
+| Total | **97** |
 
 | Source file | Requirement IDs |
 | --- | --- |
@@ -37,7 +37,7 @@ Every production source under `src/` is listed below (REQ-SPECKIT-001 / REQ-SPEC
 | `Event/SetupStepCompletedEvent.php` | FR-EVT-001 |
 | `Event/SetupStepFailedEvent.php` | FR-EVT-001 |
 | `EventSubscriber/RestoreRequestSubscriber.php` | FR-HTTP-002 |
-| `EventSubscriber/SetupRequestSubscriber.php` | FR-HTTP-002 |
+| `EventSubscriber/SetupRequestSubscriber.php` | FR-HTTP-002, FR-SETUP-004 |
 | `Exclusion/SiteBackupExclusionMatcher.php` | FR-BACKUP-002 |
 | `Model/BackupArtifact.php` | FR-MODEL-001 |
 | `Model/BackupHistoryEntry.php` | FR-MODEL-001 |
@@ -45,7 +45,7 @@ Every production source under `src/` is listed below (REQ-SPECKIT-001 / REQ-SPEC
 | `Model/SetupProgress.php` | FR-MODEL-001 |
 | `NowoSiteBackupBundle.php` | FR-BUNDLE-001 |
 | `Resources/config/packages/nowo_site_backup.yaml` | FR-DI-001 |
-| `Resources/config/routes.yaml` | FR-DI-001 |
+| `Resources/config/routes.yaml` | FR-DI-001, FR-SETUP-004 |
 | `Resources/config/services.yaml` | FR-DI-001 |
 | `Resources/translations/NowoSiteBackupBundle.de.yaml` | FR-I18N-001 |
 | `Resources/translations/NowoSiteBackupBundle.en.yaml` | FR-I18N-001 |
@@ -74,13 +74,14 @@ Every production source under `src/` is listed below (REQ-SPECKIT-001 / REQ-SPEC
 | `Service/SiteBackupManager.php` | FR-SVC-001 |
 | `Setup/AdminUserProvisionerInterface.php` | FR-SETUP-001 |
 | `Setup/ConsoleProcessRunner.php` | FR-SETUP-001 |
-| `Setup/Detector/DoctrineConnectDetector.php` | FR-SETUP-001 |
-| `Setup/Detector/DoctrineSchemaEmptyDetector.php` | FR-SETUP-001 |
-| `Setup/Detector/MarkerFileDetector.php` | FR-SETUP-001 |
-| `Setup/Detector/SetupNeedEvaluator.php` | FR-SETUP-001 |
+| `Setup/Detector/DoctrineConnectDetector.php` | FR-SETUP-003 |
+| `Setup/Detector/DoctrineSchemaEmptyDetector.php` | FR-SETUP-003 |
+| `Setup/Detector/IncompleteSetupProgressDetector.php` | FR-SETUP-003 |
+| `Setup/Detector/MarkerFileDetector.php` | FR-SETUP-003 |
+| `Setup/Detector/SetupNeedEvaluator.php` | FR-SETUP-003 |
 | `Setup/NullAdminUserProvisioner.php` | FR-SETUP-001 |
 | `Setup/SetupContext.php` | FR-SETUP-001 |
-| `Setup/SetupNeedDetectorInterface.php` | FR-SETUP-001 |
+| `Setup/SetupNeedDetectorInterface.php` | FR-SETUP-003 |
 | `Setup/SetupOrchestrator.php` | FR-SETUP-001 |
 | `Setup/SetupStepFactory.php` | FR-SETUP-001 |
 | `Setup/SetupStepInput.php` | FR-SETUP-001 |
@@ -98,9 +99,11 @@ Every production source under `src/` is listed below (REQ-SPECKIT-001 / REQ-SPEC
 | `Setup/Step/SampleDataStep.php` | FR-SETUP-001 |
 | `Setup/Step/SchemaUpdateStep.php` | FR-SETUP-001 |
 | `Setup/Step/SqlFileStep.php` | FR-SETUP-001 |
-| `Setup/Storage/FilesystemSetupProgressStorage.php` | FR-SETUP-001 |
+| `Setup/Storage/ChainSetupProgressStorage.php` | FR-SETUP-002 |
+| `Setup/Storage/DoctrineDbalSetupProgressStorage.php` | FR-SETUP-002 |
+| `Setup/Storage/FilesystemSetupProgressStorage.php` | FR-SETUP-002 |
 | `Setup/Storage/SetupMarkerManager.php` | FR-SETUP-001 |
-| `Setup/Storage/SetupProgressStorageInterface.php` | FR-SETUP-001 |
+| `Setup/Storage/SetupProgressStorageInterface.php` | FR-SETUP-002 |
 | `Storage/BackupHistoryStorageInterface.php` | FR-STORE-001 |
 | `Storage/FilesystemBackupHistoryStorage.php` | FR-STORE-001 |
 | `Storage/FilesystemRestoreProgressStorage.php` | FR-STORE-001 |

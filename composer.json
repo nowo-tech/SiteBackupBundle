@@ -32,17 +32,17 @@
     ],
     "require": {
         "php": ">=8.2 <8.6",
-        "symfony/config": "^7.4",
+        "symfony/config": "^7.0 || ^8.0",
         "symfony/console": "^7.0 || ^8.0",
-        "symfony/dependency-injection": "^7.4",
+        "symfony/dependency-injection": "^7.0 || ^8.0",
         "symfony/event-dispatcher": "^7.0 || ^8.0",
         "symfony/filesystem": "^7.0 || ^8.0",
         "symfony/finder": "^7.0 || ^8.0",
-        "symfony/http-foundation": "^7.4",
-        "symfony/http-kernel": "^7.4",
+        "symfony/http-foundation": "^7.0 || ^8.0",
+        "symfony/http-kernel": "^7.0 || ^8.0",
         "symfony/process": "^7.0 || ^8.0",
         "symfony/routing": "^7.0 || ^8.0",
-        "symfony/security-core": "^7.4",
+        "symfony/security-core": "^7.0 || ^8.0",
         "symfony/security-csrf": "^7.0 || ^8.0",
         "symfony/yaml": "^7.0 || ^8.0"
     },
@@ -64,7 +64,7 @@
         "symfony/translation": "Required for |trans in panel and restore templates",
         "symfony/security-bundle": "Optional; wire a custom SiteBackupAccessGateInterface",
         "symfony/flex": "For automatic recipe installation",
-        "doctrine/dbal": "Optional; used when database dump_command is not set and a DBAL connection is available"
+        "doctrine/dbal": "Optional; setup progress doctrine/chain storage, schema detectors, and apps that rely on a DBAL connection"
     },
     "autoload": {
         "psr-4": {

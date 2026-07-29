@@ -31,8 +31,8 @@ final class RestoreProgressTest extends TestCase
 
     public function testWithClears(): void
     {
-        $progress = (new RestoreProgress(message: 'x', error: 'e', backupId: 'b'))
-            ->with(clearMessage: true, clearError: true, clearBackupId: true);
+        $progress = (new RestoreProgress(message: 'x', backupId: 'b', error: 'e'))
+            ->with(clearMessage: true, clearBackupId: true, clearError: true);
 
         self::assertNull($progress->getMessage());
         self::assertNull($progress->getError());
