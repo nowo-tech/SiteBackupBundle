@@ -1,26 +1,27 @@
 restore:
   page:
-    title: 'Restoring site'
-    done: 'Restore finished. Reloading…'
+    title: 'Site herstellen'
+    message: 'Deze site wordt hersteld vanuit een geverifieerde back-up. Even geduld…'
+    done: 'Herstel voltooid. Opnieuw laden…'
 panel:
-  title: 'Site Backup'
+  title: 'Siteback-up'
 setup:
   wizard:
-    title: 'Set up this site'
-    subtitle: 'We will create the database, apply schema, and prepare an admin account.'
-    continue: 'Continue'
-    retry: 'Retry'
-    running: 'Running the next setup step…'
+    title: 'Deze site instellen'
+    subtitle: 'We maken de database, passen het schema toe en bereiden een beheerdersaccount voor.'
+    continue: 'Doorgaan'
+    retry: 'Opnieuw'
+    running: 'Volgende installatiestap uitvoeren…'
   admin:
-    create: 'Create admin'
+    create: 'Beheerder aanmaken'
   sample:
-    prompt: 'Load sample / demo data?'
-    load: 'Yes, load sample data'
-    skip: 'No, skip'
+    prompt: 'Voorbeeldgegevens laden?'
+    load: 'Ja, voorbeeldgegevens laden'
+    skip: 'Nee, overslaan'
   database:
-    save: 'Save DATABASE_URL'
-    skip: 'Skip (use existing env)'
+    save: 'DATABASE_URL opslaan'
+    skip: 'Overslaan (bestaande env gebruiken)'
   done:
-    title: 'Setup complete'
-    body: 'The site is ready. You can sign in with the admin account you created.'
-    home: 'Go to homepage'
+    title: 'Installatie voltooid'
+    body: 'De site is klaar. U kunt inloggen met het aangemaakte beheerdersaccount.'
+    home: 'Naar de homepage'

@@ -118,8 +118,9 @@ final class SiteBackupPanelController
             'pathPrefix'        => $this->pathPrefix,
             'error'             => $error,
             'protectionEnabled' => $this->accessGate->isProtectionEnabled(),
+            'misconfigured'     => $this->accessGate->isMisconfigured(),
             'csrfToken'         => $this->csrfTokenManager?->getToken('nowo_site_backup_login')->getValue(),
-        ]), $error ? 401 : 200);
+        ]), $error || $this->accessGate->isMisconfigured() ? 401 : 200);
     }
 
     private function handleCreate(Request $request): string
@@ -165,8 +166,9 @@ final class SiteBackupPanelController
 
     private function isCsrfValid(Request $request, string $id): bool
     {
+        // Fail closed: panel mutations require CSRF (REQ-UI-002 / SEC-004).
         if (!$this->csrfTokenManager instanceof CsrfTokenManagerInterface) {
-            return true;
+            return false;
         }
 
         $token = $request->request->getString('_csrf_token');

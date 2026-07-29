@@ -199,7 +199,10 @@ final class SiteBackupExtension extends Extension
             ->setArgument('$template', $config['templates']['restore_page'])
             ->setArgument('$statusCode', (int) $config['status_code'])
             ->setArgument('$panelPathPrefix', $config['panel']['path_prefix'])
-            ->setArgument('$defaultMessage', $config['default_message']);
+            ->setArgument('$defaultMessage', $config['default_message'] !== '' && $config['default_message'] !== null
+                ? (string) $config['default_message']
+                : 'restore.page.message')
+            ->setArgument('$translator', new Reference('translator', ContainerBuilder::NULL_ON_INVALID_REFERENCE));
 
         $definition->clearTags();
         $definition->addTag('kernel.event_listener', [

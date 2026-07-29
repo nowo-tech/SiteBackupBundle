@@ -24,6 +24,7 @@ nowo_site_backup:
         # database_dump_command: 'mysqldump -u$DB_USER -p$DB_PASSWORD $DB_NAME'
     security:
         password_protection: true
+        # REQUIRED when password_protection is true (panel is fail-closed without a hash):
         # password_hash: '%env(SITE_BACKUP_PASSWORD_HASH)%'
     setup:
         enabled: true

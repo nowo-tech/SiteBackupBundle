@@ -1,5 +1,15 @@
 # Security
 
+## Table of contents
+
+- [Scope](#scope)
+- [Attack surface](#attack-surface)
+- [Threat model](#threat-model)
+- [Secrets & cryptography](#secrets-cryptography)
+- [Logging](#logging)
+- [Dependency and updates](#dependency-and-updates)
+- [Release security checklist (12.4.1)](#release-security-checklist-1241)
+
 ## Scope
 
 Covers backup creation, integrity verification, restore orchestration, restore loading page, the admin panel, and the setup wizard. Does **not** cover host OS backups, object-storage offsite replication, or automatic production DB failover.
@@ -17,8 +27,8 @@ Covers backup creation, integrity verification, restore orchestration, restore l
 
 | Threat | Risk | Mitigation |
 | --- | --- | --- |
-| Unauthorized restore/delete | High | Password gate / custom `SiteBackupAccessGateInterface`, CSRF on panel POSTs |
-| Unauthorized setup / admin creation | High | Wizard only while detectors say required; optional `setup_token`; CSRF; `AdminUserProvisionerInterface` is app-owned |
+| Unauthorized restore/delete | High | Password gate / custom `SiteBackupAccessGateInterface` (**fail-closed** when `password_protection` is true but `password_hash` is empty); CSRF on panel POSTs (**fail-closed** if CSRF manager missing — require `symfony/security-csrf`) |
+| Unauthorized setup / admin creation | High | Wizard only while detectors say required; optional `setup_token`; CSRF fail-closed; `AdminUserProvisionerInterface` is app-owned |
 | Path traversal on apply | High | Relative paths from archive; protected paths; never overwrite `var/site-backup/` |
 | Command injection via dump/setup cmd | High | Dump / console commands are **operator-configured** only (not from free-form HTTP input) |
 | Progress info disclosure | Low | Endpoints expose phase/percent/message only |
@@ -26,7 +36,7 @@ Covers backup creation, integrity verification, restore orchestration, restore l
 
 ## Secrets & cryptography
 
-- Panel password stored as `password_hash` (bcrypt/argon2id)
+- Panel password stored as `password_hash` (bcrypt/argon2id). **Required** whenever `security.password_protection` is true (default). Generate with `php bin/console nowo:site-backup:hash-password`.
 - Integrity uses SHA-256 (checksums, not secrecy)
 - Never commit real `.env` with production dump credentials
 
@@ -52,3 +62,4 @@ Run `composer audit` before releases. See checklist 12.4.1 below.
 | Safe cryptography | ✅ |
 | Permissions/exposure documented | ✅ |
 | Limits/DoS (`process_timeout`) | ✅ |
+| Passes AI security audit (REQ-SEC-004; grade in monorepo `BUNDLES_SECURITY_ANALYSIS.md`) | ✅ Pass (conditional) after fail-closed remedia 2026-07-29 — residuals: host must set `password_hash` + install `symfony/security-csrf`; firewall `/_site_backup` and `/_setup` |

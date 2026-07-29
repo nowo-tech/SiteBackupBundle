@@ -1,26 +1,27 @@
 restore:
   page:
-    title: 'Restoring site'
-    done: 'Restore finished. Reloading…'
+    title: 'Restauration du site'
+    message: 'Restauration de ce site à partir d''une sauvegarde vérifiée. Veuillez patienter…'
+    done: 'Restauration terminée. Rechargement…'
 panel:
-  title: 'Site Backup'
+  title: 'Sauvegarde du site'
 setup:
   wizard:
-    title: 'Set up this site'
-    subtitle: 'We will create the database, apply schema, and prepare an admin account.'
-    continue: 'Continue'
-    retry: 'Retry'
-    running: 'Running the next setup step…'
+    title: 'Configurer ce site'
+    subtitle: 'Nous allons créer la base de données, appliquer le schéma et préparer un compte administrateur.'
+    continue: 'Continuer'
+    retry: 'Réessayer'
+    running: 'Exécution de l''étape suivante…'
   admin:
-    create: 'Create admin'
+    create: 'Créer l''administrateur'
   sample:
-    prompt: 'Load sample / demo data?'
-    load: 'Yes, load sample data'
-    skip: 'No, skip'
+    prompt: 'Charger des données d''exemple ?'
+    load: 'Oui, charger les données d''exemple'
+    skip: 'Non, ignorer'
   database:
-    save: 'Save DATABASE_URL'
-    skip: 'Skip (use existing env)'
+    save: 'Enregistrer DATABASE_URL'
+    skip: 'Ignorer (utiliser l''env existant)'
   done:
-    title: 'Setup complete'
-    body: 'The site is ready. You can sign in with the admin account you created.'
-    home: 'Go to homepage'
+    title: 'Configuration terminée'
+    body: 'Le site est prêt. Vous pouvez vous connecter avec le compte administrateur créé.'
+    home: 'Aller à l''accueil'

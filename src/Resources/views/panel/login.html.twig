@@ -5,8 +5,10 @@
 {% block body %}
 <section class="card">
     <h2>Site Backup panel</h2>
-    {% if not protectionEnabled %}
-        <p>Password protection is disabled. Open the panel after enabling a hash in config.</p>
+    {% if misconfigured|default(false) %}
+        <p class="error">Password protection is enabled but <code>security.password_hash</code> is not set. Configure a hash (see <code>nowo:site-backup:hash-password</code>) before using the panel.</p>
+    {% elseif not protectionEnabled %}
+        <p>Password protection is disabled. The panel is open to whoever can reach this URL — enable a hash in production.</p>
     {% else %}
         <form method="post">
             <input type="hidden" name="_csrf_token" value="{{ csrfToken }}">

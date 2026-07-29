@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Tests\Unit\Model;
 
+use InvalidArgumentException;
 use Nowo\SiteBackupBundle\Model\RestoreProgress;
 use PHPUnit\Framework\TestCase;
 
@@ -36,5 +37,24 @@ final class RestoreProgressTest extends TestCase
         self::assertNull($progress->getMessage());
         self::assertNull($progress->getError());
         self::assertNull($progress->getBackupId());
+    }
+
+    public function testPercentValidation(): void
+    {
+        $this->expectException(InvalidArgumentException::class);
+        new RestoreProgress(percent: 101.0);
+    }
+
+    public function testFromArrayDefaults(): void
+    {
+        $progress = RestoreProgress::fromArray([
+            'log'        => ['ok', 1],
+            'percent'    => 'bad',
+            'started_at' => 'invalid',
+        ]);
+
+        self::assertSame(['ok'], $progress->getLog());
+        self::assertSame(0.0, $progress->getPercent());
+        self::assertNull($progress->getStartedAt());
     }
 }

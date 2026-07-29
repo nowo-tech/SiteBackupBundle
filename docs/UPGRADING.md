@@ -1,5 +1,36 @@
 # Upgrading
 
+## To 1.1.0
+
+Security hardening, full-tree include_paths option, restore message i18n default, and coverage gate ≥99%.
+
+### Install / update
+
+```bash
+composer require nowo-tech/site-backup-bundle:^1.1
+php bin/console cache:clear
+```
+
+### Behaviour / security
+
+- With `security.password_protection: true` (default), **`password_hash` must be set** or the panel gate reports misconfigured / denies access (fail-closed). Generate with `php bin/console nowo:site-backup:hash-password`.
+- Panel and setup POSTs require a working CSRF token manager (`symfony/security-csrf` is already a hard dependency).
+
+### Migration notes
+
+| Topic | Before | After |
+| --- | --- | --- |
+| `backup.include_paths: []` or `["."]` | Empty / path-as-written | **Entire project** minus `exclude_patterns` |
+| Omit `include_paths` | Selective defaults | Unchanged (same selective defaults) |
+| `restore.default_message` default | English literal | Translation id `restore.page.message` |
+
+If you relied on an explicit empty `include_paths` list meaning “use defaults”, **remove the key** instead of setting `[]`.
+
+### Breaking / notable changes
+
+- Explicit `include_paths: []` / `["."]` semantics change as above.
+- Default restore loading message is now a translation key (override with a literal string still works if you set `default_message` yourself).
+
 ## To 1.0.0
 
 First public release. No prior Packagist versions — install fresh.

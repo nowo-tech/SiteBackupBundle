@@ -5,11 +5,11 @@ Root key: `nowo_site_backup`.
 | Key | Default | Notes |
 | --- | --- | --- |
 | `enabled` | `true` | Master switch for the restore loading page |
-| `default_message` | Restoring… | Public loading page copy |
+| `default_message` | `restore.page.message` | Translation id (domain `NowoSiteBackupBundle`) or literal for the public loading page |
 | `status_code` | `503` | HTTP status while restore is active |
 | `subscriber_priority` | `31` | After router (exclusions / attributes) |
 | `process_timeout` | `600` | Seconds for `tar` / dump processes (REQ-RUNTIME-001) |
-| `backup.include_paths` | config, public, templates, … | Relative to `kernel.project_dir` |
+| `backup.include_paths` | config, public, templates, … | Relative to `kernel.project_dir`. **`[]` or `["."]` = entire project** (minus `exclude_patterns`). Omitting the key keeps the selective defaults. |
 | `backup.exclude_patterns` | cache/log/vendor/… | `fnmatch` against relative paths |
 | `backup.storage_dir` | `%kernel.project_dir%/var/site-backup/archives` | Archives + `.meta.json` |
 | `backup.database_dump_command` | `null` | Shell command writing SQL to stdout |
@@ -29,7 +29,11 @@ Profiles (`default_profile` / `profiles`) are **not** used for backup state: bac
 nowo_site_backup:
     process_timeout: 900
     backup:
+        # Selective paths (default behaviour when the key is omitted):
         include_paths: [config, public/uploads, templates, src, composer.json]
+        # Or back up the whole project and only skip noise:
+        # include_paths: []
+        # exclude_patterns: [tmp/*, .pnpm-store/*, .phpunit.cache/*, var/*]
         database_dump_command: 'mysqldump --single-transaction -u$DB_USER -p$DB_PASSWORD $DB_NAME'
     restore:
         protected_paths: ['.env.local', 'var/site-backup', 'config/secrets']

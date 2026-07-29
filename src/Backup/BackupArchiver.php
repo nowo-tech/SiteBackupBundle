@@ -265,9 +265,9 @@ final class BackupArchiver
         $checksums = [];
         $project   = rtrim($this->projectDir, '/\\');
 
-        foreach ($this->includePaths as $relative) {
-            $relative = ltrim(str_replace('\\', '/', $relative), '/');
-            $source   = $project . '/' . $relative;
+        foreach ($this->resolveIncludePaths() as $relative) {
+            // '' = project root (entire tree minus exclude_patterns)
+            $source = $relative === '' ? $project : $project . '/' . $relative;
             if (!file_exists($source)) {
                 continue;
             }
@@ -296,7 +296,7 @@ final class BackupArchiver
                 $full     = $file->getPathname();
                 $relInner = substr($full, strlen($source) + 1);
                 $relInner = str_replace('\\', '/', $relInner);
-                $relPath  = $relative . '/' . $relInner;
+                $relPath  = $relative === '' ? $relInner : $relative . '/' . $relInner;
                 if ($this->isExcludedRelative($relPath)) {
                     continue;
                 }
@@ -308,6 +308,30 @@ final class BackupArchiver
         }
 
         return $checksums;
+    }
+
+    /**
+     * Empty include_paths or "." → entire project root (paths without "./" prefix).
+     * Omitting the config key still uses Symfony defaults (selective list), not this.
+     *
+     * @return list<string> relative paths; '' means project root
+     */
+    private function resolveIncludePaths(): array
+    {
+        if ($this->includePaths === []) {
+            return [''];
+        }
+
+        $normalized = [];
+        foreach ($this->includePaths as $relative) {
+            $relative = trim(str_replace('\\', '/', (string) $relative), '/');
+            if ($relative === '' || $relative === '.') {
+                return [''];
+            }
+            $normalized[] = $relative;
+        }
+
+        return array_values(array_unique($normalized));
     }
 
     private function isExcludedRelative(string $relative): bool
