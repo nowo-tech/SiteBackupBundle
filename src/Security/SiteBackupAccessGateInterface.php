@@ -15,4 +15,9 @@ interface SiteBackupAccessGateInterface
     public function logout(Request $request): void;
 
     public function isProtectionEnabled(): bool;
+
+    /**
+     * When true, protection is enabled but credentials are not configured — deny all access.
+     */
+    public function isMisconfigured(): bool;
 }

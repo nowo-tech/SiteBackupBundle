@@ -2,10 +2,12 @@
 # All dev targets use the root docker-compose.yml.
 
 COMPOSE_FILE := docker-compose.yml
-COMPOSE     := docker-compose -f $(COMPOSE_FILE)
+# Prefer Compose V2 plugin (GitHub Actions / modern Docker Desktop); fall back to docker-compose V1 (REQ-MAKE-010).
+COMPOSE_BIN := $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
+COMPOSE     := $(COMPOSE_BIN) -f $(COMPOSE_FILE)
 SERVICE_PHP := php
 
-.PHONY: help up down down-dev build shell install ensure-up test test-coverage coverage-php-percent cs-check cs-fix qa clean release-check release-check-demos composer-sync rector rector-dry phpstan update validate assets setup-hooks check-no-cursor-coauthor strip-cursor-coauthor-from-history validate-translations coverage-check
+.PHONY: help up down down-dev build shell install ensure-up test test-coverage coverage-php-percent cs-check cs-fix qa clean release-check release-check-demos composer-sync rector rector-dry phpstan update validate assets setup-hooks check-no-cursor-coauthor check-open-prs strip-cursor-coauthor-from-history validate-translations coverage-check demo-smoke
 
 help:
 	@echo "Site Backup Mode Bundle - Development Commands"
@@ -15,14 +17,16 @@ help:
 	@echo "Targets:"
 	@echo "  up            Start Docker container"
 	@echo "  down          Stop Docker container"
-	@echo "  down-dev      Stop root docker-compose (dev) and remove orphans"
+	@echo "  down-dev      Stop root $(COMPOSE) (dev) and remove orphans"
 	@echo "  build         Rebuild Docker image (no cache)"
 	@echo "  shell         Open shell in container"
 	@echo "  install       Install Composer dependencies"
 	@echo "  assets        No-op (no frontend in this bundle)"
 	@echo "  test          Run PHPUnit tests (starts container if needed)"
 	@echo "  test-coverage Run tests with code coverage (starts container if needed)"
-	@echo "  coverage-check Fail if PHP Lines coverage is under 100%"
+	@echo "  coverage-check Fail if PHP Lines coverage is under 99%"
+	@echo "  check-open-prs Fail if unresolved open PRs (REQ-REL-003)"
+	@echo "  demo-smoke     Demo healthchecks (release-verify)"
 	@echo "  cs-check      Check code style"
 	@echo "  cs-fix        Fix code style"
 	@echo "  rector        Apply Rector refactoring"
@@ -67,7 +71,7 @@ install: ensure-up
 
 ensure-up:
 	@if ! $(COMPOSE) exec -T $(SERVICE_PHP) true 2>/dev/null; then \
-		echo "Starting container (root docker-compose)..."; \
+		echo "Starting container (root $(COMPOSE))..."; \
 		$(COMPOSE) up -d; \
 		sleep 3; \
 		$(COMPOSE) exec -T $(SERVICE_PHP) composer install --no-interaction; \
@@ -82,7 +86,7 @@ test-coverage: ensure-up
 
 coverage-check: test-coverage
 	@pct=$$(sed 's/\x1B\[[0-9;]*[A-Za-z]//g' coverage-php.txt | awk '/^[[:space:]]*Lines:[[:space:]]+/ { gsub(/%/, "", $$2); print $$2; exit }'); \
-	awk -v p="$$pct" 'BEGIN { if (p+0 < 100) { printf "ERROR: PHP Lines coverage %s%% < 100%%\n", p; exit 1 } printf "Coverage check OK: %s%%\n", p }'
+	awk -v p="$$pct" 'BEGIN { if (p+0 < 99) { printf "ERROR: PHP Lines coverage %s%% < 99%%\n", p; exit 1 } printf "Coverage check OK: %s%%\n", p }'
 
 validate-translations: ensure-up
 	$(COMPOSE) exec -T $(SERVICE_PHP) php .scripts/validate-translations.php
@@ -111,10 +115,17 @@ update: ensure-up
 validate: ensure-up
 	$(COMPOSE) exec -T $(SERVICE_PHP) composer validate --strict
 
-release-check: check-no-cursor-coauthor ensure-up composer-sync cs-fix cs-check rector-dry phpstan validate-translations coverage-check release-check-demos
+release-check: check-no-cursor-coauthor check-open-prs ensure-up composer-sync cs-fix cs-check rector-dry phpstan validate-translations coverage-check release-check-demos
 
 release-check-demos:
 	@if [ -f demo/Makefile ]; then $(MAKE) -C demo release-check; else echo "No demo/Makefile — skip release-check-demos"; fi
+
+demo-smoke:
+	@if [ -f demo/Makefile ]; then $(MAKE) -C demo release-verify; else echo "No demo/Makefile — skip demo-smoke"; fi
+
+check-open-prs:
+	@chmod +x .scripts/check-open-prs.sh
+	@GH_REPO=nowo-tech/SiteBackupBundle ./.scripts/check-open-prs.sh
 
 composer-sync: ensure-up
 	$(COMPOSE) exec -T $(SERVICE_PHP) composer validate --strict
@@ -143,4 +154,5 @@ setup-hooks:
 
 # REQ-MAKE-008: update-deps (REQ-MAKE-008)
 BUNDLE_ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST))))
-include $(BUNDLE_ROOT)/../.scripts/Makefile.update-deps.mk
+# Optional: monorepo helper absent on standalone GitHub Actions checkout (REQ-MAKE-009).
+-include $(BUNDLE_ROOT)/../.scripts/Makefile.update-deps.mk

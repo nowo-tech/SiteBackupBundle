@@ -15,6 +15,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
+use Symfony\Contracts\Translation\TranslatorInterface;
 use Twig\Environment;
 
 use function explode;
@@ -40,7 +41,8 @@ final class RestoreRequestSubscriber
         private readonly string $template,
         private readonly int $statusCode = Response::HTTP_SERVICE_UNAVAILABLE,
         private readonly string $panelPathPrefix = '/_site_backup',
-        private readonly string $defaultMessage = 'Restoring this site from a verified backup. Please wait…',
+        private readonly string $defaultMessage = 'restore.page.message',
+        private readonly ?TranslatorInterface $translator = null,
     ) {
     }
 
@@ -118,7 +120,7 @@ final class RestoreRequestSubscriber
                 'status'    => 'restoring',
                 'phase'     => $progress->getPhase(),
                 'percent'   => $progress->getPercent(),
-                'message'   => $progress->getMessage() ?? $this->defaultMessage,
+                'message'   => $this->resolveMessage($progress),
                 'backup_id' => $progress->getBackupId(),
                 'error'     => $progress->getError(),
             ], $this->statusCode);
@@ -154,16 +156,35 @@ final class RestoreRequestSubscriber
         }
 
         $message = htmlspecialchars(
-            $progress->getMessage() ?? $this->defaultMessage,
+            $this->resolveMessage($progress),
+            ENT_QUOTES | ENT_SUBSTITUTE,
+            'UTF-8',
+        );
+        $title = htmlspecialchars(
+            $this->trans('restore.page.title'),
             ENT_QUOTES | ENT_SUBSTITUTE,
             'UTF-8',
         );
         $percent = htmlspecialchars((string) $progress->getPercent(), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 
         return '<!DOCTYPE html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="5">'
-            . '<title>Restoring</title></head><body>'
-            . '<h1>Restoring site</h1><p>' . $message . '</p>'
+            . '<title>' . $title . '</title></head><body>'
+            . '<h1>' . $title . '</h1><p>' . $message . '</p>'
             . '<p><progress max="100" value="' . $percent . '"></progress> ' . $percent . '%</p>'
             . '</body></html>';
+    }
+
+    private function resolveMessage(RestoreProgress $progress): string
+    {
+        return $this->trans($progress->getMessage() ?? $this->defaultMessage);
+    }
+
+    private function trans(string $id): string
+    {
+        if ($this->translator instanceof TranslatorInterface) {
+            return $this->translator->trans($id, [], 'NowoSiteBackupBundle');
+        }
+
+        return $id;
     }
 }

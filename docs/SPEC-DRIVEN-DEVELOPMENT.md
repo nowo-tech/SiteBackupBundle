@@ -1,5 +1,16 @@
 # Spec-driven development
 
+## Table of contents
+
+- [Layers in sync](#layers-in-sync)
+- [User stories](#user-stories)
+- [Functional scope](#functional-scope)
+- [Validating the functional spec](#validating-the-functional-spec)
+- [Requirement identifiers (selected)](#requirement-identifiers-selected)
+- [Contributor workflow](#contributor-workflow)
+- [Relationship to Engram](#relationship-to-engram)
+- [See also](#see-also)
+
 ## Layers in sync
 
 1. **Product behaviour** — integral backup, integrity verify, safe restore + loading UI, and **setup wizard** for cold DB / post-restore bootstrap. Documented in [USAGE.md](USAGE.md), [CONFIGURATION.md](CONFIGURATION.md), and [SETUP-WIZARD.md](SETUP-WIZARD.md).

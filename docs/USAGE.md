@@ -1,5 +1,17 @@
 # Usage
 
+## Table of contents
+
+- [Create an integral backup](#create-an-integral-backup)
+- [Verify integrity](#verify-integrity)
+- [Restore without breaking the site](#restore-without-breaking-the-site)
+  - [Exclude routes during restore](#exclude-routes-during-restore)
+- [Admin panel](#admin-panel)
+- [Setup wizard](#setup-wizard)
+- [Twig helpers](#twig-helpers)
+- [Template overrides (REQ-TWIG-001)](#template-overrides-req-twig-001)
+- [Database import note](#database-import-note)
+
 ## Create an integral backup
 
 ```bash

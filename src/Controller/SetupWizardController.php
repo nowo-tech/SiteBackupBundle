@@ -24,7 +24,6 @@ use function is_string;
 use function json_decode;
 use function rtrim;
 use function str_contains;
-use function str_starts_with;
 
 use const JSON_THROW_ON_ERROR;
 
@@ -95,18 +94,10 @@ final class SetupWizardController
             }
         }
 
-        $template = $this->templates['setup_wizard'];
-        if ($currentStep !== null && $currentStep->getUiKind() === 'form') {
-            $template = match (true) {
-                str_starts_with($currentStep->getId(), 'admin_user') || $currentStep->getId() === 'admin_user' || str_contains($currentStep->getId(), 'admin') => $this->templates['setup_admin'],
-                str_contains($currentStep->getId(), 'sample')                                                                                                  => $this->templates['setup_sample'],
-                str_contains($currentStep->getId(), 'database_url')                                                                                            => $this->templates['setup_database'],
-                default                                                                                                                                        => $this->templates['setup_wizard'],
-            };
-            // Prefer type-based selection via label/id heuristics above; form steps share wizard with partials
-        }
-
-        return new Response($this->twig->render($template, [
+        // Always render the wizard shell. Form steps use partials inside setup_body
+        // (do not switch to admin/sample/database templates that extend the full HTML
+        // document — that path is redundant and fragile with Twig yield + inspectors).
+        return new Response($this->twig->render($this->templates['setup_wizard'], [
             'pathPrefix'  => $this->pathPrefix,
             'brandName'   => $this->brandName,
             'progress'    => $progress,
@@ -180,8 +171,9 @@ final class SetupWizardController
 
     private function isCsrfValid(Request $request): bool
     {
+        // Fail closed: setup POSTs require CSRF (REQ-UI-002 / SEC-004).
         if (!$this->csrfTokenManager instanceof CsrfTokenManagerInterface) {
-            return true;
+            return false;
         }
 
         return $this->csrfTokenManager->isTokenValid(

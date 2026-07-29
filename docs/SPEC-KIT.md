@@ -1,5 +1,17 @@
 # GitHub Spec Kit — installation, structure, and usage
 
+## Table of contents
+
+- [What Spec Kit adds](#what-spec-kit-adds)
+- [Prerequisites — install Specify CLI](#prerequisites-install-specify-cli)
+- [Initialize Spec Kit in this repository](#initialize-spec-kit-in-this-repository)
+- [Folder structure](#folder-structure)
+- [Baseline backfill (`specs/001-baseline/`)](#baseline-backfill-specs001-baseline)
+- [Using Spec Kit in Cursor Agent](#using-spec-kit-in-cursor-agent)
+- [Maintainer checklist](#maintainer-checklist)
+- [Troubleshooting](#troubleshooting)
+- [See also](#see-also)
+
 This manual explains how **GitHub Spec Kit** is set up and used in this repository. It complements [`SPEC-DRIVEN-DEVELOPMENT.md`](SPEC-DRIVEN-DEVELOPMENT.md) (product behaviour and traceability) and the normative baseline under [`specs/001-baseline/`](../specs/001-baseline/).
 
 **Official upstream docs:** [github/spec-kit](https://github.com/github/spec-kit) · [Spec Kit documentation](https://github.github.io/spec-kit/)

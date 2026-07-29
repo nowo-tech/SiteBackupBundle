@@ -1,10 +1,19 @@
 # Installation
 
+## Table of contents
+
+- [Requirements](#requirements)
+- [Composer](#composer)
+- [Routes](#routes)
+- [Panel password (required by default)](#panel-password-required-by-default)
+- [Next steps](#next-steps)
+
 ## Requirements
 
 - PHP 8.2+ (Symfony 8.x requires PHP 8.4+)
 - Symfony HttpKernel / Console components as declared in `composer.json`
 - `symfony/twig-bundle` (or `twig/twig`) to render the public restore loading page, the admin panel, and the setup wizard
+- **`symfony/security-csrf`** (or Framework CSRF) — panel and setup POSTs **fail closed** without a CSRF token manager
 - Optional: `symfony/security-bundle` if you replace `SiteBackupAccessGateInterface`
 - Optional: Doctrine DBAL for `sql_file` import / connect detectors; apps bind `AdminUserProvisionerInterface` for the setup wizard
 - System `tar` binary for create/extract
@@ -23,7 +32,9 @@ nowo_site_backup:
     resource: '@NowoSiteBackupBundle/Resources/config/routes.yaml'
 ```
 
-## Panel password
+## Panel password (required by default)
+
+When `security.password_protection` is `true` (default), **`password_hash` must be set**. Without a hash the panel stays locked (fail-closed).
 
 ```bash
 php bin/console nowo:site-backup:hash-password

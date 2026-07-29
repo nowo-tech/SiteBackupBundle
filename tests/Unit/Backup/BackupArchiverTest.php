@@ -63,4 +63,58 @@ final class BackupArchiverTest extends TestCase
         self::assertTrue($archiver->delete($artifact->getId()));
         self::assertCount(0, $archiver->listArtifacts());
     }
+
+    public function testEmptyIncludePathsMeansEntireProjectMinusExcludes(): void
+    {
+        $this->fs->mkdir($this->projectDir . '/var/cache');
+        $this->fs->mkdir($this->projectDir . '/tmp');
+        file_put_contents($this->projectDir . '/var/cache/dev.php', "cached\n");
+        file_put_contents($this->projectDir . '/tmp/scratch.txt', "tmp\n");
+        file_put_contents($this->projectDir . '/README.md', "hello\n");
+
+        $archiver = new BackupArchiver(
+            projectDir: $this->projectDir,
+            storageDir: $this->storageDir,
+            includePaths: [],
+            excludePatterns: ['var/*', 'tmp/*'],
+            databaseDumpCommand: null,
+            processTimeoutSeconds: 60,
+        );
+
+        $artifact = $archiver->create('full-tree', 'phpunit');
+        $verify   = $archiver->verifyIntegrity($artifact);
+        self::assertTrue($verify['ok'], implode('; ', $verify['errors']));
+
+        $checksums = $verify['checksums'];
+        self::assertArrayHasKey('config/app.yaml', $checksums);
+        self::assertArrayHasKey('public/index.php', $checksums);
+        self::assertArrayHasKey('composer.json', $checksums);
+        self::assertArrayHasKey('README.md', $checksums);
+        self::assertArrayNotHasKey('var/cache/dev.php', $checksums);
+        self::assertArrayNotHasKey('tmp/scratch.txt', $checksums);
+        foreach (array_keys($checksums) as $path) {
+            self::assertStringStartsNotWith('./', $path);
+        }
+    }
+
+    public function testDotIncludePathMeansEntireProject(): void
+    {
+        file_put_contents($this->projectDir . '/root.txt', "root\n");
+
+        $archiver = new BackupArchiver(
+            projectDir: $this->projectDir,
+            storageDir: $this->storageDir,
+            includePaths: ['.'],
+            excludePatterns: [],
+            databaseDumpCommand: null,
+            processTimeoutSeconds: 60,
+        );
+
+        $artifact = $archiver->create('dot-root', 'phpunit');
+        $verify   = $archiver->verifyIntegrity($artifact);
+        self::assertTrue($verify['ok'], implode('; ', $verify['errors']));
+        self::assertArrayHasKey('root.txt', $verify['checksums']);
+        self::assertArrayHasKey('config/app.yaml', $verify['checksums']);
+        self::assertArrayNotHasKey('./root.txt', $verify['checksums']);
+    }
 }

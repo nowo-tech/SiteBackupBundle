@@ -1,6 +1,7 @@
 restore:
   page:
     title: 'Restaurando el sitio'
+    message: 'Restaurando este sitio desde una copia verificada. Por favor, espera…'
     done: 'Restauración terminada. Recargando…'
 panel:
   title: 'Copia de seguridad del sitio'

@@ -1,0 +1,3 @@
+restore:
+  page:
+    message: 'Restaurando esta demo desde una copia verificada. Por favor, espera…'

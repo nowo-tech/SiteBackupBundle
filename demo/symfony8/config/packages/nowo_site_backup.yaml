@@ -1,6 +1,7 @@
 nowo_site_backup:
     enabled: true
-    default_message: 'Restoring this demo from a verified backup. Please wait…'
+    # Translation id (NowoSiteBackupBundle). Demo overrides copy in translations/.
+    default_message: restore.page.message
     process_timeout: 300
     backup:
         include_paths:
@@ -28,5 +29,8 @@ nowo_site_backup:
         enabled: true
         brand_name: 'Site Backup Demo'
         require_done_marker: false
+        admin_provisioner: App\Setup\AdminUserProvisioner
         detectors:
             marker: true
+            doctrine_connect: true
+            doctrine_schema_empty: true

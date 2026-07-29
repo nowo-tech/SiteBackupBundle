@@ -22,13 +22,26 @@ final class PasswordSiteBackupAccessGate implements SiteBackupAccessGateInterfac
 
     public function isProtectionEnabled(): bool
     {
-        return $this->enabled && is_string($this->passwordHash) && $this->passwordHash !== '';
+        return $this->enabled;
+    }
+
+    /**
+     * True when protection is on but no usable password_hash is configured (fail-closed).
+     */
+    public function isMisconfigured(): bool
+    {
+        return $this->enabled && (!is_string($this->passwordHash) || $this->passwordHash === '');
     }
 
     public function isAuthenticated(Request $request): bool
     {
-        if (!$this->isProtectionEnabled()) {
+        if (!$this->enabled) {
             return true;
+        }
+
+        // Fail closed: enabled without a hash must never grant panel access (REQ-UI-002 / SEC-004).
+        if ($this->isMisconfigured()) {
+            return false;
         }
 
         $session = $this->session($request);
@@ -41,8 +54,12 @@ final class PasswordSiteBackupAccessGate implements SiteBackupAccessGateInterfac
 
     public function authenticate(Request $request, string $password): bool
     {
-        if (!$this->isProtectionEnabled()) {
+        if (!$this->enabled) {
             return true;
+        }
+
+        if ($this->isMisconfigured()) {
+            return false;
         }
 
         if ($this->passwordHash === null || !password_verify($password, $this->passwordHash)) {

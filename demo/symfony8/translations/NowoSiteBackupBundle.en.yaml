@@ -1,0 +1,3 @@
+restore:
+  page:
+    message: 'Restoring this demo from a verified backup. Please wait…'

@@ -1,17 +1,109 @@
-# Code inventory (baseline)
+# Code inventory — 100% traceability
 
-| Area | Path | Role |
-| --- | --- | --- |
-| Bundle | `src/NowoSiteBackupBundle.php` | Bundle + TwigPathsPass |
-| DI | `src/DependencyInjection/*` | Config tree + wiring |
-| Backup | `src/Backup/BackupArchiver.php` | Create / list / verify / extract |
-| Restore | `src/Restore/RestoreOrchestrator.php` | Safe apply + progress + setup.required |
-| Facade | `src/Service/SiteBackupManager.php` | App API + events/history |
-| HTTP restore | `src/EventSubscriber/RestoreRequestSubscriber.php` | Loading page interceptor |
-| Setup | `src/Setup/**` | Wizard engine, steps, detectors, markers |
-| HTTP setup | `src/EventSubscriber/SetupRequestSubscriber.php` | Redirect to `/_setup` |
-| Panel | `src/Controller/SiteBackupPanelController.php` | CRUD UI + progress.json |
-| Wizard UI | `src/Controller/SetupWizardController.php` | Setup wizard + API |
-| CLI | `src/Command/*` | backup + setup commands |
-| Twig | `src/Resources/views/**` | restore, panel, setup |
-| i18n | `src/Resources/translations/NowoSiteBackupBundle.*` | Domain translations |
+**Baseline spec**: [`spec.md`](spec.md)
+**Package**: `nowo-tech/site-backup-bundle`
+**Last audited**: 2026-07-29
+
+Every production source under `src/` is listed below (REQ-SPECKIT-001 / REQ-SPECKIT-003).
+
+| Source files | Count |
+| --- | --- |
+| Total | **94** |
+
+| Source file | Requirement IDs |
+| --- | --- |
+| `Attribute/ExcludeFromRestore.php` | FR-ATTR-001 |
+| `Backup/BackupArchiver.php` | FR-BACKUP-001 |
+| `Command/CreateBackupCommand.php` | FR-CLI-001 |
+| `Command/HashPasswordCommand.php` | FR-CLI-001 |
+| `Command/ListBackupsCommand.php` | FR-CLI-001 |
+| `Command/RestoreBackupCommand.php` | FR-CLI-001 |
+| `Command/SetupCommand.php` | FR-CLI-001 |
+| `Command/SetupResetCommand.php` | FR-CLI-001 |
+| `Command/SetupStatusCommand.php` | FR-CLI-001 |
+| `Command/VerifyBackupCommand.php` | FR-CLI-001 |
+| `Controller/SetupWizardController.php` | FR-HTTP-001 |
+| `Controller/SiteBackupPanelController.php` | FR-HTTP-001 |
+| `DependencyInjection/Compiler/TwigPathsPass.php` | FR-TWIG-001 |
+| `DependencyInjection/Configuration.php` | FR-CFG-001 |
+| `DependencyInjection/SiteBackupExtension.php` | FR-CFG-001 |
+| `Event/BackupCreatedEvent.php` | FR-EVT-001 |
+| `Event/BackupDeletedEvent.php` | FR-EVT-001 |
+| `Event/RestoreCompletedEvent.php` | FR-EVT-001 |
+| `Event/RestoreFailedEvent.php` | FR-EVT-001 |
+| `Event/RestoreStartedEvent.php` | FR-EVT-001 |
+| `Event/SetupCompletedEvent.php` | FR-EVT-001 |
+| `Event/SetupStartedEvent.php` | FR-EVT-001 |
+| `Event/SetupStepCompletedEvent.php` | FR-EVT-001 |
+| `Event/SetupStepFailedEvent.php` | FR-EVT-001 |
+| `EventSubscriber/RestoreRequestSubscriber.php` | FR-HTTP-002 |
+| `EventSubscriber/SetupRequestSubscriber.php` | FR-HTTP-002 |
+| `Exclusion/SiteBackupExclusionMatcher.php` | FR-BACKUP-002 |
+| `Model/BackupArtifact.php` | FR-MODEL-001 |
+| `Model/BackupHistoryEntry.php` | FR-MODEL-001 |
+| `Model/RestoreProgress.php` | FR-MODEL-001 |
+| `Model/SetupProgress.php` | FR-MODEL-001 |
+| `NowoSiteBackupBundle.php` | FR-BUNDLE-001 |
+| `Resources/config/packages/nowo_site_backup.yaml` | FR-DI-001 |
+| `Resources/config/routes.yaml` | FR-DI-001 |
+| `Resources/config/services.yaml` | FR-DI-001 |
+| `Resources/translations/NowoSiteBackupBundle.de.yaml` | FR-I18N-001 |
+| `Resources/translations/NowoSiteBackupBundle.en.yaml` | FR-I18N-001 |
+| `Resources/translations/NowoSiteBackupBundle.es.yaml` | FR-I18N-001 |
+| `Resources/translations/NowoSiteBackupBundle.fr.yaml` | FR-I18N-001 |
+| `Resources/translations/NowoSiteBackupBundle.it.yaml` | FR-I18N-001 |
+| `Resources/translations/NowoSiteBackupBundle.nl.yaml` | FR-I18N-001 |
+| `Resources/translations/NowoSiteBackupBundle.pt.yaml` | FR-I18N-001 |
+| `Resources/views/panel/history.html.twig` | FR-TWIG-003 |
+| `Resources/views/panel/index.html.twig` | FR-TWIG-003 |
+| `Resources/views/panel/layout.html.twig` | FR-TWIG-003 |
+| `Resources/views/panel/login.html.twig` | FR-TWIG-003 |
+| `Resources/views/restore/page.html.twig` | FR-TWIG-003 |
+| `Resources/views/setup/_admin_form.html.twig` | FR-TWIG-003 |
+| `Resources/views/setup/_database_form.html.twig` | FR-TWIG-003 |
+| `Resources/views/setup/_sample_form.html.twig` | FR-TWIG-003 |
+| `Resources/views/setup/admin.html.twig` | FR-TWIG-003 |
+| `Resources/views/setup/database.html.twig` | FR-TWIG-003 |
+| `Resources/views/setup/done.html.twig` | FR-TWIG-003 |
+| `Resources/views/setup/sample_data.html.twig` | FR-TWIG-003 |
+| `Resources/views/setup/token.html.twig` | FR-TWIG-003 |
+| `Resources/views/setup/wizard.html.twig` | FR-TWIG-003 |
+| `Restore/RestoreOrchestrator.php` | FR-RESTORE-001 |
+| `Security/PasswordSiteBackupAccessGate.php` | FR-SEC-001 |
+| `Security/SiteBackupAccessGateInterface.php` | FR-SEC-001 |
+| `Service/SiteBackupManager.php` | FR-SVC-001 |
+| `Setup/AdminUserProvisionerInterface.php` | FR-SETUP-001 |
+| `Setup/ConsoleProcessRunner.php` | FR-SETUP-001 |
+| `Setup/Detector/DoctrineConnectDetector.php` | FR-SETUP-001 |
+| `Setup/Detector/DoctrineSchemaEmptyDetector.php` | FR-SETUP-001 |
+| `Setup/Detector/MarkerFileDetector.php` | FR-SETUP-001 |
+| `Setup/Detector/SetupNeedEvaluator.php` | FR-SETUP-001 |
+| `Setup/NullAdminUserProvisioner.php` | FR-SETUP-001 |
+| `Setup/SetupContext.php` | FR-SETUP-001 |
+| `Setup/SetupNeedDetectorInterface.php` | FR-SETUP-001 |
+| `Setup/SetupOrchestrator.php` | FR-SETUP-001 |
+| `Setup/SetupStepFactory.php` | FR-SETUP-001 |
+| `Setup/SetupStepInput.php` | FR-SETUP-001 |
+| `Setup/SetupStepInterface.php` | FR-SETUP-001 |
+| `Setup/SetupStepResult.php` | FR-SETUP-001 |
+| `Setup/Step/AbstractSetupStep.php` | FR-SETUP-001 |
+| `Setup/Step/AdminUserStep.php` | FR-SETUP-001 |
+| `Setup/Step/CacheClearStep.php` | FR-SETUP-001 |
+| `Setup/Step/ConsoleStep.php` | FR-SETUP-001 |
+| `Setup/Step/DatabaseCreateStep.php` | FR-SETUP-001 |
+| `Setup/Step/DatabaseUrlStep.php` | FR-SETUP-001 |
+| `Setup/Step/MarkerStep.php` | FR-SETUP-001 |
+| `Setup/Step/MigrationsStep.php` | FR-SETUP-001 |
+| `Setup/Step/RequirementsStep.php` | FR-SETUP-001 |
+| `Setup/Step/SampleDataStep.php` | FR-SETUP-001 |
+| `Setup/Step/SchemaUpdateStep.php` | FR-SETUP-001 |
+| `Setup/Step/SqlFileStep.php` | FR-SETUP-001 |
+| `Setup/Storage/FilesystemSetupProgressStorage.php` | FR-SETUP-001 |
+| `Setup/Storage/SetupMarkerManager.php` | FR-SETUP-001 |
+| `Setup/Storage/SetupProgressStorageInterface.php` | FR-SETUP-001 |
+| `Storage/BackupHistoryStorageInterface.php` | FR-STORE-001 |
+| `Storage/FilesystemBackupHistoryStorage.php` | FR-STORE-001 |
+| `Storage/FilesystemRestoreProgressStorage.php` | FR-STORE-001 |
+| `Storage/RestoreProgressStorageInterface.php` | FR-STORE-001 |
+| `Twig/SiteBackupExtension.php` | FR-TWIG-002 |
+

@@ -1,6 +1,7 @@
 restore:
   page:
     title: 'Restoring site'
+    message: 'Restoring this site from a verified backup. Please wait…'
     done: 'Restore finished. Reloading…'
 panel:
   title: 'Site Backup'

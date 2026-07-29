@@ -77,7 +77,7 @@
     {% endif %}
     <div class="phase">{{ progress.phase }}</div>
     <h1>{{ 'restore.page.title'|trans({}, 'NowoSiteBackupBundle') }}</h1>
-    <p>{{ progress.message|default(defaultMessage) }}</p>
+    <p>{{ (progress.message|default(defaultMessage))|trans({}, 'NowoSiteBackupBundle') }}</p>
     <div class="bar" aria-hidden="true"><span></span></div>
     <div class="meta">
         <span>{{ progress.percent|number_format(0) }}%</span>

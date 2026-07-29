@@ -1,5 +1,25 @@
 name: site-backup-bundle-demo-symfony-8
 services:
+  mysql:
+    image: mysql:8.4
+    container_name: site-backup-demo-symfony8-mysql
+    environment:
+      MYSQL_DATABASE: site_backup_demo
+      MYSQL_USER: app
+      MYSQL_PASSWORD: app
+      MYSQL_ROOT_PASSWORD: root
+    volumes:
+      - mysql-data:/var/lib/mysql
+    networks:
+      - site-backup-demo-network
+    # REQ-DEMO-006: no host ports for DB
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "127.0.0.1", "-uroot", "-proot"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+      start_period: 10s
+
   php:
     build:
       context: .
@@ -21,14 +41,43 @@ services:
       - APP_SECRET=${APP_SECRET:-demo-secret}
       - FRANKENPHP_MODE=${FRANKENPHP_MODE:-worker}
       - DEFAULT_URI=http://localhost:${PORT:-8056}
+      - DATABASE_URL=${DATABASE_URL:-mysql://app:app@mysql:3306/site_backup_demo?serverVersion=8.4.0&charset=utf8mb4}
+    depends_on:
+      mysql:
+        condition: service_healthy
     dns:
       - 8.8.8.8
       - 8.8.4.4
     networks:
       - site-backup-demo-network
 
+###> doctrine/doctrine-bundle ###
+  database:
+    image: postgres:${POSTGRES_VERSION:-16}-alpine
+    environment:
+      POSTGRES_DB: ${POSTGRES_DB:-app}
+      # You should definitely change the password in production
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-!ChangeMe!}
+      POSTGRES_USER: ${POSTGRES_USER:-app}
+    healthcheck:
+      test: ["CMD", "pg_isready", "-d", "${POSTGRES_DB:-app}", "-U", "${POSTGRES_USER:-app}"]
+      timeout: 5s
+      retries: 5
+      start_period: 60s
+    volumes:
+      - database_data:/var/lib/postgresql/data:rw
+      # You may use a bind-mounted host directory instead, so that it is harder to accidentally remove the volume and lose all your data!
+      # - ./docker/db/data:/var/lib/postgresql/data:rw
+###< doctrine/doctrine-bundle ###
+
 volumes:
   composer-cache:
+    driver: local
+  mysql-data:
+
+###> doctrine/doctrine-bundle ###
+  database_data:
+###< doctrine/doctrine-bundle ###
     driver: local
 
 networks:

@@ -7,6 +7,32 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.1.0] - 2026-07-29
+
+### Security
+
+- Panel **fail-closed** when `password_protection` is true but `password_hash` is empty (`isMisconfigured()`).
+- CSRF on panel/setup POSTs **fail-closed** if no CSRF token manager is available (require `symfony/security-csrf`).
+
+### Added
+
+- `make check-open-prs`, `demo-smoke`; `release-check` gates open PRs.
+- `SYMFONY_DEPRECATIONS_HELPER=max[direct]=0` (REQ-SF-005).
+- Spec Kit `.specify/` + full `code-inventory.md` (94/94); `docs/COVERAGE.md`.
+- Release security checklist item for REQ-SEC-004.
+- Expanded PHPUnit coverage toward the ≥99% Lines gate.
+
+### Changed
+
+- Coverage gate **≥ 99%** Lines; README reports measured **99.4%**.
+- `backup.include_paths: []` or `["."]` now means **entire project** (minus `exclude_patterns`), with clean relative paths (no `./` prefix). Omitting the key still uses the selective defaults.
+- Restore page `default_message` default is translation id `restore.page.message` (domain `NowoSiteBackupBundle`).
+- Symfony component constraints aligned to `^7.0 || ^8.0` (was partially pinned to `^7.4`).
+
+### Documentation
+
+- [UPGRADING.md](UPGRADING.md) **To 1.1.0**; SECURITY / CONFIGURATION / USAGE updated for fail-closed and include_paths.
+
 ## [1.0.0] - 2026-07-26
 
 First stable release of **Site Backup Bundle**.
@@ -50,5 +76,6 @@ First stable release of **Site Backup Bundle**.
 - Symfony `^7.0 || ^8.0` (CI / mandatory minors: **7.4**, **8.0**, **8.1**)
 - System `tar` required for archive create/extract
 
-[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.0.0...HEAD
+[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.1.0...HEAD
+[1.1.0]: https://github.com/nowo-tech/SiteBackupBundle/releases/tag/v1.1.0
 [1.0.0]: https://github.com/nowo-tech/SiteBackupBundle/releases/tag/v1.0.0

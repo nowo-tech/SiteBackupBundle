@@ -1,5 +1,13 @@
 # Contributing
 
+## Table of contents
+
+- [Development setup](#development-setup)
+- [Code style](#code-style)
+- [Code of Conduct](#code-of-conduct)
+- [Pull requests](#pull-requests)
+- [Git hooks (REQ-GIT-001)](#git-hooks-req-git-001)
+
 ## Development setup
 
 1. Clone the repository.
