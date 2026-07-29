@@ -54,6 +54,8 @@ services:
 
     Nowo\SiteBackupBundle\Setup\SetupStepFactory: ~
 
+    Nowo\SiteBackupBundle\Setup\SetupTabCheckerLocator: ~
+
     Nowo\SiteBackupBundle\Setup\SetupOrchestrator: ~
 
     Nowo\SiteBackupBundle\Setup\Detector\MarkerFileDetector: ~

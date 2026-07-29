@@ -24,6 +24,7 @@ use Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator;
 use Nowo\SiteBackupBundle\Setup\NullAdminUserProvisioner;
 use Nowo\SiteBackupBundle\Setup\SetupOrchestrator;
 use Nowo\SiteBackupBundle\Setup\SetupStepFactory;
+use Nowo\SiteBackupBundle\Setup\SetupTabCheckerLocator;
 use Nowo\SiteBackupBundle\Setup\Storage\ChainSetupProgressStorage;
 use Nowo\SiteBackupBundle\Setup\Storage\DoctrineDbalSetupProgressStorage;
 use Nowo\SiteBackupBundle\Setup\Storage\FilesystemSetupProgressStorage;
@@ -34,6 +35,7 @@ use Nowo\SiteBackupBundle\Storage\FilesystemBackupHistoryStorage;
 use Nowo\SiteBackupBundle\Storage\FilesystemRestoreProgressStorage;
 use Nowo\SiteBackupBundle\Storage\RestoreProgressStorageInterface;
 use Symfony\Component\Config\FileLocator;
+use Symfony\Component\DependencyInjection\Compiler\ServiceLocatorTagPass;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Extension\Extension;
 use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
@@ -42,6 +44,7 @@ use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
 
 use function array_values;
 use function in_array;
+use function is_array;
 use function is_string;
 
 final class SiteBackupExtension extends Extension
@@ -316,22 +319,54 @@ final class SiteBackupExtension extends Extension
             ->setArgument('$markers', new Reference(SetupMarkerManager::class))
             ->setArgument('$adminProvisioner', new Reference(AdminUserProvisionerInterface::class))
             ->setArgument('$dbalConnection', $dbalRef)
-            ->setArgument('$customSteps', []);
+            ->setArgument('$customSteps', [])
+            ->setArgument('$checkerLocator', new Reference(SetupTabCheckerLocator::class));
 
-        /** @var array<string, array{steps: list<array<string, mixed>>}> $profiles */
-        $profiles   = $setup['profiles'];
-        $normalized = [];
+        /** @var array<string, array{steps?: list<array<string, mixed>>, tabs?: list<array<string, mixed>>, advance_mode?: string|null}> $profiles */
+        $profiles      = $setup['profiles'];
+        $normalized    = [];
+        $checkerRefs   = [];
+        $globalAdvance = is_string($setup['advance_mode'] ?? null) ? $setup['advance_mode'] : 'automatic';
         foreach ($profiles as $name => $profile) {
-            $steps = [];
-            foreach ($profile['steps'] ?? [] as $step) {
+            $rawTabs  = $profile['tabs'] ?? [];
+            $rawSteps = $profile['steps'] ?? [];
+            $source   = is_array($rawTabs) && $rawTabs !== [] ? $rawTabs : $rawSteps;
+            $steps    = [];
+            foreach ($source as $step) {
                 $clean = array_filter(
                     $step,
                     static fn (mixed $v): bool => $v !== null,
                 );
+                if (isset($clean['runner']) && is_array($clean['runner'])) {
+                    $runner = array_filter(
+                        $clean['runner'],
+                        static fn (mixed $v): bool => $v !== null,
+                    );
+                    if (!isset($runner['type']) || !is_string($runner['type']) || $runner['type'] === '') {
+                        unset($clean['runner']);
+                    } else {
+                        $clean['runner'] = $runner;
+                    }
+                }
+                $checker = $clean['checker'] ?? null;
+                if (is_string($checker) && $checker !== '') {
+                    $checkerRefs[$checker] = new Reference($checker);
+                }
                 $steps[] = $clean;
             }
-            $normalized[$name] = ['steps' => $steps];
+            $entry = ['steps' => $steps];
+            $mode  = $profile['advance_mode'] ?? null;
+            if (is_string($mode) && ($mode === 'automatic' || $mode === 'manual')) {
+                $entry['advance_mode'] = $mode;
+            }
+            $normalized[$name] = $entry;
         }
+
+        $container->getDefinition(SetupTabCheckerLocator::class)
+            ->setArgument(
+                '$container',
+                ServiceLocatorTagPass::register($container, $checkerRefs),
+            );
 
         $container->getDefinition(SetupOrchestrator::class)
             ->setArgument('$projectDir', '%kernel.project_dir%')
@@ -340,7 +375,8 @@ final class SiteBackupExtension extends Extension
             ->setArgument('$markers', new Reference(SetupMarkerManager::class))
             ->setArgument('$profiles', $normalized)
             ->setArgument('$defaultProfile', $setup['default_profile'])
-            ->setArgument('$eventDispatcher', new Reference('event_dispatcher', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE));
+            ->setArgument('$eventDispatcher', new Reference('event_dispatcher', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
+            ->setArgument('$defaultAdvanceMode', $globalAdvance);
 
         $setupEnabled = (bool) $setup['enabled'];
 

@@ -2,7 +2,7 @@
 
 **Package**: `nowo-tech/site-backup-bundle`  
 **Baseline**: `001-baseline`  
-**Last amended**: 2026-07-29
+**Last amended**: 2026-07-30
 
 ## User scenarios
 
@@ -38,9 +38,38 @@ Given `setup.progress_storage: chain` (or `doctrine`) and a working DBAL connect
 2. **Given** `progress_storage: filesystem` only, **When** `var/site-backup/setup-progress.json` is deleted mid-wizard, **Then** progress is lost (documented trade-off).
 3. **Given** chain mode, **When** save succeeds, **Then** both JSON and DBAL table (`setup.progress_table`, default `nowo_site_backup_setup_progress`) are updated; payload includes `started_at` / `completed_at`.
 
-### US-6 — Configurable path prefixes
-**Priority**: P2  
-Given `setup.path_prefix` / `panel.path_prefix`, When routes are imported, Then prefixes come from container parameters (`%nowo.site_backup.setup.path_prefix%`, `%nowo.site_backup.panel.path_prefix%`) so apps can override without editing hard-coded prefixes in `routes.yaml`.
+### US-7 — Gate until setup is 100% complete
+**Priority**: P1  
+Given the operator has started the setup wizard (or `setup.required` / incomplete progress / `require_done_marker`), When a visitor hits a normal route before `setup.done` exists, Then the site gate redirects to `/_setup`. Starting the wizard writes `setup.required` so the gate cannot be left mid-flight.
+
+**Acceptance**:
+
+1. **Given** wizard phase is `running` / `waiting_input` / `failed` and no `setup.done`, **When** GET `/`, **Then** redirect to setup.
+2. **Given** wizard starts from `idle`, **When** the first `advance` runs, **Then** `setup.required` is marked with the active profile.
+3. **Given** the `marker` step writes `setup.done`, **When** GET `/`, **Then** the normal app is served.
+
+### US-8 — Full database import vs guided admin
+**Priority**: P1  
+Given `fresh_install`, When the operator reaches `bootstrap_mode`, Then they choose **guided** (create admin later) or **full database** (import a `.sql` dump). Full import runs `sql_file`, then **migrations** and any configured idempotent loaders (`console` / `sql_file` / `sample_data`); `admin_user` uses `skip_if_admin_exists` so a dump that already contains users skips the registration form.
+
+**Acceptance**:
+
+1. **Given** guided mode, **When** pipeline reaches `admin_user`, **Then** the admin form is shown (unless an admin already exists).
+2. **Given** full_database mode and a valid `sql_import_path` (or default `var/site-backup/full-import.sql` / `last-restore-dump.sql`), **When** advance continues, **Then** SQL is imported before migrations.
+3. **Given** full_database mode without a dump file, **When** the operator submits, **Then** the wizard stays on waiting_input asking for the path.
+4. **Given** profile `full_database` via `?profile=full_database`, **When** the dump file exists, **Then** import runs without the bootstrap choice step.
+
+### US-9 — YAML tabs, checkers, and advance mode
+**Priority**: P1  
+Given `setup.profiles.*.tabs` (ordered), When the wizard runs, Then each tab may declare a `checker` service (`SetupTabCheckerInterface`), optional `template` / `runner`, and `label` as a **translation id**. `advance_mode: automatic|manual` (global or per profile) controls whether auto tabs chain until interaction is required.
+
+**Acceptance**:
+
+1. **Given** a profile with `tabs`, **When** the wizard loads, **Then** UI chips follow tab order and labels are translated via `|trans`.
+2. **Given** `advance_mode: automatic`, **When** tabs are `auto` and checkers return ok, **Then** the orchestrator continues until `needs_input` / fail / done.
+3. **Given** `advance_mode: manual`, **When** one auto tab completes, **Then** the UI waits for Continuar before the next auto tab.
+4. **Given** a custom tab with `checker` returning needs_input, **When** the operator opens the wizard, **Then** the configured Twig `template` is shown.
+5. **Given** only legacy `steps` (no `tabs`), **When** the profile runs, **Then** behaviour matches pre-tabs profiles (BC).
 
 ## Functional requirements
 
@@ -59,10 +88,16 @@ Given `setup.path_prefix` / `panel.path_prefix`, When routes are imported, Then 
 | FR-SETUP-002 | Progress storage: `filesystem` \| `doctrine` \| `chain`; `started_at` / `completed_at`; optional DBAL table auto-create |
 | FR-SETUP-003 | Detectors: marker, doctrine connect, schema empty, **incomplete progress** (toggleable); evaluator ORs enabled detectors |
 | FR-SETUP-004 | Default `setup.path_prefix` is `/_setup`; routes honour config via parameters; path auto-added to exclusions |
+| FR-SETUP-005 | Starting the wizard marks `setup.required` until `setup.done`; gate stays on while progress is incomplete |
+| FR-SETUP-006 | Step type `bootstrap_mode` (`guided` \| `full_database`) + answer `sql_import_path`; `when_answer` filters steps |
+| FR-SETUP-007 | Profile `fresh_install` includes bootstrap + conditional full SQL import; profile `full_database` deep-link; migrations + idempotent loaders always after import; `admin_user` skip_if_admin_exists |
+| FR-SETUP-008 | Profiles may declare ordered `tabs` with `checker`, `template`, `runner`; legacy `steps` still work |
+| FR-SETUP-009 | `advance_mode` `automatic`\|`manual` (setup + per-profile override); interactive tabs always pause |
+| FR-SETUP-010 | Tab `label` / `description` are translation ids; domain default `NowoSiteBackupBundle`; `#[AsSetupTabChecker]` autoconfigures checkers |
 | FR-TWIG-001 | Twig namespace `NowoSiteBackupBundle` with app overrides first (`templates/bundles/NowoSiteBackupBundle/`) |
 | FR-TWIG-002 | Twig functions for restore progress |
 | FR-TWIG-003 | Panel / restore / setup Twig templates (apps may restyle via overrides) |
-| FR-I18N-001 | Translations en/es/it/fr/pt/de/nl |
+| FR-I18N-001 | Translations en/es/it/fr/pt/de/nl including `setup.tab.*` |
 | FR-EVT-001 | Domain events for backup/restore/setup lifecycle |
 | FR-STORE-001 | Filesystem history + restore progress storage |
 | FR-SVC-001 | `SiteBackupManager` façade |
@@ -79,6 +114,8 @@ Given `setup.path_prefix` / `panel.path_prefix`, When routes are imported, Then 
 | SC-SEC-001 | Panel denied without hash; CSRF required for POSTs |
 | SC-SETUP-001 | Incomplete progress detector + doctrine/chain storage covered by unit tests |
 | SC-SETUP-002 | Default config exposes `setup.path_prefix: /_setup` and `progress_storage: filesystem` |
+| SC-SETUP-003 | `bootstrap_mode` + `when_answer` + full SQL import path covered by unit tests |
+| SC-SETUP-004 | Tabs + checker + `advance_mode` covered by unit tests; tab labels use translation ids |
 | SC-QA-001 | `make phpstan` / `cs-check` clean |
 
 ## Non-goals

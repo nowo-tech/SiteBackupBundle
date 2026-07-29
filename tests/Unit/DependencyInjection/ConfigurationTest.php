@@ -22,8 +22,46 @@ final class ConfigurationTest extends TestCase
         self::assertSame('/_setup', $config['setup']['path_prefix']);
         self::assertArrayHasKey('fresh_install', $config['setup']['profiles']);
         self::assertArrayHasKey('post_restore', $config['setup']['profiles']);
+        self::assertArrayHasKey('full_database', $config['setup']['profiles']);
+        $freshTypes = array_column($config['setup']['profiles']['fresh_install']['steps'], 'type');
+        self::assertContains('bootstrap_mode', $freshTypes);
+        self::assertContains('sql_file', $freshTypes);
         self::assertFalse($config['setup']['require_done_marker']);
         self::assertSame('filesystem', $config['setup']['progress_storage']);
         self::assertTrue($config['setup']['detectors']['incomplete_progress']);
+        self::assertSame('automatic', $config['setup']['advance_mode']);
+    }
+
+    public function testTabsAndAdvanceMode(): void
+    {
+        $config = (new Processor())->processConfiguration(new Configuration(), [[
+            'setup' => [
+                'advance_mode' => 'manual',
+                'profiles'     => [
+                    'demo' => [
+                        'advance_mode' => 'automatic',
+                        'tabs'         => [
+                            [
+                                'type'     => 'custom',
+                                'id'       => 'menus',
+                                'label'    => 'setup.tab.custom',
+                                'checker'  => 'App\\MenusChecker',
+                                'template' => '@App/menus.twig',
+                                'runner'   => [
+                                    'type'    => 'console',
+                                    'command' => 'app:menus:sync',
+                                ],
+                            ],
+                        ],
+                    ],
+                ],
+            ],
+        ]]);
+
+        self::assertSame('manual', $config['setup']['advance_mode']);
+        self::assertSame('automatic', $config['setup']['profiles']['demo']['advance_mode']);
+        self::assertCount(1, $config['setup']['profiles']['demo']['tabs']);
+        self::assertSame('App\\MenusChecker', $config['setup']['profiles']['demo']['tabs'][0]['checker']);
+        self::assertSame('console', $config['setup']['profiles']['demo']['tabs'][0]['runner']['type']);
     }
 }

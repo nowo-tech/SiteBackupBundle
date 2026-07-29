@@ -6,8 +6,11 @@ namespace Nowo\SiteBackupBundle\Setup;
 
 use InvalidArgumentException;
 use Nowo\SiteBackupBundle\Setup\Step\AdminUserStep;
+use Nowo\SiteBackupBundle\Setup\Step\BootstrapModeStep;
 use Nowo\SiteBackupBundle\Setup\Step\CacheClearStep;
+use Nowo\SiteBackupBundle\Setup\Step\ConditionalAnswerStep;
 use Nowo\SiteBackupBundle\Setup\Step\ConsoleStep;
+use Nowo\SiteBackupBundle\Setup\Step\CustomSetupStep;
 use Nowo\SiteBackupBundle\Setup\Step\DatabaseCreateStep;
 use Nowo\SiteBackupBundle\Setup\Step\DatabaseUrlStep;
 use Nowo\SiteBackupBundle\Setup\Step\MarkerStep;
@@ -16,8 +19,11 @@ use Nowo\SiteBackupBundle\Setup\Step\RequirementsStep;
 use Nowo\SiteBackupBundle\Setup\Step\SampleDataStep;
 use Nowo\SiteBackupBundle\Setup\Step\SchemaUpdateStep;
 use Nowo\SiteBackupBundle\Setup\Step\SqlFileStep;
+use Nowo\SiteBackupBundle\Setup\Step\TabStep;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupMarkerManager;
 
+use function array_filter;
+use function array_values;
 use function is_array;
 use function is_string;
 use function sprintf;
@@ -36,6 +42,7 @@ final class SetupStepFactory
         private readonly AdminUserProvisionerInterface $adminProvisioner,
         private readonly mixed $dbalConnection = null,
         private readonly array $customSteps = [],
+        private readonly ?SetupTabCheckerLocator $checkerLocator = null,
     ) {
     }
 
@@ -50,12 +57,45 @@ final class SetupStepFactory
         }
 
         if (isset($this->customSteps[$type])) {
-            return $this->customSteps[$type];
+            return $this->wrapTabMeta($this->wrapWhenAnswer($this->customSteps[$type], $config), $config);
         }
 
         $id    = is_string($config['id'] ?? null) ? $config['id'] : sprintf('%s_%d', $type, $index);
         $label = is_string($config['label'] ?? null) ? $config['label'] : $this->defaultLabel($type);
 
+        if ($type === 'custom') {
+            $inner = $this->createCustomInner($id, $label, $config);
+
+            return $this->wrapTabMeta($this->wrapWhenAnswer($inner, $config), $config);
+        }
+
+        $step = $this->buildBuiltIn($type, $id, $label, $config);
+
+        return $this->wrapTabMeta($this->wrapWhenAnswer($step, $config), $config);
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     */
+    private function createCustomInner(string $id, string $label, array $config): SetupStepInterface
+    {
+        $runner = $config['runner'] ?? null;
+        if (is_array($runner) && is_string($runner['type'] ?? null) && $runner['type'] !== '') {
+            $runnerType  = $runner['type'];
+            $runnerId    = is_string($runner['id'] ?? null) ? $runner['id'] : $id;
+            $runnerLabel = is_string($runner['label'] ?? null) ? $runner['label'] : $label;
+
+            return $this->buildBuiltIn($runnerType, $runnerId, $runnerLabel, $runner);
+        }
+
+        return new CustomSetupStep($id, $label);
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     */
+    private function buildBuiltIn(string $type, string $id, string $label, array $config): SetupStepInterface
+    {
         return match ($type) {
             'requirements' => new RequirementsStep(
                 $id,
@@ -63,6 +103,14 @@ final class SetupStepFactory
                 is_array($config['extensions'] ?? null) ? array_values(array_filter($config['extensions'], 'is_string')) : ['json', 'pdo'],
                 is_array($config['writable'] ?? null) ? array_values(array_filter($config['writable'], 'is_string')) : ['var'],
                 (bool) ($config['require_tar'] ?? true),
+            ),
+            'bootstrap_mode' => new BootstrapModeStep(
+                $id,
+                $label,
+                is_array($config['paths'] ?? null) ? array_values(array_filter($config['paths'], 'is_string')) : [
+                    'var/site-backup/full-import.sql',
+                    'var/site-backup/last-restore-dump.sql',
+                ],
             ),
             'database_url'    => new DatabaseUrlStep($id, $label, (bool) ($config['optional'] ?? true)),
             'database_create' => new DatabaseCreateStep($id, $label, $this->runner),
@@ -102,6 +150,42 @@ final class SetupStepFactory
     }
 
     /**
+     * @param array<string, mixed> $config
+     */
+    private function wrapWhenAnswer(SetupStepInterface $step, array $config): SetupStepInterface
+    {
+        $when = $config['when_answer'] ?? null;
+        if (!is_array($when) || $when === []) {
+            return $step;
+        }
+
+        foreach ($when as $key => $value) {
+            if (!is_string($key) || !is_string($value)) {
+                continue;
+            }
+            $step = new ConditionalAnswerStep($step, $key, $value);
+        }
+
+        return $step;
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     */
+    private function wrapTabMeta(SetupStepInterface $step, array $config): SetupStepInterface
+    {
+        $checkerId   = is_string($config['checker'] ?? null) ? $config['checker'] : null;
+        $template    = is_string($config['template'] ?? null) ? $config['template'] : null;
+        $labelDomain = is_string($config['label_domain'] ?? null) && $config['label_domain'] !== ''
+            ? $config['label_domain']
+            : 'NowoSiteBackupBundle';
+        $description = is_string($config['description'] ?? null) ? $config['description'] : null;
+        $checker     = $this->checkerLocator?->get($checkerId);
+
+        return new TabStep($step, $checker, $template, $labelDomain, $description);
+    }
+
+    /**
      * @param list<array<string, mixed>> $stepConfigs
      *
      * @return list<SetupStepInterface>
@@ -118,20 +202,7 @@ final class SetupStepFactory
 
     private function defaultLabel(string $type): string
     {
-        return match ($type) {
-            'requirements'    => 'Check requirements',
-            'database_url'    => 'Database URL',
-            'database_create' => 'Create database',
-            'cache_clear'     => 'Clear cache',
-            'schema_update'   => 'Update schema',
-            'migrations'      => 'Run migrations',
-            'sql_file'        => 'Import SQL',
-            'console'         => 'Run command',
-            'admin_user'      => 'Create admin user',
-            'sample_data'     => 'Sample data',
-            'marker'          => 'Finalize',
-            default           => $type,
-        };
+        return 'setup.tab.' . $type;
     }
 
     /**

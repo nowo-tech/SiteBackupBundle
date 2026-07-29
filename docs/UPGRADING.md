@@ -1,5 +1,75 @@
 # Upgrading
 
+## To 1.3.0
+
+Bootstrap choice (guided vs full SQL dump), YAML tabs + checkers, advance mode, and stricter mid-wizard site gate.
+
+### Install / update
+
+```bash
+composer require nowo-tech/site-backup-bundle:^1.3
+php bin/console cache:clear
+```
+
+### Behaviour
+
+- `fresh_install` now starts with **`bootstrap_mode`**: guided admin path or full database import.
+- Full dump defaults: `var/site-backup/full-import.sql` or `var/site-backup/last-restore-dump.sql` (override with form field / answer `sql_import_path`).
+- After import, **migrations** (and any app `console` / idempotent loaders you add) still run; **`admin_user`** skips when users already exist (`skip_if_admin_exists: true`).
+- Starting the wizard writes **`setup.required`** until the `marker` step writes **`setup.done`** — the public site stays gated mid-setup.
+- Cold-start apps that must lock the site until setup finishes should set `setup.require_done_marker: true` (unchanged default `false` for BC when adding the bundle to an existing app).
+- Prefer **`profiles.*.tabs`** for the wizard flow (built-in + `custom` with `checker` / `template` / `runner`). Existing **`steps`** profiles keep working.
+- **`advance_mode`**: `automatic` (default, BC) chains auto tabs; `manual` pauses after each auto tab until Continuar. Interactive tabs always pause. CLI `nowo:site-backup:setup` always chains (automatic).
+- Tab `label` / `description` are translation ids (domain `NowoSiteBackupBundle` by default, or `label_domain`).
+
+### Optional: YAML tabs + checker
+
+```yaml
+nowo_site_backup:
+    setup:
+        advance_mode: automatic
+        profiles:
+            fresh_install:
+                advance_mode: manual
+                tabs:
+                    - { type: requirements, label: setup.tab.requirements }
+                    - id: menus
+                      type: custom
+                      label: setup.tab.menus
+                      template: '@App/setup/menus.html.twig'
+                      checker: App\Setup\Checker\MenusReadyChecker
+                      runner: { type: console, command: 'app:menus:sync' }
+                    - { type: marker, write_done: true }
+```
+
+```php
+use Nowo\SiteBackupBundle\Attribute\AsSetupTabChecker;
+use Nowo\SiteBackupBundle\Setup\SetupTabCheckerInterface;
+
+#[AsSetupTabChecker]
+final class MenusReadyChecker implements SetupTabCheckerInterface { /* … */ }
+```
+
+### Optional: always gate until done (new installs)
+
+```yaml
+nowo_site_backup:
+    setup:
+        require_done_marker: true
+        detectors:
+            incomplete_progress: true
+```
+
+### Migration notes
+
+| Topic | Before | After |
+| --- | --- | --- |
+| `fresh_install` steps | requirements → … → migrations → admin → marker | + `bootstrap_mode` + conditional `sql_file` |
+| Custom profiles overriding defaults | Unchanged if you set `setup.profiles` explicitly | Re-add `bootstrap_mode` / `when_answer` if you want the new UX |
+| Mid-wizard gate | Incomplete progress / `setup.required` | Also marks `setup.required` on wizard start |
+| Flow declaration | `steps` only | Optional `tabs` (+ checkers); `steps` still valid |
+| Advance between auto steps | Always chain until input | `advance_mode: manual` pauses per auto tab (UI) |
+
 ## To 1.2.0
 
 Durable setup progress (optional DBAL / chain storage) and an incomplete-progress site gate.

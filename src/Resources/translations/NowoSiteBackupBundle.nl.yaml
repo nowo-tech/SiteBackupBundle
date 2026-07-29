@@ -12,6 +12,30 @@ setup:
     continue: 'Doorgaan'
     retry: 'Opnieuw'
     running: 'Volgende installatiestap uitvoeren…'
+  bootstrap:
+    prompt: 'Choose how to bootstrap this site'
+    guided: 'Guided setup (create admin)'
+    full_database: 'Load full database dump'
+    sql_path: 'SQL dump path (relative to project)'
+    sql_hint: 'Required for full dump. Defaults: var/site-backup/full-import.sql or last-restore-dump.sql. Migrations and idempotent loaders still run; admin form is skipped if users already exist.'
+  tab:
+    requirements: 'Vereisten'
+    bootstrap_mode: 'Opstartmodus'
+    database_url: 'Database-URL'
+    database_create: 'Database aanmaken'
+    cache_clear: 'Cache legen'
+    schema_update: 'Schema bijwerken'
+    migrations: 'Migraties'
+    sql_file: 'SQL importeren'
+    console: 'Commando uitvoeren'
+    admin_user: 'Admin-gebruiker'
+    sample_data: 'Voorbeeldgegevens'
+    marker: 'Afronden'
+    custom: 'Aangepaste stap'
+  check:
+    ok: 'OK'
+    needs_input: 'Wachten op invoer'
+    blocked: 'Geblokkeerd'
   admin:
     create: 'Beheerder aanmaken'
   sample:

@@ -66,6 +66,10 @@ final class SetupWizardController
             if (!$this->isCsrfValid($request)) {
                 $error = 'Invalid CSRF token.';
             } else {
+                $postedProfile = $request->request->getString('profile');
+                if ($postedProfile !== '') {
+                    $profile = $postedProfile;
+                }
                 $input = new SetupStepInput($request->request->all());
                 if ($request->request->getString('reset') === '1') {
                     $this->orchestrator->resetProgress();
@@ -107,6 +111,7 @@ final class SetupWizardController
             'error'       => $error,
             'csrfToken'   => $this->csrfTokenManager?->getToken('nowo_site_backup_setup')->getValue(),
             'progressUrl' => rtrim($this->pathPrefix, '/') . '/api/progress',
+            'advanceMode' => $this->orchestrator->getAdvanceMode($progress->getProfile()),
         ]));
     }
 

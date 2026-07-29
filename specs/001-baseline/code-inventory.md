@@ -2,17 +2,18 @@
 
 **Baseline spec**: [`spec.md`](spec.md)
 **Package**: `nowo-tech/site-backup-bundle`
-**Last audited**: 2026-07-29 (FR-SETUP-002/003/004)
+**Last audited**: 2026-07-30 (FR-SETUP-008/009/010 tabs + checkers)
 
 Every production source under `src/` is listed below (REQ-SPECKIT-001 / REQ-SPECKIT-003).
 
 | Source files | Count |
 | --- | --- |
-| Total | **97** |
+| Total | **106** |
 
 | Source file | Requirement IDs |
 | --- | --- |
 | `Attribute/ExcludeFromRestore.php` | FR-ATTR-001 |
+| `Attribute/AsSetupTabChecker.php` | FR-SETUP-010 |
 | `Backup/BackupArchiver.php` | FR-BACKUP-001 |
 | `Command/CreateBackupCommand.php` | FR-CLI-001 |
 | `Command/HashPasswordCommand.php` | FR-CLI-001 |
@@ -60,6 +61,7 @@ Every production source under `src/` is listed below (REQ-SPECKIT-001 / REQ-SPEC
 | `Resources/views/panel/login.html.twig` | FR-TWIG-003 |
 | `Resources/views/restore/page.html.twig` | FR-TWIG-003 |
 | `Resources/views/setup/_admin_form.html.twig` | FR-TWIG-003 |
+| `Resources/views/setup/_bootstrap_form.html.twig` | FR-TWIG-003 |
 | `Resources/views/setup/_database_form.html.twig` | FR-TWIG-003 |
 | `Resources/views/setup/_sample_form.html.twig` | FR-TWIG-003 |
 | `Resources/views/setup/admin.html.twig` | FR-TWIG-003 |
@@ -87,10 +89,16 @@ Every production source under `src/` is listed below (REQ-SPECKIT-001 / REQ-SPEC
 | `Setup/SetupStepInput.php` | FR-SETUP-001 |
 | `Setup/SetupStepInterface.php` | FR-SETUP-001 |
 | `Setup/SetupStepResult.php` | FR-SETUP-001 |
+| `Setup/SetupTabCheckResult.php` | FR-SETUP-008 |
+| `Setup/SetupTabCheckerInterface.php` | FR-SETUP-008 |
+| `Setup/SetupTabCheckerLocator.php` | FR-SETUP-008 |
 | `Setup/Step/AbstractSetupStep.php` | FR-SETUP-001 |
 | `Setup/Step/AdminUserStep.php` | FR-SETUP-001 |
+| `Setup/Step/BootstrapModeStep.php` | FR-SETUP-006 |
 | `Setup/Step/CacheClearStep.php` | FR-SETUP-001 |
+| `Setup/Step/ConditionalAnswerStep.php` | FR-SETUP-006 |
 | `Setup/Step/ConsoleStep.php` | FR-SETUP-001 |
+| `Setup/Step/CustomSetupStep.php` | FR-SETUP-008 |
 | `Setup/Step/DatabaseCreateStep.php` | FR-SETUP-001 |
 | `Setup/Step/DatabaseUrlStep.php` | FR-SETUP-001 |
 | `Setup/Step/MarkerStep.php` | FR-SETUP-001 |
@@ -99,6 +107,7 @@ Every production source under `src/` is listed below (REQ-SPECKIT-001 / REQ-SPEC
 | `Setup/Step/SampleDataStep.php` | FR-SETUP-001 |
 | `Setup/Step/SchemaUpdateStep.php` | FR-SETUP-001 |
 | `Setup/Step/SqlFileStep.php` | FR-SETUP-001 |
+| `Setup/Step/TabStep.php` | FR-SETUP-008, FR-SETUP-009 |
 | `Setup/Storage/ChainSetupProgressStorage.php` | FR-SETUP-002 |
 | `Setup/Storage/DoctrineDbalSetupProgressStorage.php` | FR-SETUP-002 |
 | `Setup/Storage/FilesystemSetupProgressStorage.php` | FR-SETUP-002 |

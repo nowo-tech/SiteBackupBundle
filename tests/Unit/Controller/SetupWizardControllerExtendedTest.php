@@ -85,6 +85,14 @@ final class SetupWizardControllerExtendedTest extends TestCase
         $reset = Request::create('/?profile=admin_only', 'POST', ['reset' => '1', '_csrf_token' => 'token']);
         self::assertSame(200, $controller->index($reset)->getStatusCode());
 
+        $postProfile = Request::create('/', 'POST', [
+            'profile'     => 'admin_only',
+            '_csrf_token' => 'token',
+            'email'       => 'a@b.c',
+            'password'    => 'secret',
+        ]);
+        self::assertContains($controller->index($postProfile)->getStatusCode(), [200, 302]);
+
         $noCsrfManager = new SetupWizardController(
             $orchestrator,
             $evaluator,

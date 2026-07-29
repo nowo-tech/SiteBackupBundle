@@ -1042,7 +1042,9 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *             incomplete_progress?: bool|Param, // When true, unfinished setup progress (running/waiting/failed) forces the site gate to /_setup. // Default: true
  *         },
  *         default_profile?: scalar|Param|null, // Default: "fresh_install"
- *         profiles?: array<string, array{ // Default: {"fresh_install":{"steps":[{"type":"requirements"},{"type":"database_url","optional":true},{"type":"database_create"},{"type":"cache_clear"},{"type":"migrations"},{"type":"admin_user","roles":["ROLE_SUPER_ADMIN"]},{"type":"marker","write_done":true}]},"post_restore":{"steps":[{"type":"requirements"},{"type":"database_create"},{"type":"cache_clear"},{"type":"sql_file","paths":["var/site-backup/last-restore-dump.sql"],"if_exists":true},{"type":"migrations"},{"type":"admin_user","skip_if_admin_exists":true},{"type":"marker","write_done":true}]},"minimal":{"steps":[{"type":"database_create"},{"type":"migrations"},{"type":"admin_user"},{"type":"marker","write_done":true}]}}
+ *         advance_mode?: "automatic"|"manual"|Param, // automatic = chain auto tabs until interaction; manual = one auto tab per Continuar. // Default: "automatic"
+ *         profiles?: array<string, array{ // Default: {"fresh_install":{"steps":[{"type":"requirements"},{"type":"bootstrap_mode"},{"type":"database_url","optional":true},{"type":"database_create"},{"type":"cache_clear"},{"type":"sql_file","id":"full_database_import","paths":["var/site-backup/full-import.sql","var/site-backup/last-restore-dump.sql"],"if_exists":false,"when_answer":{"bootstrap_mode":"full_database"}},{"type":"migrations"},{"type":"admin_user","roles":["ROLE_SUPER_ADMIN"],"skip_if_admin_exists":true},{"type":"marker","write_done":true}]},"post_restore":{"steps":[{"type":"requirements"},{"type":"database_create"},{"type":"cache_clear"},{"type":"sql_file","paths":["var/site-backup/last-restore-dump.sql"],"if_exists":true},{"type":"migrations"},{"type":"admin_user","skip_if_admin_exists":true},{"type":"marker","write_done":true}]},"full_database":{"steps":[{"type":"requirements"},{"type":"database_url","optional":true},{"type":"database_create"},{"type":"cache_clear"},{"type":"sql_file","id":"full_database_import","paths":["var/site-backup/full-import.sql","var/site-backup/last-restore-dump.sql"],"if_exists":false},{"type":"migrations"},{"type":"admin_user","skip_if_admin_exists":true},{"type":"marker","write_done":true}]},"minimal":{"steps":[{"type":"database_create"},{"type":"migrations"},{"type":"admin_user"},{"type":"marker","write_done":true}]}}
+ *             advance_mode?: scalar|Param|null, // Override setup.advance_mode for this profile (automatic|manual). // Default: null
  *             steps?: list<array{ // Default: []
  *                 type?: scalar|Param|null,
  *                 id?: scalar|Param|null, // Default: null
@@ -1059,6 +1061,48 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *                 write_done?: bool|Param|null, // Default: null
  *                 skip_if_admin_exists?: bool|Param|null, // Default: null
  *                 when?: scalar|Param|null, // Default: null
+ *                 when_answer?: mixed, // Map of answer key => required value; step is skipped unless all match. // Default: null
+ *                 ...<string, mixed>
+ *             }>,
+ *             tabs?: list<array{ // Default: []
+ *                 type?: scalar|Param|null,
+ *                 id?: scalar|Param|null, // Default: null
+ *                 label?: scalar|Param|null, // Default: null
+ *                 command?: mixed, // Default: null
+ *                 commands?: mixed, // Default: null
+ *                 paths?: mixed, // Default: null
+ *                 roles?: mixed, // Default: null
+ *                 extensions?: mixed, // Default: null
+ *                 writable?: mixed, // Default: null
+ *                 optional?: bool|Param|null, // Default: null
+ *                 if_exists?: bool|Param|null, // Default: null
+ *                 require_tar?: bool|Param|null, // Default: null
+ *                 write_done?: bool|Param|null, // Default: null
+ *                 skip_if_admin_exists?: bool|Param|null, // Default: null
+ *                 when?: scalar|Param|null, // Default: null
+ *                 when_answer?: mixed, // Map of answer key => required value; step is skipped unless all match. // Default: null
+ *                 checker?: scalar|Param|null, // Service id / FQCN implementing SetupTabCheckerInterface. // Default: null
+ *                 template?: scalar|Param|null, // Twig template for custom waiting_input UI. // Default: null
+ *                 label_domain?: scalar|Param|null, // Translation domain for label/description (default NowoSiteBackupBundle). // Default: null
+ *                 description?: scalar|Param|null, // Optional translation id for tab subtitle. // Default: null
+ *                 runner?: array{ // Optional nested step config when type is custom (e.g. console / sql_file).
+ *                     type?: scalar|Param|null, // Default: null
+ *                     id?: scalar|Param|null, // Default: null
+ *                     label?: scalar|Param|null, // Default: null
+ *                     command?: mixed, // Default: null
+ *                     commands?: mixed, // Default: null
+ *                     paths?: mixed, // Default: null
+ *                     roles?: mixed, // Default: null
+ *                     extensions?: mixed, // Default: null
+ *                     writable?: mixed, // Default: null
+ *                     optional?: bool|Param|null, // Default: null
+ *                     if_exists?: bool|Param|null, // Default: null
+ *                     require_tar?: bool|Param|null, // Default: null
+ *                     write_done?: bool|Param|null, // Default: null
+ *                     skip_if_admin_exists?: bool|Param|null, // Default: null
+ *                     when?: scalar|Param|null, // Default: null
+ *                     when_answer?: mixed, // Map of answer key => required value; step is skipped unless all match. // Default: null
+ *                 },
  *                 ...<string, mixed>
  *             }>,
  *         }>,
