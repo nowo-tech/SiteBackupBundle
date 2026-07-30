@@ -1,20 +1,20 @@
-{% extends '@NowoSiteBackupBundle/panel/layout.html.twig' %}
+{% extends nowo_site_backup_panel_layout_template %}
 
-{% block title %}Login — Site Backup{% endblock %}
+{% block nowo_ui_document_title %}Login — Site Backup{% endblock %}
 
-{% block body %}
-<section class="card">
+{% block nowo_site_backup_panel_content %}
+<section class="nowo-ui-card card">
     <h2>Site Backup panel</h2>
     {% if misconfigured|default(false) %}
-        <p class="error">Password protection is enabled but <code>security.password_hash</code> is not set. Configure a hash (see <code>nowo:site-backup:hash-password</code>) before using the panel.</p>
+        <p class="nowo-ui-flash nowo-ui-flash--err error">Password protection is enabled but <code>security.password_hash</code> is not set. Configure a hash (see <code>nowo:site-backup:hash-password</code>) before using the panel.</p>
     {% elseif not protectionEnabled %}
         <p>Password protection is disabled. The panel is open to whoever can reach this URL — enable a hash in production.</p>
     {% else %}
-        <form method="post">
+        <form method="post" class="nowo-ui-form">
             <input type="hidden" name="_csrf_token" value="{{ csrfToken }}">
             <input type="hidden" name="action" value="login">
             <label>Password <input type="password" name="password" required autofocus></label>
-            <button type="submit">Sign in</button>
+            <button type="submit" class="nowo-ui-btn">Sign in</button>
         </form>
     {% endif %}
 </section>

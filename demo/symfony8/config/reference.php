@@ -991,6 +991,7 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *     panel?: array{
  *         enabled?: bool|Param, // Default: true
  *         path_prefix?: scalar|Param|null, // Default: "/_site_backup"
+ *         layout_template?: scalar|Param|null, // Host Twig layout for panel pages (global nowo_site_backup_panel_layout_template). Must define block nowo_ui_content / nowo_site_backup_panel_content. Default: bundle standalone panel layout. // Default: null
  *     },
  *     exclusions?: array{
  *         paths?: list<scalar|Param|null>,

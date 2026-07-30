@@ -34,6 +34,7 @@ use Nowo\SiteBackupBundle\Storage\BackupHistoryStorageInterface;
 use Nowo\SiteBackupBundle\Storage\FilesystemBackupHistoryStorage;
 use Nowo\SiteBackupBundle\Storage\FilesystemRestoreProgressStorage;
 use Nowo\SiteBackupBundle\Storage\RestoreProgressStorageInterface;
+use Nowo\SiteBackupBundle\Twig\SiteBackupExtension as SiteBackupTwigExtension;
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\Compiler\ServiceLocatorTagPass;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
@@ -65,13 +66,19 @@ final class SiteBackupExtension extends Extension
         $container->setParameter('nowo.site_backup.panel.path_prefix', $config['panel']['path_prefix']);
         $container->setParameter('nowo.site_backup.setup.path_prefix', $config['setup']['path_prefix']);
 
-        $layout = $config['setup']['layout_template'] ?? null;
-        if (is_string($layout) && $layout !== '') {
-            $config['templates']['setup_layout'] = $layout;
+        $setupLayout = $config['setup']['layout_template'] ?? null;
+        if (is_string($setupLayout) && $setupLayout !== '') {
+            $config['templates']['setup_layout'] = $setupLayout;
+        }
+
+        $panelLayout = $config['panel']['layout_template'] ?? null;
+        if (is_string($panelLayout) && $panelLayout !== '') {
+            $config['templates']['panel_layout'] = $panelLayout;
         }
 
         $container->setParameter('nowo.site_backup.templates', $config['templates']);
         $container->setParameter('nowo.site_backup.setup', $config['setup']);
+        $container->setParameter('nowo.site_backup.panel', $config['panel']);
 
         $this->configureStorage($container, $config);
         $this->configureArchiver($container, $config);
@@ -80,6 +87,7 @@ final class SiteBackupExtension extends Extension
         $this->configureAccessGate($container, $config['security']);
         $this->configureManager($container);
         $this->configureSubscriber($container, $config);
+        $this->configureTwigGlobals($container, $config);
         $this->configurePanel($container, $config);
         $this->configureSetup($container, $config);
     }
@@ -223,6 +231,26 @@ final class SiteBackupExtension extends Extension
             'method'   => 'onKernelRequest',
             'priority' => (int) $config['subscriber_priority'],
         ]);
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     */
+    private function configureTwigGlobals(ContainerBuilder $container, array $config): void
+    {
+        if (!$container->hasDefinition(SiteBackupTwigExtension::class)) {
+            return;
+        }
+
+        /** @var array<string, string> $templates */
+        $templates   = $config['templates'];
+        $setupLayout = $templates['setup_layout'] ?? '@NowoSiteBackupBundle/setup/layout.html.twig';
+        $panelLayout = $templates['panel_layout'] ?? '@NowoSiteBackupBundle/panel/layout.html.twig';
+
+        $container->getDefinition(SiteBackupTwigExtension::class)
+            ->setArgument('$manager', new Reference(SiteBackupManager::class))
+            ->setArgument('$setupLayoutTemplate', $setupLayout)
+            ->setArgument('$panelLayoutTemplate', $panelLayout);
     }
 
     /**

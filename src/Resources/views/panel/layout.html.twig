@@ -1,35 +1,60 @@
+{# Default standalone panel chrome (REQ-UI-001).
+   Host apps: set panel.layout_template to the project layout / bridge that defines
+   nowo_ui_content (or nowo_site_backup_panel_content). #}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="en" class="nowo-ui-root nowo-site-backup-panel">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block title %}Site Backup{% endblock %}</title>
-    <style>
-        body { font-family: system-ui, sans-serif; margin: 0; background: #f8fafc; color: #0f172a; }
-        header { background: #0f172a; color: #fff; padding: 1rem 1.5rem; display: flex; gap: 1rem; align-items: center; }
-        header a { color: #93c5fd; text-decoration: none; }
-        main { max-width: 960px; margin: 1.5rem auto; padding: 0 1rem; }
-        .flash { padding: .75rem 1rem; border-radius: 8px; margin-bottom: 1rem; }
-        .flash.ok { background: #dcfce7; }
-        .flash.err { background: #fee2e2; }
-        table { width: 100%; border-collapse: collapse; background: #fff; }
-        th, td { border-bottom: 1px solid #e2e8f0; padding: .65rem .5rem; text-align: left; font-size: .92rem; }
-        form.inline { display: inline; }
-        button, .btn { background: #2563eb; color: #fff; border: 0; border-radius: 8px; padding: .45rem .8rem; cursor: pointer; }
-        button.danger { background: #dc2626; }
-        .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1rem; margin-bottom: 1rem; }
-    </style>
+    <title>{% block nowo_ui_document_title %}{% block title %}Site Backup{% endblock %}{% endblock %}</title>
+    {% block stylesheets %}
+        {% block nowo_ui_styles %}
+            <style>
+                .nowo-site-backup-panel body,
+                .nowo-ui-body { font-family: system-ui, sans-serif; margin: 0; background: #f8fafc; color: #0f172a; }
+                .nowo-ui-header { background: #0f172a; color: #fff; padding: 1rem 1.5rem; display: flex; gap: 1rem; align-items: center; }
+                .nowo-ui-header a { color: #93c5fd; text-decoration: none; }
+                .nowo-ui-main { max-width: 960px; margin: 1.5rem auto; padding: 0 1rem; }
+                .nowo-ui-flash { padding: .75rem 1rem; border-radius: 8px; margin-bottom: 1rem; }
+                .nowo-ui-flash--ok { background: #dcfce7; }
+                .nowo-ui-flash--err { background: #fee2e2; }
+                .nowo-ui-table { width: 100%; border-collapse: collapse; background: #fff; }
+                .nowo-ui-table th,
+                .nowo-ui-table td { border-bottom: 1px solid #e2e8f0; padding: .65rem .5rem; text-align: left; font-size: .92rem; }
+                .nowo-ui-form--inline { display: inline; }
+                .nowo-ui-btn,
+                .nowo-site-backup-panel button,
+                .nowo-site-backup-panel .btn { background: #2563eb; color: #fff; border: 0; border-radius: 8px; padding: .45rem .8rem; cursor: pointer; }
+                .nowo-ui-btn--danger,
+                .nowo-site-backup-panel button.danger { background: #dc2626; }
+                .nowo-ui-card,
+                .nowo-site-backup-panel .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1rem; margin-bottom: 1rem; }
+            </style>
+        {% endblock %}
+    {% endblock %}
 </head>
-<body>
-<header>
+<body class="nowo-ui-body">
+{% block nowo_ui_header %}
+<header class="nowo-ui-header">
     <strong>Site Backup</strong>
     <a href="{{ pathPrefix }}">Panel</a>
     <a href="{{ pathPrefix }}/history">History</a>
 </header>
-<main>
-    {% if error is defined and error %}<div class="flash err">{{ error }}</div>{% endif %}
-    {% if success is defined and success %}<div class="flash ok">{{ success }}</div>{% endif %}
-    {% block body %}{% endblock %}
+{% endblock %}
+<main class="nowo-ui-main">
+    {% block nowo_ui_flashes %}
+        {% if error is defined and error %}<div class="nowo-ui-flash nowo-ui-flash--err flash err">{{ error }}</div>{% endif %}
+        {% if success is defined and success %}<div class="nowo-ui-flash nowo-ui-flash--ok flash ok">{{ success }}</div>{% endif %}
+    {% endblock %}
+    {% block nowo_ui_content %}
+        {% block nowo_site_backup_panel_content %}
+            {% block body %}{% endblock %}
+        {% endblock %}
+    {% endblock %}
+    {% block nowo_ui_modals %}{% endblock %}
 </main>
+{% block javascripts %}
+    {% block nowo_ui_scripts %}{% endblock %}
+{% endblock %}
 </body>
 </html>

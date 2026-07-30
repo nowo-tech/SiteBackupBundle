@@ -1,5 +1,51 @@
 # Upgrading
 
+## To 1.5.0
+
+Panel (and setup) integrate with a host layout via config + Twig globals — avoid forking page templates (REQ-TWIG-001 / REQ-UI-001).
+
+### Install / update
+
+```bash
+composer require nowo-tech/site-backup-bundle:^1.5.0
+php bin/console cache:clear
+```
+
+### Behaviour
+
+- Panel pages `{% extends nowo_site_backup_panel_layout_template %}` and fill `nowo_site_backup_panel_content` / `nowo_ui_content`.
+- Setup pages `{% extends nowo_site_backup_setup_layout_template %}` (global; still driven by `setup.layout_template` when set).
+- Default chrome remains the bundle standalone layouts.
+- Prefer CSS on `.nowo-ui-*` / `.nowo-site-backup-*` over copying forms or pages.
+
+### Migration notes
+
+| Topic | Before | After |
+| --- | --- | --- |
+| Panel branding | Fork `panel/layout.html.twig` or full pages | Set `panel.layout_template` to a thin host shell |
+| Setup branding (1.4) | View var `layout_template` | Twig global `nowo_site_backup_setup_layout_template` |
+| Restyle buttons/tables | Inline / fork | Classes `nowo-ui-btn`, `nowo-ui-table`, … |
+
+Example panel shell:
+
+```twig
+{# templates/kit/site_backup_panel_layout.html.twig #}
+{% extends 'layouts/admin.html.twig' %}
+{% block body %}
+    {% block nowo_ui_content %}
+        {% block nowo_site_backup_panel_content %}{% endblock %}
+    {% endblock %}
+{% endblock %}
+```
+
+```yaml
+nowo_site_backup:
+    panel:
+        layout_template: 'kit/site_backup_panel_layout.html.twig'
+    setup:
+        layout_template: 'kit/site_backup_setup_layout.html.twig'
+```
+
 ## To 1.4.0
 
 Setup pages use a **host `layout_template`** so apps brand the shell without forking wizard/done/token markup.
@@ -13,7 +59,7 @@ php bin/console cache:clear
 
 ### Behaviour
 
-- `wizard.html.twig`, `done.html.twig`, and `token.html.twig` now `{% extends layout_template %}` and fill `nowo_site_backup_content`.
+- `wizard.html.twig`, `done.html.twig`, and `token.html.twig` fill `nowo_site_backup_content` inside the configured setup layout.
 - Default layout remains the bundle dark standalone theme (`@NowoSiteBackupBundle/setup/layout.html.twig`).
 - Detector reasons render in the vendor wizard; database form skips are hidden when the connection failed.
 
@@ -22,27 +68,9 @@ php bin/console cache:clear
 | Topic | Before | After |
 | --- | --- | --- |
 | Branding setup UI | Copy/fork `setup/wizard.html.twig` (full HTML) | Set `setup.layout_template` to a thin host shell |
-| `templates.setup_*` | Full page paths | Same paths, but pages expect `layout_template` in the view |
 | Full HTML overrides of wizard/done/token | Worked as drop-in | Must either keep forking **or** switch to `layout_template` + delete forks |
 
-Example host shell:
-
-```twig
-{# templates/kit/site_backup_setup_layout.html.twig #}
-{% extends 'layouts/guest_shell.html.twig' %}
-{% block title %}{{ brandName }} — Setup{% endblock %}
-{% block body %}
-    {% block nowo_site_backup_content %}{% endblock %}
-{% endblock %}
-```
-
-```yaml
-nowo_site_backup:
-    setup:
-        layout_template: 'kit/site_backup_setup_layout.html.twig'
-```
-
-Do **not** override `_admin_form` / `_bootstrap_form` / `_continue_form` / `_sample_form` unless you need different field names; restyle with CSS targeting `.nowo-site-backup-setup`.
+See **To 1.5.0** for panel `layout_template` and Twig layout globals.
 
 ## To 1.3.2
 
