@@ -211,12 +211,31 @@ Prefer **`setup.profiles.<name>.tabs`** (ordered). When `tabs` is non-empty it r
 | --- | --- |
 | `label` / `description` | Translation ids (`label_domain` default `NowoSiteBackupBundle`) |
 | `checker` | Service id / FQCN implementing `SetupTabCheckerInterface` (`ok` / `needs_input` / `blocked`) |
-| `template` | Twig body for `waiting_input` (`custom` or override) |
+| `template` | Optional Twig body for `waiting_input` — prefer a **bundle** logical name (see below) |
 | `runner` | Nested built-in step (e.g. `console`) when `type: custom` |
 
 `#[AsSetupTabChecker]` tags the service; YAML still binds it with `checker: …`.
 
 `advance_mode: automatic|manual` (global `setup.advance_mode` or per profile): automatic chains auto tabs until interaction; manual runs one auto tab per Continuar. Interactive tabs always pause. Headless CLI always behaves as automatic.
+
+### Reusable Twig (REQ-TWIG-001 / REQ-UI-001)
+
+Bundle templates are the **default product UI**. Apps should:
+
+1. **Use the shipped wizard** (`@NowoSiteBackupBundle/setup/...`) so `composer update` keeps UX improvements without re-implementing screens.
+2. **Customize only via overrides** under `templates/bundles/NowoSiteBackupBundle/<subpath>` (same relative path) — overrides always win; omit the file to fall back to the package.
+3. Prefer **partials / blocks** over copying whole pages. For a `custom` tab, omit `template` (built-in Continuar) or point at a bundle partial, e.g. `@NowoSiteBackupBundle/setup/_continue_form.html.twig`. Avoid `@App/...` forks unless the host truly needs a one-off screen.
+
+```yaml
+# Good: checker + runner; UI stays in the bundle
+- id: menus
+  type: custom
+  label: setup.tab.custom   # or app translation id + label_domain
+  description: setup.check.needs_input
+  checker: App\Setup\Checker\MenusReadyChecker
+  runner: { type: console, command: 'app:menus:sync' }
+  # template omitted → @NowoSiteBackupBundle/setup/_continue_form.html.twig via wizard
+```
 
 ## Configuration (polyvalent)
 
@@ -346,15 +365,21 @@ Changes vs current restore behaviour:
 
 ## Twig overrides
 
+Overrides live under `templates/bundles/NowoSiteBackupBundle/` (REQ-TWIG-001). Prefer overriding a **partial** or block rather than forking the whole wizard so bundle upgrades stay drop-in.
+
 | Subpath | Role |
 | --- | --- |
-| `setup/layout.html.twig` | Wizard chrome |
-| `setup/welcome.html.twig` | Step welcome |
-| `setup/runner.html.twig` | Auto steps + progress |
-| `setup/database.html.twig` | DSN form |
-| `setup/admin.html.twig` | Super-admin form |
-| `setup/sample_data.html.twig` | Opt-in sample data |
+| `setup/wizard.html.twig` | Wizard shell (`setup_body` block) |
+| `setup/_bootstrap_form.html.twig` | Guided vs full-database choice |
+| `setup/_admin_form.html.twig` | Super-admin form |
+| `setup/_sample_form.html.twig` | Sample-data opt-in |
+| `setup/_database_form.html.twig` | DATABASE_URL form |
+| `setup/_continue_form.html.twig` | Generic Continuar (custom tabs without `template`) |
 | `setup/done.html.twig` | Success |
+| `setup/token.html.twig` | Setup token gate |
+
+See also [USAGE.md](USAGE.md) — Template overrides.
+
 
 ## CLI
 

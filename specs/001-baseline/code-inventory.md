@@ -8,7 +8,7 @@ Every production source under `src/` is listed below (REQ-SPECKIT-001 / REQ-SPEC
 
 | Source files | Count |
 | --- | --- |
-| Total | **106** |
+| Total | **107** |
 
 | Source file | Requirement IDs |
 | --- | --- |
@@ -62,6 +62,7 @@ Every production source under `src/` is listed below (REQ-SPECKIT-001 / REQ-SPEC
 | `Resources/views/restore/page.html.twig` | FR-TWIG-003 |
 | `Resources/views/setup/_admin_form.html.twig` | FR-TWIG-003 |
 | `Resources/views/setup/_bootstrap_form.html.twig` | FR-TWIG-003 |
+| `Resources/views/setup/_continue_form.html.twig` | FR-TWIG-003 |
 | `Resources/views/setup/_database_form.html.twig` | FR-TWIG-003 |
 | `Resources/views/setup/_sample_form.html.twig` | FR-TWIG-003 |
 | `Resources/views/setup/admin.html.twig` | FR-TWIG-003 |
