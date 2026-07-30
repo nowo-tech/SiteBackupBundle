@@ -1,5 +1,27 @@
 # Upgrading
 
+## To 1.3.2
+
+CI no longer rewrites Symfony constraints to `^7.4` when applying CS Fixer on `main`.
+
+### Install / update
+
+```bash
+composer require nowo-tech/site-backup-bundle:^1.3.2
+php bin/console cache:clear
+```
+
+### Behaviour
+
+- Declared `symfony/*` requirements remain `^7.0 || ^8.0` (Symfony 7 and 8 hosts).
+- No setup/wizard behaviour changes from 1.3.1.
+
+### Migration notes
+
+| Topic | Before | After |
+| --- | --- | --- |
+| Some `symfony/*` requires after CI style commits | Drifted to `^7.4` | Stays `^7.0 \|\| ^8.0` |
+
 ## To 1.3.1
 
 Twig reusability guidance (REQ-TWIG-001 / REQ-UI-001) and a shared Continuar partial.

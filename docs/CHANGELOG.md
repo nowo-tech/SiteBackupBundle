@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.2] - 2026-07-30
+
+### Fixed
+
+- Restored Symfony component constraints to `^7.0 || ^8.0` again (CI `code-style-fix` had been committing `composer require …:^7.4` pins).
+- CI auto-fix job no longer commits `composer.json` / `composer.lock`; only PHP CS Fixer changes.
+
+### Documentation
+
+- [UPGRADING.md](UPGRADING.md) / [RELEASE.md](RELEASE.md) for 1.3.2.
+
 ## [1.3.1] - 2026-07-30
 
 ### Added
