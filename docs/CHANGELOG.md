@@ -7,6 +7,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.3.1] - 2026-07-30
+
+### Added
+
+- Setup partial `setup/_continue_form.html.twig` for generic Continuar on custom tabs (included from the wizard when no `template` is set).
+
+### Fixed
+
+- Restored Symfony component constraints to `^7.0 || ^8.0` (had drifted to `^7.4` only for some packages after a CI sync, breaking Symfony 8 demos).
+
+### Documentation
+
+- Clarified REQ-TWIG-001 / REQ-UI-001: reuse bundle Twig; prefer overrides under `templates/bundles/NowoSiteBackupBundle/`; avoid app-forked `@App` templates for custom tabs ([USAGE.md](USAGE.md), [SETUP-WIZARD.md](SETUP-WIZARD.md), [UPGRADING.md](UPGRADING.md)).
+- Inventory refreshed (107/107).
+
 ## [1.3.0] - 2026-07-30
 
 ### Added

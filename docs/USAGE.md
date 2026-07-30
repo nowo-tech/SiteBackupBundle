@@ -99,7 +99,9 @@ See [SETUP-WIZARD.md](SETUP-WIZARD.md) for profiles, step types, and security.
 
 ## Template overrides (REQ-TWIG-001)
 
-Place overrides under `templates/bundles/NowoSiteBackupBundle/`:
+Bundle templates are designed to be **reused as-is** across projects. Prefer updating the package and keeping `@NowoSiteBackupBundle/...` rather than copying screens into the app (REQ-UI-001: integrate without forking pages).
+
+Place overrides under `templates/bundles/NowoSiteBackupBundle/` with the **same relative path** as under `src/Resources/views/`. The override **always wins**; delete it to fall back to the bundle after upgrades.
 
 | Subpath | Role |
 | --- | --- |
@@ -108,11 +110,17 @@ Place overrides under `templates/bundles/NowoSiteBackupBundle/`:
 | `panel/index.html.twig` | Dashboard |
 | `panel/login.html.twig` | Login |
 | `panel/history.html.twig` | History |
-| `setup/wizard.html.twig` | Setup wizard shell |
-| `setup/admin.html.twig` | Admin user step |
-| `setup/database.html.twig` | DATABASE_URL step |
-| `setup/sample_data.html.twig` | Sample data opt-in |
+| `setup/wizard.html.twig` | Setup wizard shell (`setup_body` block) |
+| `setup/_bootstrap_form.html.twig` | Bootstrap mode form |
+| `setup/_admin_form.html.twig` | Admin user step |
+| `setup/_database_form.html.twig` | DATABASE_URL step |
+| `setup/_sample_form.html.twig` | Sample data opt-in |
+| `setup/_continue_form.html.twig` | Generic Continuar (custom tabs) |
 | `setup/done.html.twig` | Setup finished |
+| `setup/token.html.twig` | Optional setup token gate |
+
+For setup tabs, put domain logic in YAML `checker` / `runner`; keep Twig in the bundle or in a thin override of a **partial** — see [SETUP-WIZARD.md](SETUP-WIZARD.md).
+
 
 ## Database import note
 

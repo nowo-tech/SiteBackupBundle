@@ -63,14 +63,7 @@
                 {% elseif 'database_url' in currentStep.id %}
                     {% include '@NowoSiteBackupBundle/setup/_database_form.html.twig' %}
                 {% else %}
-                    {% if currentStep.description|default(null) %}
-                        <p class="sub">{{ currentStep.description|trans({}, currentStep.labelDomain|default('NowoSiteBackupBundle')) }}</p>
-                    {% endif %}
-                    <form method="post">
-                        <input type="hidden" name="_csrf_token" value="{{ csrfToken }}">
-                        <input type="hidden" name="action" value="continue">
-                        <button type="submit">{{ 'setup.wizard.continue'|trans({}, 'NowoSiteBackupBundle') }}</button>
-                    </form>
+                    {% include '@NowoSiteBackupBundle/setup/_continue_form.html.twig' %}
                 {% endif %}
             {% elseif progress.phase == 'failed' %}
                 <form method="post">

@@ -25,7 +25,7 @@ Root key: `nowo_site_backup`.
 | `setup.detectors.incomplete_progress` | `true` | Gate when progress phase is running/waiting/failed |
 | `setup.advance_mode` | `automatic` | `automatic` \| `manual` — chain auto tabs vs one Continuar per auto tab (CLI always chains) |
 | `setup.profiles.*.advance_mode` | inherit | Optional per-profile override |
-| `setup.profiles.*.tabs` | `[]` | Preferred ordered flow (checker/template/runner); when non-empty, ignores `steps` |
+| `setup.profiles.*.tabs` | `[]` | Preferred ordered flow (checker/runner; optional `template` — prefer bundle `@NowoSiteBackupBundle/...` or omit); when non-empty, ignores `steps` |
 | `setup.profiles.fresh_install` | includes `bootstrap_mode` + optional full SQL | Guided vs full dump; see [SETUP-WIZARD.md](SETUP-WIZARD.md) |
 
 Profiles (`default_profile` / `profiles`) are **not** used for backup state: backup state is global (REQ-CFG-001 N/A for backups).

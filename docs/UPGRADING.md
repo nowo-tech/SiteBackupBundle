@@ -1,5 +1,31 @@
 # Upgrading
 
+## To 1.3.1
+
+Twig reusability guidance (REQ-TWIG-001 / REQ-UI-001) and a shared Continuar partial.
+
+### Install / update
+
+```bash
+composer require nowo-tech/site-backup-bundle:^1.3.1
+php bin/console cache:clear
+```
+
+### Behaviour
+
+- No breaking config changes from 1.3.0.
+- Custom tabs without `template` render `@NowoSiteBackupBundle/setup/_continue_form.html.twig`.
+- Prefer keeping wizard UI in the bundle (or thin overrides under `templates/bundles/NowoSiteBackupBundle/`) so package upgrades do not force redoing screens; put app logic in `checker` / `runner`.
+- Symfony component constraints again `^7.0 || ^8.0` (Symfony 8 hosts).
+
+### Migration notes
+
+| Topic | Before | After |
+| --- | --- | --- |
+| Custom tab Continuar UI | Inline in `wizard.html.twig` | Partial `_continue_form.html.twig` (overridable) |
+| Docs examples for `template` | Often `@App/...` | Prefer omit `template` or bundle logical names |
+| Some `symfony/*` requires | `^7.4` only (CI drift) | `^7.0 \|\| ^8.0` |
+
 ## To 1.3.0
 
 Bootstrap choice (guided vs full SQL dump), YAML tabs + checkers, advance mode, and stricter mid-wizard site gate.
@@ -24,6 +50,8 @@ php bin/console cache:clear
 
 ### Optional: YAML tabs + checker
 
+Prefer **bundle UI** (omit `template`, or use `@NowoSiteBackupBundle/setup/_continue_form.html.twig`). Put app logic in the **checker** / **runner**, not in a forked `@App` Twig page — so upgrading the bundle keeps working without redoing screens (REQ-TWIG-001 / REQ-UI-001).
+
 ```yaml
 nowo_site_backup:
     setup:
@@ -35,8 +63,8 @@ nowo_site_backup:
                     - { type: requirements, label: setup.tab.requirements }
                     - id: menus
                       type: custom
-                      label: setup.tab.menus
-                      template: '@App/setup/menus.html.twig'
+                      label: setup.tab.custom
+                      description: setup.check.needs_input
                       checker: App\Setup\Checker\MenusReadyChecker
                       runner: { type: console, command: 'app:menus:sync' }
                     - { type: marker, write_done: true }
@@ -49,6 +77,8 @@ use Nowo\SiteBackupBundle\Setup\SetupTabCheckerInterface;
 #[AsSetupTabChecker]
 final class MenusReadyChecker implements SetupTabCheckerInterface { /* … */ }
 ```
+
+If you must restyle Continuar, override `templates/bundles/NowoSiteBackupBundle/setup/_continue_form.html.twig` instead of inventing `@App/setup/menus.html.twig`.
 
 ### Optional: always gate until done (new installs)
 
