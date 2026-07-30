@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.4.0] - 2026-07-30
+
+### Added
+
+- Setup **`layout_template`** (`setup.layout_template` / `templates.setup_layout`): wizard, done, and token pages extend a host layout via block `nowo_site_backup_content` (same pattern as CookieConsent / Dashboard Menu). Default layout: `@NowoSiteBackupBundle/setup/layout.html.twig`.
+- Setup **reasons** banner in the vendor wizard (connection failed, empty schema, markers, incomplete progress).
+- `_database_form` hides Skip and warns when Doctrine connect detection reports failure.
+- Translation keys `setup.reason.*` and `setup.token.*` in all bundle locales.
+
+### Changed
+
+- Setup Twig pages are **content-only** (no standalone DOCTYPE); chrome lives in `setup/layout.html.twig` or the app `layout_template`.
+- Docs: prefer `layout_template` over forking `wizard.html.twig` / `done` / `token` ([SETUP-WIZARD.md](SETUP-WIZARD.md), [UPGRADING.md](UPGRADING.md), [USAGE.md](USAGE.md)); inventory 108/108.
+
 ## [1.3.2] - 2026-07-30
 
 ### Fixed

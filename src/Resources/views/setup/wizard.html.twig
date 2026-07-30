@@ -1,40 +1,8 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ brandName }} — Setup</title>
-    <style>
-        :root { --bg:#0b1220; --panel:#111827; --text:#e5e7eb; --muted:#9ca3af; --accent:#38bdf8; --err:#f87171; --ok:#4ade80; }
-        * { box-sizing: border-box; }
-        body { margin:0; min-height:100vh; font-family: system-ui, sans-serif; background:
-            radial-gradient(900px 400px at 10% 0%, #1d4ed8 0%, transparent 50%),
-            radial-gradient(700px 400px at 100% 100%, #0ea5e9 0%, transparent 45%), var(--bg); color: var(--text); }
-        .wrap { width: min(640px, 94vw); margin: 4vh auto; }
-        .brand { font-size: .85rem; letter-spacing: .08em; text-transform: uppercase; color: var(--accent); margin-bottom: .5rem; }
-        h1 { margin: 0 0 .35rem; font-size: 1.6rem; }
-        .sub { color: var(--muted); margin: 0 0 1.5rem; }
-        .card { background: color-mix(in srgb, var(--panel) 90%, transparent); border: 1px solid #1f2937; border-radius: 16px; padding: 1.5rem; }
-        .steps { display:flex; flex-wrap:wrap; gap:.35rem; margin-bottom: 1rem; }
-        .steps span { font-size:.72rem; padding:.2rem .5rem; border-radius:999px; background:#0f172a; color:var(--muted); border:1px solid #1f2937; }
-        .steps span.on { color:#fff; border-color: var(--accent); }
-        .steps span.done { color: var(--ok); }
-        .bar { height:10px; background:#0f172a; border-radius:999px; overflow:hidden; margin: 1rem 0; }
-        .bar > i { display:block; height:100%; background: linear-gradient(90deg, var(--accent), #818cf8); width: {{ progress.percent }}%; }
-        .err { color: var(--err); }
-        .log { max-height: 160px; overflow:auto; font-size:.8rem; color:var(--muted); background:#0b1220; padding:.75rem; border-radius:8px; }
-        label { display:block; margin:.75rem 0 .35rem; color:var(--muted); font-size:.9rem; }
-        input[type=text], input[type=email], input[type=password], input[type=url] {
-            width:100%; padding:.65rem .75rem; border-radius:8px; border:1px solid #334155; background:#0b1220; color:#fff;
-        }
-        .actions { display:flex; gap:.75rem; margin-top:1.25rem; flex-wrap:wrap; }
-        button { background: var(--accent); color:#0b1220; border:0; border-radius:8px; padding:.6rem 1rem; font-weight:600; cursor:pointer; }
-        button.secondary { background: transparent; color: var(--text); border:1px solid #334155; }
-    </style>
-</head>
-<body>
-<div class="wrap">
-    <div class="brand">{{ brandName }}</div>
+{% extends layout_template %}
+
+{% block nowo_site_backup_title %}{{ brandName }} — Setup{% endblock %}
+
+{% block nowo_site_backup_content %}
     <h1>{{ 'setup.wizard.title'|trans({}, 'NowoSiteBackupBundle') }}</h1>
     <p class="sub">{{ 'setup.wizard.subtitle'|trans({}, 'NowoSiteBackupBundle') }}</p>
 
@@ -45,8 +13,42 @@
                 <span class="{% if progress.currentStepId == step.id %}on{% elseif step.id in progress.completedStepIds %}done{% endif %}">{{ step.label|trans({}, tabDomain) }}</span>
             {% endfor %}
         </div>
-        <div class="bar"><i></i></div>
+        <div class="bar"><i style="width: {{ progress.percent }}%"></i></div>
         <p><strong>{{ progress.percent|number_format(0) }}%</strong> — {{ progress.message|trans({}, 'NowoSiteBackupBundle') }}</p>
+
+        {% set setup_reasons = reasons|default([]) %}
+        {% set db_connection_failed = 'database connection failed' in setup_reasons %}
+        {% set db_schema_empty = 'database schema is empty' in setup_reasons %}
+        {% if setup_reasons is not empty %}
+            <div class="warn" role="status">
+                <strong>{{ 'setup.reason.heading'|trans({}, 'NowoSiteBackupBundle') }}</strong>
+                <ul>
+                    {% for reason in setup_reasons %}
+                        <li>
+                            {% if reason == 'database connection failed' %}
+                                {{ 'setup.reason.db_connection'|trans({}, 'NowoSiteBackupBundle') }}
+                            {% elseif reason == 'database schema is empty' %}
+                                {{ 'setup.reason.db_schema_empty'|trans({}, 'NowoSiteBackupBundle') }}
+                            {% elseif reason == 'setup.required marker present' %}
+                                {{ 'setup.reason.marker_required'|trans({}, 'NowoSiteBackupBundle') }}
+                            {% elseif reason == 'setup.done marker missing' %}
+                                {{ 'setup.reason.marker_done_missing'|trans({}, 'NowoSiteBackupBundle') }}
+                            {% elseif reason starts with 'incomplete setup progress' %}
+                                {{ 'setup.reason.incomplete'|trans({ '%detail%': reason }, 'NowoSiteBackupBundle') }}
+                            {% else %}
+                                {{ reason }}
+                            {% endif %}
+                        </li>
+                    {% endfor %}
+                </ul>
+                {% if db_connection_failed %}
+                    <p class="sub" style="margin:.75rem 0 0">{{ 'setup.reason.db_connection_hint'|trans({}, 'NowoSiteBackupBundle') }}</p>
+                {% elseif db_schema_empty %}
+                    <p class="sub" style="margin:.75rem 0 0">{{ 'setup.reason.db_schema_hint'|trans({}, 'NowoSiteBackupBundle') }}</p>
+                {% endif %}
+            </div>
+        {% endif %}
+
         {% if error %}<p class="err">{{ error|trans({}, 'NowoSiteBackupBundle') }}</p>{% endif %}
         {% if progress.error and not error %}<p class="err">{{ progress.error|trans({}, 'NowoSiteBackupBundle') }}</p>{% endif %}
 
@@ -61,7 +63,9 @@
                 {% elseif 'sample' in currentStep.id %}
                     {% include '@NowoSiteBackupBundle/setup/_sample_form.html.twig' %}
                 {% elseif 'database_url' in currentStep.id %}
-                    {% include '@NowoSiteBackupBundle/setup/_database_form.html.twig' %}
+                    {% include '@NowoSiteBackupBundle/setup/_database_form.html.twig' with {
+                        db_connection_failed: db_connection_failed
+                    } %}
                 {% else %}
                     {% include '@NowoSiteBackupBundle/setup/_continue_form.html.twig' %}
                 {% endif %}
@@ -80,17 +84,15 @@
                     <button type="submit">{{ 'setup.wizard.continue'|trans({}, 'NowoSiteBackupBundle') }}</button>
                 </form>
                 {% if advanceMode|default('automatic') == 'automatic' and progress.phase == 'running' %}
-                    <script>setTimeout(function(){ document.getElementById('auto-advance').submit(); }, 600);</script>
+                    <script>setTimeout(function () { document.getElementById('auto-advance').submit(); }, 600);</script>
                 {% endif %}
             {% endif %}
         {% endblock %}
 
         {% if progress.log is not empty %}
-            <div class="log" style="margin-top:1rem">
+            <div class="log">
                 {% for line in progress.log|slice(-12) %}{{ line }}<br>{% endfor %}
             </div>
         {% endif %}
     </div>
-</div>
-</body>
-</html>
+{% endblock %}

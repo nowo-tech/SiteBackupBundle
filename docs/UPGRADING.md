@@ -1,5 +1,49 @@
 # Upgrading
 
+## To 1.4.0
+
+Setup pages use a **host `layout_template`** so apps brand the shell without forking wizard/done/token markup.
+
+### Install / update
+
+```bash
+composer require nowo-tech/site-backup-bundle:^1.4.0
+php bin/console cache:clear
+```
+
+### Behaviour
+
+- `wizard.html.twig`, `done.html.twig`, and `token.html.twig` now `{% extends layout_template %}` and fill `nowo_site_backup_content`.
+- Default layout remains the bundle dark standalone theme (`@NowoSiteBackupBundle/setup/layout.html.twig`).
+- Detector reasons render in the vendor wizard; database form skips are hidden when the connection failed.
+
+### Migration notes
+
+| Topic | Before | After |
+| --- | --- | --- |
+| Branding setup UI | Copy/fork `setup/wizard.html.twig` (full HTML) | Set `setup.layout_template` to a thin host shell |
+| `templates.setup_*` | Full page paths | Same paths, but pages expect `layout_template` in the view |
+| Full HTML overrides of wizard/done/token | Worked as drop-in | Must either keep forking **or** switch to `layout_template` + delete forks |
+
+Example host shell:
+
+```twig
+{# templates/kit/site_backup_setup_layout.html.twig #}
+{% extends 'layouts/guest_shell.html.twig' %}
+{% block title %}{{ brandName }} — Setup{% endblock %}
+{% block body %}
+    {% block nowo_site_backup_content %}{% endblock %}
+{% endblock %}
+```
+
+```yaml
+nowo_site_backup:
+    setup:
+        layout_template: 'kit/site_backup_setup_layout.html.twig'
+```
+
+Do **not** override `_admin_form` / `_bootstrap_form` / `_continue_form` / `_sample_form` unless you need different field names; restyle with CSS targeting `.nowo-site-backup-setup`.
+
 ## To 1.3.2
 
 CI no longer rewrites Symfony constraints to `^7.4` when applying CS Fixer on `main`.

@@ -1,6 +1,6 @@
 # Release
 
-Current stable target: **v1.3.2**.
+Current stable target: **v1.4.0**.
 
 ## Checklist
 
@@ -13,12 +13,12 @@ Current stable target: **v1.3.2**.
 7. Push the branch and the tag to `git@github.com:nowo-tech/SiteBackupBundle.git` — `.github/workflows/release.yml` creates the GitHub Release from the tag + changelog entry.
 8. Confirm [Packagist](https://packagist.org/packages/nowo-tech/site-backup-bundle) picks up the tag (submit the GitHub repo once if the package is new).
 
-## Example: v1.3.2
+## Example: v1.4.0
 
 ```bash
-git tag -a v1.3.2 -m "Release v1.3.2 - stop CI from pinning Symfony ^7.4 in composer.json"
+git tag -a v1.4.0 -m "Release v1.4.0 - setup layout_template for host branding without forking wizard Twig"
 git push origin main
-git push origin v1.3.2
+git push origin v1.4.0
 ```
 
 ## Versioning

@@ -101,7 +101,9 @@ See [SETUP-WIZARD.md](SETUP-WIZARD.md) for profiles, step types, and security.
 
 Bundle templates are designed to be **reused as-is** across projects. Prefer updating the package and keeping `@NowoSiteBackupBundle/...` rather than copying screens into the app (REQ-UI-001: integrate without forking pages).
 
-Place overrides under `templates/bundles/NowoSiteBackupBundle/` with the **same relative path** as under `src/Resources/views/`. The override **always wins**; delete it to fall back to the bundle after upgrades.
+For setup branding, set **`setup.layout_template`** to a host shell that defines block `nowo_site_backup_content` (do not fork `wizard` / `done` / `token`). Restyle forms with CSS on `.nowo-site-backup-setup`.
+
+Place overrides under `templates/bundles/NowoSiteBackupBundle/` with the **same relative path** as under `src/Resources/views/` only when necessary. The override **always wins**; delete it to fall back to the bundle after upgrades.
 
 | Subpath | Role |
 | --- | --- |
@@ -110,7 +112,8 @@ Place overrides under `templates/bundles/NowoSiteBackupBundle/` with the **same 
 | `panel/index.html.twig` | Dashboard |
 | `panel/login.html.twig` | Login |
 | `panel/history.html.twig` | History |
-| `setup/wizard.html.twig` | Setup wizard shell (`setup_body` block) |
+| `setup/layout.html.twig` | Default setup chrome |
+| `setup/wizard.html.twig` | Setup wizard content (`setup_body` block) |
 | `setup/_bootstrap_form.html.twig` | Bootstrap mode form |
 | `setup/_admin_form.html.twig` | Admin user step |
 | `setup/_database_form.html.twig` | DATABASE_URL step |

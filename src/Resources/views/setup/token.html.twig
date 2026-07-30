@@ -1,11 +1,10 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <title>{{ brandName }} — Setup token required</title>
-</head>
-<body>
-    <h1>Setup token required</h1>
-    <p>Open <code>{{ pathPrefix }}?token=…</code> with the configured <code>setup.setup_token</code>.</p>
-</body>
-</html>
+{% extends layout_template %}
+
+{% block nowo_site_backup_title %}{{ brandName }} — Setup token required{% endblock %}
+
+{% block nowo_site_backup_content %}
+    <div class="card">
+        <h1>{{ 'setup.token.title'|trans({}, 'NowoSiteBackupBundle') }}</h1>
+        <p class="sub">{{ 'setup.token.body'|trans({ '%path%': pathPrefix ~ '?token=…' }, 'NowoSiteBackupBundle') }}</p>
+    </div>
+{% endblock %}

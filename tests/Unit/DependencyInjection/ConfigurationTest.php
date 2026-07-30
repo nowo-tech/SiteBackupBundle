@@ -30,6 +30,11 @@ final class ConfigurationTest extends TestCase
         self::assertSame('filesystem', $config['setup']['progress_storage']);
         self::assertTrue($config['setup']['detectors']['incomplete_progress']);
         self::assertSame('automatic', $config['setup']['advance_mode']);
+        self::assertNull($config['setup']['layout_template']);
+        self::assertSame(
+            '@NowoSiteBackupBundle/setup/layout.html.twig',
+            $config['templates']['setup_layout'],
+        );
     }
 
     public function testTabsAndAdvanceMode(): void
@@ -42,12 +47,11 @@ final class ConfigurationTest extends TestCase
                         'advance_mode' => 'automatic',
                         'tabs'         => [
                             [
-                                'type'     => 'custom',
-                                'id'       => 'menus',
-                                'label'    => 'setup.tab.custom',
-                                'checker'  => 'App\\MenusChecker',
-                                'template' => '@App/menus.twig',
-                                'runner'   => [
+                                'type'    => 'custom',
+                                'id'      => 'menus',
+                                'label'   => 'setup.tab.custom',
+                                'checker' => 'App\\MenusChecker',
+                                'runner'  => [
                                     'type'    => 'console',
                                     'command' => 'app:menus:sync',
                                 ],
@@ -63,5 +67,15 @@ final class ConfigurationTest extends TestCase
         self::assertCount(1, $config['setup']['profiles']['demo']['tabs']);
         self::assertSame('App\\MenusChecker', $config['setup']['profiles']['demo']['tabs'][0]['checker']);
         self::assertSame('console', $config['setup']['profiles']['demo']['tabs'][0]['runner']['type']);
+    }
+
+    public function testSetupLayoutTemplate(): void
+    {
+        $config = (new Processor())->processConfiguration(new Configuration(), [[
+            'setup' => [
+                'layout_template' => 'kit/site_backup_setup_layout.html.twig',
+            ],
+        ]]);
+        self::assertSame('kit/site_backup_setup_layout.html.twig', $config['setup']['layout_template']);
     }
 }

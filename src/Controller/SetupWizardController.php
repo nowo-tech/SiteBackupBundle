@@ -52,10 +52,10 @@ final class SetupWizardController
         }
 
         if (!$this->isTokenValid($request)) {
-            return new Response($this->twig->render($this->templates['setup_token'], [
+            return new Response($this->twig->render($this->templates['setup_token'], $this->setupViewVars([
                 'pathPrefix' => $this->pathPrefix,
                 'brandName'  => $this->brandName,
-            ]), 403);
+            ])), 403);
         }
 
         $profile  = $request->query->getString('profile') ?: null;
@@ -101,7 +101,7 @@ final class SetupWizardController
         // Always render the wizard shell. Form steps use partials inside setup_body
         // (do not switch to admin/sample/database templates that extend the full HTML
         // document — that path is redundant and fragile with Twig yield + inspectors).
-        return new Response($this->twig->render($this->templates['setup_wizard'], [
+        return new Response($this->twig->render($this->templates['setup_wizard'], $this->setupViewVars([
             'pathPrefix'  => $this->pathPrefix,
             'brandName'   => $this->brandName,
             'progress'    => $progress,
@@ -112,17 +112,17 @@ final class SetupWizardController
             'csrfToken'   => $this->csrfTokenManager?->getToken('nowo_site_backup_setup')->getValue(),
             'progressUrl' => rtrim($this->pathPrefix, '/') . '/api/progress',
             'advanceMode' => $this->orchestrator->getAdvanceMode($progress->getProfile()),
-        ]));
+        ])));
     }
 
     #[Route('/done', name: 'nowo_site_backup_setup_done', methods: ['GET'])]
     public function done(): Response
     {
-        return new Response($this->twig->render($this->templates['setup_done'], [
+        return new Response($this->twig->render($this->templates['setup_done'], $this->setupViewVars([
             'pathPrefix' => $this->pathPrefix,
             'brandName'  => $this->brandName,
             'progress'   => $this->orchestrator->getProgress(),
-        ]));
+        ])));
     }
 
     #[Route('/api/progress', name: 'nowo_site_backup_setup_progress', methods: ['GET'])]
@@ -184,5 +184,18 @@ final class SetupWizardController
         return $this->csrfTokenManager->isTokenValid(
             new CsrfToken('nowo_site_backup_setup', $request->request->getString('_csrf_token')),
         );
+    }
+
+    /**
+     * @param array<string, mixed> $vars
+     *
+     * @return array<string, mixed>
+     */
+    private function setupViewVars(array $vars): array
+    {
+        $vars['layout_template'] = $this->templates['setup_layout']
+            ?? '@NowoSiteBackupBundle/setup/layout.html.twig';
+
+        return $vars;
     }
 }

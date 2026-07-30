@@ -1,20 +1,11 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{{ brandName }} — Ready</title>
-    <style>
-        body { margin:0; min-height:100vh; display:grid; place-items:center; font-family:system-ui,sans-serif; background:#0b1220; color:#e5e7eb; }
-        .card { width:min(480px,92vw); padding:2rem; border:1px solid #1f2937; border-radius:16px; background:#111827; text-align:center; }
-        a { color:#38bdf8; }
-    </style>
-</head>
-<body>
-<main class="card">
-    <h1>{{ 'setup.done.title'|trans({}, 'NowoSiteBackupBundle') }}</h1>
-    <p>{{ 'setup.done.body'|trans({}, 'NowoSiteBackupBundle') }}</p>
-    <p><a href="/">{{ 'setup.done.home'|trans({}, 'NowoSiteBackupBundle') }}</a></p>
-</main>
-</body>
-</html>
+{% extends layout_template %}
+
+{% block nowo_site_backup_title %}{{ brandName }} — Ready{% endblock %}
+
+{% block nowo_site_backup_content %}
+    <div class="card" style="text-align:center">
+        <h1>{{ 'setup.done.title'|trans({}, 'NowoSiteBackupBundle') }}</h1>
+        <p class="sub">{{ 'setup.done.body'|trans({}, 'NowoSiteBackupBundle') }}</p>
+        <p><a href="/">{{ 'setup.done.home'|trans({}, 'NowoSiteBackupBundle') }}</a></p>
+    </div>
+{% endblock %}
