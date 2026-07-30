@@ -45,6 +45,19 @@ setup:
   database:
     save: 'Guardar DATABASE_URL'
     skip: 'Omitir (usar env existente)'
+  reason:
+    heading: 'Hace falta completar el setup'
+    db_connection: 'La base de datos no es alcanzable con el DATABASE_URL actual (falta, es incorrecto o el servicio DB está caído).'
+    db_connection_hint: 'Configura un DATABASE_URL válido en el paso de base de datos antes de continuar. Omitir está desactivado hasta que la conexión funcione.'
+    db_connection_form: 'Falló la conexión a la base de datos. Introduce un DATABASE_URL válido (se escribe en .env.local). No puedes omitir este paso hasta que la base responda.'
+    db_schema_empty: 'La base conecta pero aún no tiene tablas — las migraciones / importación crearán el esquema.'
+    db_schema_hint: 'Continúa el asistente para ejecutar migraciones (o importar un dump completo). No hace falta cambiar DATABASE_URL si la conexión ya funciona.'
+    marker_required: 'Existe el marcador setup.required (arranque en frío o post-restore).'
+    marker_done_missing: 'Falta setup.done y require_done_marker está activo.'
+    incomplete: 'Asistente en curso: %detail%'
+  token:
+    title: 'Se requiere token de setup'
+    body: 'Abre %path% con el setup.setup_token configurado.'
   done:
     title: 'Configuración completada'
     body: 'El sitio está listo. Puedes iniciar sesión con la cuenta de administrador.'

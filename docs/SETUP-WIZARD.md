@@ -365,15 +365,24 @@ Changes vs current restore behaviour:
 
 ## Twig overrides
 
-Overrides live under `templates/bundles/NowoSiteBackupBundle/` (REQ-TWIG-001). Prefer overriding a **partial** or block rather than forking the whole wizard so bundle upgrades stay drop-in.
+**Prefer `setup.layout_template`** (REQ-TWIG-001 / REQ-UI-001): keep wizard/done/token markup in the package; only supply a host chrome shell that defines block `nowo_site_backup_content`.
+
+```yaml
+nowo_site_backup:
+    setup:
+        layout_template: 'kit/site_backup_setup_layout.html.twig'
+```
+
+Optional file overrides still live under `templates/bundles/NowoSiteBackupBundle/` — an override **replaces** the package file entirely (upstream edits will not apply until you delete or merge the fork). Prefer CSS on `.nowo-site-backup-setup` over forking form partials.
 
 | Subpath | Role |
 | --- | --- |
-| `setup/wizard.html.twig` | Wizard shell (`setup_body` block) |
+| `setup/layout.html.twig` | Default standalone chrome (CSS variables `--nowo-sbb-*`) |
+| `setup/wizard.html.twig` | Wizard content (`setup_body` block) — extends `layout_template` |
 | `setup/_bootstrap_form.html.twig` | Guided vs full-database choice |
 | `setup/_admin_form.html.twig` | Super-admin form |
 | `setup/_sample_form.html.twig` | Sample-data opt-in |
-| `setup/_database_form.html.twig` | DATABASE_URL form |
+| `setup/_database_form.html.twig` | DATABASE_URL form (hides Skip when connection failed) |
 | `setup/_continue_form.html.twig` | Generic Continuar (custom tabs without `template`) |
 | `setup/done.html.twig` | Success |
 | `setup/token.html.twig` | Setup token gate |

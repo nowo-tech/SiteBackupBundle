@@ -64,6 +64,12 @@ final class SiteBackupExtension extends Extension
         $container->setParameter('nowo.site_backup.restore', $config['restore']);
         $container->setParameter('nowo.site_backup.panel.path_prefix', $config['panel']['path_prefix']);
         $container->setParameter('nowo.site_backup.setup.path_prefix', $config['setup']['path_prefix']);
+
+        $layout = $config['setup']['layout_template'] ?? null;
+        if (is_string($layout) && $layout !== '') {
+            $config['templates']['setup_layout'] = $layout;
+        }
+
         $container->setParameter('nowo.site_backup.templates', $config['templates']);
         $container->setParameter('nowo.site_backup.setup', $config['setup']);
 

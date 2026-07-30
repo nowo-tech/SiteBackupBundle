@@ -1,0 +1,140 @@
+{# Default standalone chrome for setup pages.
+   Apps: set setup.layout_template to a host shell that defines the same block
+   nowo_site_backup_content (and optionally overrides nowo_site_backup_styles). #}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>{% block nowo_site_backup_title %}{{ brandName }} — Setup{% endblock %}</title>
+    {% block nowo_site_backup_styles %}
+        <style>
+            :root {
+                --nowo-sbb-bg: #0b1220;
+                --nowo-sbb-panel: #111827;
+                --nowo-sbb-text: #e5e7eb;
+                --nowo-sbb-muted: #9ca3af;
+                --nowo-sbb-accent: #38bdf8;
+                --nowo-sbb-err: #f87171;
+                --nowo-sbb-ok: #4ade80;
+            }
+            * { box-sizing: border-box; }
+            body {
+                margin: 0;
+                min-height: 100vh;
+                font-family: system-ui, sans-serif;
+                background:
+                    radial-gradient(900px 400px at 10% 0%, #1d4ed8 0%, transparent 50%),
+                    radial-gradient(700px 400px at 100% 100%, #0ea5e9 0%, transparent 45%),
+                    var(--nowo-sbb-bg);
+                color: var(--nowo-sbb-text);
+            }
+            .nowo-site-backup-setup { width: min(640px, 94vw); margin: 4vh auto; }
+            .nowo-site-backup-setup .brand {
+                font-size: .85rem;
+                letter-spacing: .08em;
+                text-transform: uppercase;
+                color: var(--nowo-sbb-accent);
+                margin-bottom: .5rem;
+            }
+            .nowo-site-backup-setup h1 { margin: 0 0 .35rem; font-size: 1.6rem; }
+            .nowo-site-backup-setup .sub { color: var(--nowo-sbb-muted); margin: 0 0 1.5rem; }
+            .nowo-site-backup-setup .card {
+                background: color-mix(in srgb, var(--nowo-sbb-panel) 90%, transparent);
+                border: 1px solid #1f2937;
+                border-radius: 16px;
+                padding: 1.5rem;
+            }
+            .nowo-site-backup-setup .steps { display: flex; flex-wrap: wrap; gap: .35rem; margin-bottom: 1rem; }
+            .nowo-site-backup-setup .steps span {
+                font-size: .72rem;
+                padding: .2rem .5rem;
+                border-radius: 999px;
+                background: #0f172a;
+                color: var(--nowo-sbb-muted);
+                border: 1px solid #1f2937;
+            }
+            .nowo-site-backup-setup .steps span.on { color: #fff; border-color: var(--nowo-sbb-accent); }
+            .nowo-site-backup-setup .steps span.done { color: var(--nowo-sbb-ok); }
+            .nowo-site-backup-setup .bar {
+                height: 10px;
+                background: #0f172a;
+                border-radius: 999px;
+                overflow: hidden;
+                margin: 1rem 0;
+            }
+            .nowo-site-backup-setup .bar > i {
+                display: block;
+                height: 100%;
+                background: linear-gradient(90deg, var(--nowo-sbb-accent), #818cf8);
+            }
+            .nowo-site-backup-setup .err { color: var(--nowo-sbb-err); }
+            .nowo-site-backup-setup .warn {
+                margin: 0 0 1rem;
+                padding: .75rem 1rem;
+                border-radius: 8px;
+                border: 1px solid color-mix(in srgb, #fbbf24 45%, #1f2937);
+                background: color-mix(in srgb, #fbbf24 12%, var(--nowo-sbb-panel));
+                color: #fde68a;
+                font-size: .9rem;
+            }
+            .nowo-site-backup-setup .warn ul { margin: .5rem 0 0; padding-left: 1.25rem; }
+            .nowo-site-backup-setup .log {
+                max-height: 160px;
+                overflow: auto;
+                font-size: .8rem;
+                color: var(--nowo-sbb-muted);
+                background: #0b1220;
+                padding: .75rem;
+                border-radius: 8px;
+                margin-top: 1rem;
+            }
+            .nowo-site-backup-setup label {
+                display: block;
+                margin: .75rem 0 .35rem;
+                color: var(--nowo-sbb-muted);
+                font-size: .9rem;
+            }
+            .nowo-site-backup-setup input[type=text],
+            .nowo-site-backup-setup input[type=email],
+            .nowo-site-backup-setup input[type=password],
+            .nowo-site-backup-setup input[type=url] {
+                width: 100%;
+                padding: .65rem .75rem;
+                border-radius: 8px;
+                border: 1px solid #334155;
+                background: #0b1220;
+                color: #fff;
+            }
+            .nowo-site-backup-setup .actions {
+                display: flex;
+                gap: .75rem;
+                margin-top: 1.25rem;
+                flex-wrap: wrap;
+            }
+            .nowo-site-backup-setup button {
+                background: var(--nowo-sbb-accent);
+                color: #0b1220;
+                border: 0;
+                border-radius: 8px;
+                padding: .6rem 1rem;
+                font-weight: 600;
+                cursor: pointer;
+            }
+            .nowo-site-backup-setup button.secondary {
+                background: transparent;
+                color: var(--nowo-sbb-text);
+                border: 1px solid #334155;
+            }
+        </style>
+    {% endblock %}
+</head>
+<body>
+<div class="nowo-site-backup-setup">
+    {% block nowo_site_backup_brand %}
+        <div class="brand">{{ brandName }}</div>
+    {% endblock %}
+    {% block nowo_site_backup_content %}{% endblock %}
+</div>
+</body>
+</html>

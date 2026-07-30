@@ -1014,6 +1014,7 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *         panel_login?: scalar|Param|null, // Default: "@NowoSiteBackupBundle/panel/login.html.twig"
  *         panel_history?: scalar|Param|null, // Default: "@NowoSiteBackupBundle/panel/history.html.twig"
  *         setup_wizard?: scalar|Param|null, // Default: "@NowoSiteBackupBundle/setup/wizard.html.twig"
+ *         setup_layout?: scalar|Param|null, // Twig layout extended by setup wizard/done/token. Prefer setup.layout_template. // Default: "@NowoSiteBackupBundle/setup/layout.html.twig"
  *         setup_admin?: scalar|Param|null, // Default: "@NowoSiteBackupBundle/setup/admin.html.twig"
  *         setup_sample?: scalar|Param|null, // Default: "@NowoSiteBackupBundle/setup/sample_data.html.twig"
  *         setup_database?: scalar|Param|null, // Default: "@NowoSiteBackupBundle/setup/database.html.twig"
@@ -1023,6 +1024,7 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *     setup?: array{ // Cold-start / post-restore setup wizard.
  *         enabled?: bool|Param, // Default: true
  *         path_prefix?: scalar|Param|null, // Default: "/_setup"
+ *         layout_template?: scalar|Param|null, // Host Twig layout for setup pages (extends pattern like CookieConsent layout_template). Must define block nowo_site_backup_content. Default uses the bundle standalone layout. // Default: null
  *         require_done_marker?: bool|Param, // When true, missing setup.done forces the wizard (fresh clones). Default false so adding the bundle does not lock existing apps. // Default: false
  *         brand_name?: scalar|Param|null, // Default: "Site Setup"
  *         setup_token?: scalar|Param|null, // Optional shared secret for /_setup (?token= or X-Setup-Token). // Default: null

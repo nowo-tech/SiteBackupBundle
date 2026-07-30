@@ -19,6 +19,8 @@ Root key: `nowo_site_backup`.
 | `security.password_hash` | `null` | Prefer env `SITE_BACKUP_PASSWORD_HASH` |
 | `templates.*` | `@NowoSiteBackupBundle/...` | Overrideable Twig templates |
 | `setup.path_prefix` | `/_setup` | Wizard URL prefix; drives imported setup routes + site-gate exclusions |
+| `setup.layout_template` | `null` (bundle `setup/layout.html.twig`) | Host Twig shell for wizard/done/token; must define block `nowo_site_backup_content` |
+| `templates.setup_layout` | `@NowoSiteBackupBundle/setup/layout.html.twig` | Same as `setup.layout_template` when set |
 | `setup.progress_storage` | `filesystem` | `filesystem` \| `doctrine` \| `chain` (prefer DB on load) |
 | `setup.progress_table` | `nowo_site_backup_setup_progress` | DBAL table for doctrine/chain |
 | `setup.progress_file` | `%kernel.project_dir%/var/site-backup/setup-progress.json` | JSON progress when filesystem/chain |

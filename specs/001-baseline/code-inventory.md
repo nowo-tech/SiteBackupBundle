@@ -2,13 +2,13 @@
 
 **Baseline spec**: [`spec.md`](spec.md)
 **Package**: `nowo-tech/site-backup-bundle`
-**Last audited**: 2026-07-30 (FR-SETUP-008/009/010 tabs + checkers)
+**Last audited**: 2026-07-30 (FR-SETUP layout_template / 1.4.0)
 
 Every production source under `src/` is listed below (REQ-SPECKIT-001 / REQ-SPECKIT-003).
 
 | Source files | Count |
 | --- | --- |
-| Total | **107** |
+| Total | **108** |
 
 | Source file | Requirement IDs |
 | --- | --- |
@@ -68,6 +68,7 @@ Every production source under `src/` is listed below (REQ-SPECKIT-001 / REQ-SPEC
 | `Resources/views/setup/admin.html.twig` | FR-TWIG-003 |
 | `Resources/views/setup/database.html.twig` | FR-TWIG-003 |
 | `Resources/views/setup/done.html.twig` | FR-TWIG-003 |
+| `Resources/views/setup/layout.html.twig` | FR-TWIG-003, FR-UI-related |
 | `Resources/views/setup/sample_data.html.twig` | FR-TWIG-003 |
 | `Resources/views/setup/token.html.twig` | FR-TWIG-003 |
 | `Resources/views/setup/wizard.html.twig` | FR-TWIG-003 |
