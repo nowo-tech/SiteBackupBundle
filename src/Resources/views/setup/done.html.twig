@@ -1,9 +1,10 @@
-{% extends layout_template %}
+{% extends nowo_site_backup_setup_layout_template %}
 
+{% block nowo_ui_document_title %}{{ brandName }} — Ready{% endblock %}
 {% block nowo_site_backup_title %}{{ brandName }} — Ready{% endblock %}
 
 {% block nowo_site_backup_content %}
-    <div class="card" style="text-align:center">
+    <div class="nowo-ui-card card" style="text-align:center">
         <h1>{{ 'setup.done.title'|trans({}, 'NowoSiteBackupBundle') }}</h1>
         <p class="sub">{{ 'setup.done.body'|trans({}, 'NowoSiteBackupBundle') }}</p>
         <p><a href="/">{{ 'setup.done.home'|trans({}, 'NowoSiteBackupBundle') }}</a></p>

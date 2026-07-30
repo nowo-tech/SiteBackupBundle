@@ -365,20 +365,22 @@ Changes vs current restore behaviour:
 
 ## Twig overrides
 
-**Prefer `setup.layout_template`** (REQ-TWIG-001 / REQ-UI-001): keep wizard/done/token markup in the package; only supply a host chrome shell that defines block `nowo_site_backup_content`.
+**Prefer `setup.layout_template`** (REQ-TWIG-001 / REQ-UI-001): keep wizard/done/token markup in the package; only supply a host chrome shell that defines block `nowo_site_backup_content` (and optionally `nowo_ui_content`). Pages extend Twig global `nowo_site_backup_setup_layout_template`.
 
 ```yaml
 nowo_site_backup:
     setup:
         layout_template: 'kit/site_backup_setup_layout.html.twig'
+    panel:
+        layout_template: 'kit/site_backup_panel_layout.html.twig'
 ```
 
 Optional file overrides still live under `templates/bundles/NowoSiteBackupBundle/` — an override **replaces** the package file entirely (upstream edits will not apply until you delete or merge the fork). Prefer CSS on `.nowo-site-backup-setup` over forking form partials.
 
 | Subpath | Role |
 | --- | --- |
-| `setup/layout.html.twig` | Default standalone chrome (CSS variables `--nowo-sbb-*`) |
-| `setup/wizard.html.twig` | Wizard content (`setup_body` block) — extends `layout_template` |
+| `setup/layout.html.twig` | Default standalone setup chrome (`nowo-ui-*` + `--nowo-sbb-*`) |
+| `setup/wizard.html.twig` | Wizard content (`setup_body`) — extends `nowo_site_backup_setup_layout_template` |
 | `setup/_bootstrap_form.html.twig` | Guided vs full-database choice |
 | `setup/_admin_form.html.twig` | Super-admin form |
 | `setup/_sample_form.html.twig` | Sample-data opt-in |
@@ -386,6 +388,8 @@ Optional file overrides still live under `templates/bundles/NowoSiteBackupBundle
 | `setup/_continue_form.html.twig` | Generic Continuar (custom tabs without `template`) |
 | `setup/done.html.twig` | Success |
 | `setup/token.html.twig` | Setup token gate |
+| `panel/layout.html.twig` | Default standalone panel chrome |
+| `panel/index.html.twig` / `history` / `login` | Panel pages — extend `nowo_site_backup_panel_layout_template` |
 
 See also [USAGE.md](USAGE.md) — Template overrides.
 

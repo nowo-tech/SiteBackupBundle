@@ -31,9 +31,14 @@ final class ConfigurationTest extends TestCase
         self::assertTrue($config['setup']['detectors']['incomplete_progress']);
         self::assertSame('automatic', $config['setup']['advance_mode']);
         self::assertNull($config['setup']['layout_template']);
+        self::assertNull($config['panel']['layout_template']);
         self::assertSame(
             '@NowoSiteBackupBundle/setup/layout.html.twig',
             $config['templates']['setup_layout'],
+        );
+        self::assertSame(
+            '@NowoSiteBackupBundle/panel/layout.html.twig',
+            $config['templates']['panel_layout'],
         );
     }
 

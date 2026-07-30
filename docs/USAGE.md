@@ -101,18 +101,18 @@ See [SETUP-WIZARD.md](SETUP-WIZARD.md) for profiles, step types, and security.
 
 Bundle templates are designed to be **reused as-is** across projects. Prefer updating the package and keeping `@NowoSiteBackupBundle/...` rather than copying screens into the app (REQ-UI-001: integrate without forking pages).
 
-For setup branding, set **`setup.layout_template`** to a host shell that defines block `nowo_site_backup_content` (do not fork `wizard` / `done` / `token`). Restyle forms with CSS on `.nowo-site-backup-setup`.
+For setup / panel branding, set **`setup.layout_template`** and/or **`panel.layout_template`** to a host shell (Twig globals `nowo_site_backup_setup_layout_template` / `nowo_site_backup_panel_layout_template`). Do not fork `wizard` / `done` / `token` / panel pages. Restyle with `.nowo-ui-*` / `.nowo-site-backup-*` CSS.
 
 Place overrides under `templates/bundles/NowoSiteBackupBundle/` with the **same relative path** as under `src/Resources/views/` only when necessary. The override **always wins**; delete it to fall back to the bundle after upgrades.
 
 | Subpath | Role |
 | --- | --- |
 | `restore/page.html.twig` | Public loading page |
-| `panel/layout.html.twig` | Panel chrome |
-| `panel/index.html.twig` | Dashboard |
-| `panel/login.html.twig` | Login |
-| `panel/history.html.twig` | History |
-| `setup/layout.html.twig` | Default setup chrome |
+| `panel/layout.html.twig` | Default panel chrome (or `panel.layout_template`) |
+| `panel/index.html.twig` | Dashboard content |
+| `panel/login.html.twig` | Login content |
+| `panel/history.html.twig` | History content |
+| `setup/layout.html.twig` | Default setup chrome (or `setup.layout_template`) |
 | `setup/wizard.html.twig` | Setup wizard content (`setup_body` block) |
 | `setup/_bootstrap_form.html.twig` | Bootstrap mode form |
 | `setup/_admin_form.html.twig` | Admin user step |

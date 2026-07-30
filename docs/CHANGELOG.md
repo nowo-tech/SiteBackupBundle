@@ -7,11 +7,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-07-30
+
+### Added
+
+- Panel **`layout_template`** (`panel.layout_template` / `templates.panel_layout`) so hosts brand the admin panel without forking page markup (REQ-UI-001).
+- Twig globals `nowo_site_backup_setup_layout_template` and `nowo_site_backup_panel_layout_template` (pages `{% extends %}` those globals).
+- Stable **`nowo-ui-*`** CSS hooks on setup and panel chrome/partials for host restyling without forking templates.
+
+### Changed
+
+- Setup pages extend the setup layout **global** (same as panel); prefer `setup.layout_template` / `panel.layout_template` over copying layouts.
+- Docs: [USAGE.md](USAGE.md), [CONFIGURATION.md](CONFIGURATION.md), [UPGRADING.md](UPGRADING.md), [SETUP-WIZARD.md](SETUP-WIZARD.md).
+
 ## [1.4.0] - 2026-07-30
 
 ### Added
 
-- Setup **`layout_template`** (`setup.layout_template` / `templates.setup_layout`): wizard, done, and token pages extend a host layout via block `nowo_site_backup_content` (same pattern as CookieConsent / Dashboard Menu). Default layout: `@NowoSiteBackupBundle/setup/layout.html.twig`.
+- Setup **`layout_template`** (`setup.layout_template` / `templates.setup_layout`): wizard, done, and token pages extend a host layout via block `nowo_site_backup_content`. Default layout: `@NowoSiteBackupBundle/setup/layout.html.twig`.
 - Setup **reasons** banner in the vendor wizard (connection failed, empty schema, markers, incomplete progress).
 - `_database_form` hides Skip and warns when Doctrine connect detection reports failure.
 - Translation keys `setup.reason.*` and `setup.token.*` in all bundle locales.

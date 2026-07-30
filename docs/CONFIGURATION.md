@@ -16,10 +16,12 @@ Root key: `nowo_site_backup`.
 | `restore.progress_file` | `var/site-backup/restore-progress.json` | Polled by the loading UI |
 | `restore.protected_paths` | `.env.local`, `var/site-backup` | Never overwritten on apply |
 | `panel.path_prefix` | `/_site_backup` | Auto-excluded from loading page; drives imported panel routes |
+| `panel.layout_template` | `null` (bundle `panel/layout.html.twig`) | Host Twig shell; Twig global `nowo_site_backup_panel_layout_template`; blocks `nowo_ui_content` / `nowo_site_backup_panel_content` |
+| `templates.panel_layout` | `@NowoSiteBackupBundle/panel/layout.html.twig` | Same as `panel.layout_template` when set |
 | `security.password_hash` | `null` | Prefer env `SITE_BACKUP_PASSWORD_HASH` |
 | `templates.*` | `@NowoSiteBackupBundle/...` | Overrideable Twig templates |
 | `setup.path_prefix` | `/_setup` | Wizard URL prefix; drives imported setup routes + site-gate exclusions |
-| `setup.layout_template` | `null` (bundle `setup/layout.html.twig`) | Host Twig shell for wizard/done/token; must define block `nowo_site_backup_content` |
+| `setup.layout_template` | `null` (bundle `setup/layout.html.twig`) | Host Twig shell; Twig global `nowo_site_backup_setup_layout_template`; blocks `nowo_ui_content` / `nowo_site_backup_content` |
 | `templates.setup_layout` | `@NowoSiteBackupBundle/setup/layout.html.twig` | Same as `setup.layout_template` when set |
 | `setup.progress_storage` | `filesystem` | `filesystem` \| `doctrine` \| `chain` (prefer DB on load) |
 | `setup.progress_table` | `nowo_site_backup_setup_progress` | DBAL table for doctrine/chain |
