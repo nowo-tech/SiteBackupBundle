@@ -2,11 +2,12 @@
    Host apps: set setup.layout_template (global nowo_site_backup_setup_layout_template)
    to a project shell that defines nowo_ui_content / nowo_site_backup_content. #}
 <!DOCTYPE html>
-<html lang="en" class="nowo-ui-root nowo-site-backup-setup">
+<html lang="en" class="nowo-ui-root nowo-site-backup-setup nowo-ui-css-{{ nowo_site_backup_css_framework|default('custom') }}" data-css-framework="{{ nowo_site_backup_css_framework|default('custom') }}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block nowo_ui_document_title %}{% block nowo_site_backup_title %}{{ brandName }} — Setup{% endblock %}{% endblock %}</title>
+    {# Demo root layout: no parent() (full HTML). Pages do not reopen stylesheets/javascripts. #}
     {% block stylesheets %}
         {% block nowo_ui_styles %}
             {% block nowo_site_backup_styles %}

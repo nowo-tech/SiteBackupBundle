@@ -1,5 +1,38 @@
 # Upgrading
 
+## To 1.6.0
+
+Optional host CSS stack hint for setup/panel Web UI (REQ-UI-001). **Non-breaking** — default remains `custom` (semantic `nowo-ui-*`).
+
+### Install / update
+
+```bash
+composer require nowo-tech/site-backup-bundle:^1.6.0
+php bin/console cache:clear
+```
+
+### Behaviour
+
+- New root key `css_framework` → Twig global `nowo_site_backup_css_framework`.
+- Demo layouts add `nowo-ui-css-{{ framework }}` / `data-css-framework` on `<html>`.
+- No change to `setup.layout_template` / `panel.layout_template` from **1.5.0**.
+
+### Migration notes
+
+| Topic | Before | After |
+| --- | --- | --- |
+| Host CSS stack | Implicit / CSS-only | Optional `css_framework: bootstrap5` (etc.) alongside layout templates |
+| Default | — | `custom` (unchanged look for existing installs) |
+
+```yaml
+nowo_site_backup:
+    css_framework: bootstrap5
+    panel:
+        layout_template: 'kit/site_backup_panel_layout.html.twig'
+    setup:
+        layout_template: 'kit/site_backup_setup_layout.html.twig'
+```
+
 ## To 1.5.0
 
 Panel (and setup) integrate with a host layout via config + Twig globals — avoid forking page templates (REQ-TWIG-001 / REQ-UI-001).

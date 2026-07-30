@@ -9,6 +9,7 @@ Root key: `nowo_site_backup`.
 | `status_code` | `503` | HTTP status while restore is active |
 | `subscriber_priority` | `31` | After router (exclusions / attributes) |
 | `process_timeout` | `600` | Seconds for `tar` / dump processes (REQ-RUNTIME-001) |
+| `css_framework` | `custom` | Host CSS stack hint (REQ-UI-001): `bootstrap5`, `bootstrap`, `bootstrap4`, `tabler`, `tailwind`, `foundation`, `custom`, `none`. Twig global `nowo_site_backup_css_framework`. Demo uses semantic `nowo-ui-*` (`custom`). |
 | `backup.include_paths` | config, public, templates, … | Relative to `kernel.project_dir`. **`[]` or `["."]` = entire project** (minus `exclude_patterns`). Omitting the key keeps the selective defaults. |
 | `backup.exclude_patterns` | cache/log/vendor/… | `fnmatch` against relative paths |
 | `backup.storage_dir` | `%kernel.project_dir%/var/site-backup/archives` | Archives + `.meta.json` |
@@ -41,6 +42,7 @@ Profiles (`default_profile` / `profiles`) are **not** used for backup state: bac
 ```yaml
 nowo_site_backup:
     process_timeout: 900
+    css_framework: bootstrap5   # or: tailwind | foundation | custom | tabler | …
     backup:
         # Selective paths (default behaviour when the key is omitted):
         include_paths: [config, public/uploads, templates, src, composer.json]

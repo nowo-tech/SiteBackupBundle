@@ -61,6 +61,7 @@ final class SiteBackupExtension extends Extension
         $container->setParameter('nowo.site_backup.enabled', $config['enabled']);
         $container->setParameter('nowo.site_backup.default_message', $config['default_message']);
         $container->setParameter('nowo.site_backup.process_timeout', $config['process_timeout']);
+        $container->setParameter('nowo.site_backup.css_framework', $config['css_framework']);
         $container->setParameter('nowo.site_backup.backup', $config['backup']);
         $container->setParameter('nowo.site_backup.restore', $config['restore']);
         $container->setParameter('nowo.site_backup.panel.path_prefix', $config['panel']['path_prefix']);
@@ -250,7 +251,8 @@ final class SiteBackupExtension extends Extension
         $container->getDefinition(SiteBackupTwigExtension::class)
             ->setArgument('$manager', new Reference(SiteBackupManager::class))
             ->setArgument('$setupLayoutTemplate', $setupLayout)
-            ->setArgument('$panelLayoutTemplate', $panelLayout);
+            ->setArgument('$panelLayoutTemplate', $panelLayout)
+            ->setArgument('$cssFramework', (string) $config['css_framework']);
     }
 
     /**

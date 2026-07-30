@@ -2,11 +2,12 @@
    Host apps: set panel.layout_template to the project layout / bridge that defines
    nowo_ui_content (or nowo_site_backup_panel_content). #}
 <!DOCTYPE html>
-<html lang="en" class="nowo-ui-root nowo-site-backup-panel">
+<html lang="en" class="nowo-ui-root nowo-site-backup-panel nowo-ui-css-{{ nowo_site_backup_css_framework|default('custom') }}" data-css-framework="{{ nowo_site_backup_css_framework|default('custom') }}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block nowo_ui_document_title %}{% block title %}Site Backup{% endblock %}{% endblock %}</title>
+    {# Demo root layout: no parent() (full HTML). Pages do not reopen stylesheets/javascripts. #}
     {% block stylesheets %}
         {% block nowo_ui_styles %}
             <style>

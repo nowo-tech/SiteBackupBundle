@@ -19,10 +19,13 @@ final class SiteBackupExtension extends AbstractExtension implements GlobalsInte
 
     public const GLOBAL_PANEL_LAYOUT_TEMPLATE = 'nowo_site_backup_panel_layout_template';
 
+    public const GLOBAL_CSS_FRAMEWORK = 'nowo_site_backup_css_framework';
+
     public function __construct(
         private readonly SiteBackupManager $manager,
         private readonly string $setupLayoutTemplate = '@NowoSiteBackupBundle/setup/layout.html.twig',
         private readonly string $panelLayoutTemplate = '@NowoSiteBackupBundle/panel/layout.html.twig',
+        private readonly string $cssFramework = 'custom',
     ) {
     }
 
@@ -42,6 +45,7 @@ final class SiteBackupExtension extends AbstractExtension implements GlobalsInte
         return [
             self::GLOBAL_SETUP_LAYOUT_TEMPLATE => $this->setupLayoutTemplate,
             self::GLOBAL_PANEL_LAYOUT_TEMPLATE => $this->panelLayoutTemplate,
+            self::GLOBAL_CSS_FRAMEWORK         => $this->cssFramework,
         ];
     }
 

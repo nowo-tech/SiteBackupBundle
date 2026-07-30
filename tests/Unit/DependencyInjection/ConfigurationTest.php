@@ -6,6 +6,7 @@ namespace Nowo\SiteBackupBundle\Tests\Unit\DependencyInjection;
 
 use Nowo\SiteBackupBundle\DependencyInjection\Configuration;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\Config\Definition\Processor;
 
 final class ConfigurationTest extends TestCase
@@ -32,6 +33,7 @@ final class ConfigurationTest extends TestCase
         self::assertSame('automatic', $config['setup']['advance_mode']);
         self::assertNull($config['setup']['layout_template']);
         self::assertNull($config['panel']['layout_template']);
+        self::assertSame('custom', $config['css_framework']);
         self::assertSame(
             '@NowoSiteBackupBundle/setup/layout.html.twig',
             $config['templates']['setup_layout'],
@@ -40,6 +42,22 @@ final class ConfigurationTest extends TestCase
             '@NowoSiteBackupBundle/panel/layout.html.twig',
             $config['templates']['panel_layout'],
         );
+    }
+
+    public function testCssFrameworkAccepted(): void
+    {
+        $config = (new Processor())->processConfiguration(new Configuration(), [[
+            'css_framework' => 'bootstrap5',
+        ]]);
+        self::assertSame('bootstrap5', $config['css_framework']);
+    }
+
+    public function testInvalidCssFrameworkRejected(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+        (new Processor())->processConfiguration(new Configuration(), [[
+            'css_framework' => 'material',
+        ]]);
     }
 
     public function testTabsAndAdvanceMode(): void

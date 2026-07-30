@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-07-30
+
+### Added
+
+- Root config **`css_framework`** (default `custom`) with Twig global `nowo_site_backup_css_framework` (REQ-UI-001). Accepted values: `bootstrap`, `bootstrap4`, `bootstrap5`, `tabler`, `tailwind`, `foundation`, `custom`, `none`.
+- Demo setup/panel layouts expose `nowo-ui-css-*` / `data-css-framework` for host theming hints.
+
+### Documentation
+
+- [CONFIGURATION.md](CONFIGURATION.md) / [USAGE.md](USAGE.md): `css_framework` + host layout example; Twig override freeze guidance.
+- [UPGRADING.md](UPGRADING.md) section **To 1.6.0**.
+
 ## [1.5.0] - 2026-07-30
 
 ### Added
@@ -164,7 +176,13 @@ First stable release of **Site Backup Bundle**.
 - Symfony `^7.0 || ^8.0` (CI / mandatory minors: **7.4**, **8.0**, **8.1**)
 - System `tar` required for archive create/extract
 
-[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.2.0...HEAD
-[1.2.0]: https://github.com/nowo-tech/SiteBackupBundle/releases/tag/v1.2.0
-[1.1.0]: https://github.com/nowo-tech/SiteBackupBundle/releases/tag/v1.1.0
+[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.6.0...HEAD
+[1.6.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.5.0...v1.6.0
+[1.5.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.4.0...v1.5.0
+[1.4.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.3.2...v1.4.0
+[1.3.2]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.3.1...v1.3.2
+[1.3.1]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.3.0...v1.3.1
+[1.3.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.2.0...v1.3.0
+[1.2.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.1.0...v1.2.0
+[1.1.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.0.0...v1.1.0
 [1.0.0]: https://github.com/nowo-tech/SiteBackupBundle/releases/tag/v1.0.0

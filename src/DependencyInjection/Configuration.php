@@ -18,6 +18,9 @@ final class Configuration implements ConfigurationInterface
 {
     public const ALIAS = 'nowo_site_backup';
 
+    /** @var list<string> */
+    public const CSS_FRAMEWORKS = ['bootstrap', 'bootstrap4', 'bootstrap5', 'tailwind', 'foundation', 'custom', 'tabler', 'none'];
+
     public function getConfigTreeBuilder(): TreeBuilder
     {
         $treeBuilder = new TreeBuilder(self::ALIAS);
@@ -49,6 +52,11 @@ final class Configuration implements ConfigurationInterface
                     ->info('Timeout in seconds for tar / dump subprocesses (REQ-RUNTIME-001).')
                     ->defaultValue(600)
                     ->min(30)
+                ->end()
+                ->enumNode('css_framework')
+                    ->info('Host CSS stack hint for setup/panel Web UI (REQ-UI-001). Twig global nowo_site_backup_css_framework. Demo default: custom (semantic nowo-ui-*).')
+                    ->values(self::CSS_FRAMEWORKS)
+                    ->defaultValue('custom')
                 ->end()
                 ->arrayNode('backup')
                     ->info('What is included in an integral backup.')

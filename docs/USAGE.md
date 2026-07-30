@@ -103,7 +103,18 @@ Bundle templates are designed to be **reused as-is** across projects. Prefer upd
 
 For setup / panel branding, set **`setup.layout_template`** and/or **`panel.layout_template`** to a host shell (Twig globals `nowo_site_backup_setup_layout_template` / `nowo_site_backup_panel_layout_template`). Do not fork `wizard` / `done` / `token` / panel pages. Restyle with `.nowo-ui-*` / `.nowo-site-backup-*` CSS.
 
-Place overrides under `templates/bundles/NowoSiteBackupBundle/` with the **same relative path** as under `src/Resources/views/` only when necessary. The override **always wins**; delete it to fall back to the bundle after upgrades.
+**`css_framework` (REQ-UI-001):** set root key `css_framework` to match the host stack (`bootstrap5`, `tailwind`, `foundation`, `custom`, `tabler`, …). Twig global: `nowo_site_backup_css_framework`. Default standalone layouts use semantic `nowo-ui-*` markup (`custom`); when you point `layout_template` at a host/Bootstrap shell, set `css_framework` accordingly so host CSS and any future macros/partials align. Example:
+
+```yaml
+nowo_site_backup:
+    css_framework: bootstrap5
+    panel:
+        layout_template: 'kit/site_backup_panel_layout.html.twig'
+    setup:
+        layout_template: 'kit/site_backup_setup_layout.html.twig'
+```
+
+Place overrides under `templates/bundles/NowoSiteBackupBundle/` with the **same relative path** as under `src/Resources/views/` only when necessary. The override **always wins** and **freezes** that `<subpath>` (vendor updates for that file are hidden until you delete or merge the override). Prefer `layout_template` / `css_framework` / CSS on `nowo-ui-*` for upgrade-safe customisation.
 
 | Subpath | Role |
 | --- | --- |

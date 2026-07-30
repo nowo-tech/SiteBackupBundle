@@ -36,9 +36,17 @@ final class SiteBackupExtensionTest extends TestCase
             $this->createManager(),
             '@App/setup_layout.html.twig',
             '@App/panel_layout.html.twig',
+            'bootstrap5',
         );
         $globals = $extension->getGlobals();
         self::assertSame('@App/setup_layout.html.twig', $globals[SiteBackupExtension::GLOBAL_SETUP_LAYOUT_TEMPLATE]);
         self::assertSame('@App/panel_layout.html.twig', $globals[SiteBackupExtension::GLOBAL_PANEL_LAYOUT_TEMPLATE]);
+        self::assertSame('bootstrap5', $globals[SiteBackupExtension::GLOBAL_CSS_FRAMEWORK]);
+    }
+
+    public function testDefaultCssFrameworkIsCustom(): void
+    {
+        $globals = (new SiteBackupExtension($this->createManager()))->getGlobals();
+        self::assertSame('custom', $globals[SiteBackupExtension::GLOBAL_CSS_FRAMEWORK]);
     }
 }
