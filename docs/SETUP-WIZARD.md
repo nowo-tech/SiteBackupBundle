@@ -370,6 +370,35 @@ Changes vs current restore behaviour:
 - After restore, **do not** drop the gate immediately if detectors still say “not ready”.
 - Transition: restore loading → (optional short message) → redirect to `/_setup?profile=post_restore`.
 
+## Locale-in-path (dual URLs)
+
+Setup wizard routes support an AuthKit-style `locale.in_path` mode for localized URLs. This is configured under `setup.locale`:
+
+```yaml
+nowo_site_backup:
+    setup:
+        locale:
+            in_path: both          # never | always | both
+            default: en
+            enabled: [en, es]
+            unlocalized: serve     # serve | redirect (only when both)
+```
+
+| Mode | Wizard URL | Done URL |
+| --- | --- | --- |
+| `never` (default) | `/_setup` | `/_setup/done` |
+| `always` | `/{_locale}/_setup` | `/{_locale}/_setup/done` |
+| `both` | `/{_locale}/_setup` + `/_setup` | `/{_locale}/_setup/done` + `/_setup/done` |
+
+When `in_path: both`:
+
+- **`unlocalized: redirect`** — bare `/_setup` redirects (302) to `/{default_locale}/_setup`.
+- **`unlocalized: serve`** — bare `/_setup` renders normally with `_locale` defaulting to `locale.default`.
+
+Localized setup URLs are automatically excluded from the restore/setup gate (no extra `exclusions.patterns` config needed). The `SetupRequestSubscriber` redirect target is locale-aware via `SetupPathPrefixResolver`.
+
+Routes are registered by `SetupRouteLoader` (type `nowo_site_backup_setup`) instead of `#[Route]` attributes. The default mode `never` produces the same routes and paths as previous versions.
+
 ## Twig overrides
 
 **Prefer `setup.layout_template`** (REQ-TWIG-001 / REQ-UI-001): keep wizard/done/token markup in the package; only supply a host chrome shell that defines block `nowo_site_backup_content` (and optionally `nowo_ui_content`). Pages extend Twig global `nowo_site_backup_setup_layout_template`.
