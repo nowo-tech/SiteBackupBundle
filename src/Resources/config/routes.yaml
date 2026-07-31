@@ -4,6 +4,5 @@ nowo_site_backup_panel:
     prefix: '%nowo.site_backup.panel.path_prefix%'
 
 nowo_site_backup_setup:
-    resource: ../../Controller/SetupWizardController.php
-    type: attribute
-    prefix: '%nowo.site_backup.setup.path_prefix%'
+    resource: .
+    type: nowo_site_backup_setup

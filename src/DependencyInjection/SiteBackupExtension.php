@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\DependencyInjection;
 
 use Nowo\SiteBackupBundle\Backup\BackupArchiver;
+use Nowo\SiteBackupBundle\Controller\SetupUnlocalizedLocaleRedirectController;
 use Nowo\SiteBackupBundle\Controller\SetupWizardController;
 use Nowo\SiteBackupBundle\Controller\SiteBackupPanelController;
 use Nowo\SiteBackupBundle\EventSubscriber\RestoreRequestSubscriber;
 use Nowo\SiteBackupBundle\EventSubscriber\SetupRequestSubscriber;
 use Nowo\SiteBackupBundle\Exclusion\SiteBackupExclusionMatcher;
 use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
+use Nowo\SiteBackupBundle\Routing\SetupPathPrefixResolver;
+use Nowo\SiteBackupBundle\Routing\SetupRouteLoader;
 use Nowo\SiteBackupBundle\Security\PasswordSiteBackupAccessGate;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessGateInterface;
 use Nowo\SiteBackupBundle\Service\SiteBackupManager;
@@ -66,6 +69,12 @@ final class SiteBackupExtension extends Extension
         $container->setParameter('nowo.site_backup.restore', $config['restore']);
         $container->setParameter('nowo.site_backup.panel.path_prefix', $config['panel']['path_prefix']);
         $container->setParameter('nowo.site_backup.setup.path_prefix', $config['setup']['path_prefix']);
+
+        $locale = $config['setup']['locale'] ?? [];
+        $container->setParameter('nowo.site_backup.setup.locale.in_path', $locale['in_path'] ?? 'never');
+        $container->setParameter('nowo.site_backup.setup.locale.default', $locale['default'] ?? 'en');
+        $container->setParameter('nowo.site_backup.setup.locale.enabled', $locale['enabled'] ?? ['en']);
+        $container->setParameter('nowo.site_backup.setup.locale.unlocalized', $locale['unlocalized'] ?? 'redirect');
 
         $setupLayout = $config['setup']['layout_template'] ?? null;
         if (is_string($setupLayout) && $setupLayout !== '') {
@@ -170,11 +179,24 @@ final class SiteBackupExtension extends Extension
             $prefixes[] = $setupPrefix;
         }
 
+        $patterns = array_values($exclusions['patterns'] ?? []);
+
+        $localeConfig  = $config['setup']['locale'] ?? [];
+        $localeInPath  = (string) ($localeConfig['in_path'] ?? 'never');
+        $localeEnabled = array_values($localeConfig['enabled'] ?? ['en']);
+        if ($localeInPath !== 'never' && $localeEnabled !== []) {
+            $escapedPrefix = preg_quote($setupPrefix, '#');
+            $localePattern = '#^/(' . implode('|', $localeEnabled) . ')' . $escapedPrefix . '(/|$|\\?)#';
+            if (!in_array($localePattern, $patterns, true)) {
+                $patterns[] = $localePattern;
+            }
+        }
+
         $container->getDefinition(SiteBackupExclusionMatcher::class)
             ->setArgument('$paths', $paths)
             ->setArgument('$pathPrefixes', $prefixes)
             ->setArgument('$routes', array_values($exclusions['routes'] ?? []))
-            ->setArgument('$patterns', array_values($exclusions['patterns'] ?? []))
+            ->setArgument('$patterns', $patterns)
             ->setArgument('$ips', array_values($exclusions['ips'] ?? []));
     }
 
@@ -286,6 +308,29 @@ final class SiteBackupExtension extends Extension
     private function configureSetup(ContainerBuilder $container, array $config): void
     {
         $setup = $config['setup'];
+
+        $localeConfig   = $setup['locale'] ?? [];
+        $localeInPath   = (string) ($localeConfig['in_path'] ?? 'never');
+        $localeDefault  = (string) ($localeConfig['default'] ?? 'en');
+        $localeEnabled  = array_values($localeConfig['enabled'] ?? ['en']);
+        $unlocalizedStr = (string) ($localeConfig['unlocalized'] ?? 'redirect');
+        $setupEnabled   = (bool) $setup['enabled'];
+
+        $container->register(SetupPathPrefixResolver::class, SetupPathPrefixResolver::class)
+            ->setArgument('$requestStack', new Reference('request_stack'))
+            ->setArgument('$basePrefix', $setup['path_prefix'])
+            ->setArgument('$localeInPath', $localeInPath)
+            ->setArgument('$defaultLocale', $localeDefault)
+            ->setArgument('$enabledLocales', $localeEnabled);
+
+        $container->register(SetupRouteLoader::class, SetupRouteLoader::class)
+            ->setArgument('$pathPrefix', $setup['path_prefix'])
+            ->setArgument('$localeInPath', $localeInPath)
+            ->setArgument('$defaultLocale', $localeDefault)
+            ->setArgument('$enabledLocales', $localeEnabled)
+            ->setArgument('$unlocalizedMode', $unlocalizedStr)
+            ->setArgument('$enabled', $setupEnabled)
+            ->addTag('routing.loader');
 
         $container->getDefinition(SetupMarkerManager::class)
             ->setArgument('$requiredFile', $setup['required_marker_file'])
@@ -414,8 +459,6 @@ final class SiteBackupExtension extends Extension
             ->setArgument('$eventDispatcher', new Reference('event_dispatcher', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
             ->setArgument('$defaultAdvanceMode', $globalAdvance);
 
-        $setupEnabled = (bool) $setup['enabled'];
-
         if ($container->hasDefinition(SetupRequestSubscriber::class)) {
             $sub = $container->getDefinition(SetupRequestSubscriber::class);
             $sub
@@ -424,7 +467,9 @@ final class SiteBackupExtension extends Extension
                 ->setArgument('$backupManager', new Reference(SiteBackupManager::class))
                 ->setArgument('$exclusionMatcher', new Reference(SiteBackupExclusionMatcher::class))
                 ->setArgument('$setupPathPrefix', $setup['path_prefix'])
-                ->setArgument('$panelPathPrefix', $config['panel']['path_prefix']);
+                ->setArgument('$panelPathPrefix', $config['panel']['path_prefix'])
+                ->setArgument('$enabledLocales', $localeEnabled)
+                ->setArgument('$pathPrefixResolver', new Reference(SetupPathPrefixResolver::class));
             $sub->clearTags();
             if ($setupEnabled) {
                 $sub->addTag('kernel.event_listener', [
@@ -434,6 +479,11 @@ final class SiteBackupExtension extends Extension
                 ]);
             }
         }
+
+        $container->register(SetupUnlocalizedLocaleRedirectController::class, SetupUnlocalizedLocaleRedirectController::class)
+            ->setArgument('$urlGenerator', new Reference('router'))
+            ->setPublic(true)
+            ->addTag('controller.service_arguments');
 
         if (!$container->hasDefinition(SetupWizardController::class)) {
             return;
@@ -455,6 +505,7 @@ final class SiteBackupExtension extends Extension
             ->setArgument('$brandName', $setup['brand_name'])
             ->setArgument('$setupToken', is_string($token) && $token !== '' ? $token : null)
             ->setArgument('$csrfTokenManager', new Reference(CsrfTokenManagerInterface::class, ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
+            ->setArgument('$pathPrefixResolver', new Reference(SetupPathPrefixResolver::class))
             ->setPublic(true);
     }
 }

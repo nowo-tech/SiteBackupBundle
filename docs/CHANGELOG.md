@@ -7,6 +7,28 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.7.0] - 2026-07-31
+
+### Added
+
+- Setup **`locale`** configuration (mirrors AuthKit locale-in-path pattern): `setup.locale.in_path` (`never` \| `always` \| `both`), `.default`, `.enabled`, `.unlocalized` (`serve` \| `redirect`).
+- `SetupRouteLoader` (`type: nowo_site_backup_setup`) registers wizard routes with optional `/{_locale}` prefix depending on mode.
+- `SetupPathPrefixResolver` resolves the effective setup path prefix for the current request (locale-aware redirects, Twig vars, progress URL).
+- `SetupUnlocalizedLocaleRedirectController` redirects bare setup URLs to the canonical `/{_locale}/…` URL when `in_path: both` + `unlocalized: redirect`.
+- Enums `LocaleInPathMode` and `UnlocalizedLocaleMode` under `Nowo\SiteBackupBundle\Enum\`.
+- DI parameters: `nowo.site_backup.setup.locale.in_path`, `.default`, `.enabled`, `.unlocalized`.
+- Localized setup routes are auto-excluded from restore/setup gate patterns.
+- `SetupRequestSubscriber` is locale-aware: skips redirect for localized setup paths; redirect target uses `SetupPathPrefixResolver`.
+
+### Changed
+
+- Setup routes are now registered by `SetupRouteLoader` (type `nowo_site_backup_setup`) instead of `#[Route]` attributes on `SetupWizardController`. Default behaviour (`in_path: never`) is fully backward compatible.
+- `SetupWizardController` uses `SetupPathPrefixResolver` for all path prefix references (Twig vars, redirects, progress URL).
+
+### Documentation
+
+- [CONFIGURATION.md](CONFIGURATION.md) / [SETUP-WIZARD.md](SETUP-WIZARD.md) / [UPGRADING.md](UPGRADING.md) for locale-in-path.
+
 ## [1.6.0] - 2026-07-30
 
 ### Added
@@ -176,7 +198,8 @@ First stable release of **Site Backup Bundle**.
 - Symfony `^7.0 || ^8.0` (CI / mandatory minors: **7.4**, **8.0**, **8.1**)
 - System `tar` required for archive create/extract
 
-[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.6.0...HEAD
+[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.7.0...HEAD
+[1.7.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.4.0...v1.5.0
 [1.4.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.3.2...v1.4.0

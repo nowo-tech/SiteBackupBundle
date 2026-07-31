@@ -8,10 +8,12 @@ services:
         resource: '../../*'
         exclude:
             - '../../DependencyInjection/'
+            - '../../Enum/'
             - '../../Model/'
             - '../../Event/'
             - '../../Attribute/'
             - '../../Resources/'
+            - '../../Routing/'
             - '../../Setup/Step/'
             - '../../NowoSiteBackupBundle.php'
 

@@ -13,6 +13,7 @@
 - [Security](#security)
 - [Idempotency contract](#idempotency-contract)
 - [Integration with backup / restore](#integration-with-backup--restore)
+- [Locale-in-path (dual URLs)](#locale-in-path-dual-urls)
 - [Twig overrides](#twig-overrides)
 - [CLI](#cli)
 - [Events](#events)
@@ -81,7 +82,7 @@ After a successful wizard finish: write `setup.done`, remove `setup.required`, e
 
 During setup, the gate **blocks** the rest of the site (503 or soft redirect to `/_setup`) except:
 
-- wizard routes (`/_setup`, `/_setup/api/*`)
+- wizard routes (`/_setup`, `/_setup/api/*`, and `/{_locale}/_setup…` when `setup.locale.in_path` is `always`/`both`)
 - health exclusions
 - optional restore panel (ops)
 
@@ -244,6 +245,12 @@ nowo_site_backup:
     setup:
         enabled: true
         path_prefix: '/_setup'
+        # Optional locale-in-path (default never = bare /_setup)
+        # locale:
+        #     in_path: both          # never | always | both
+        #     default: en
+        #     enabled: [en, es]
+        #     unlocalized: redirect  # serve | redirect
         # When true, missing setup.done forces wizard (good for fresh clones)
         require_done_marker: true
         brand_name: '%env(default:APP_NAME:APP_NAME)%'

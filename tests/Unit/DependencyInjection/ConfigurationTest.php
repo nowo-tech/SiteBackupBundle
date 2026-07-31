@@ -34,6 +34,10 @@ final class ConfigurationTest extends TestCase
         self::assertNull($config['setup']['layout_template']);
         self::assertNull($config['panel']['layout_template']);
         self::assertSame('custom', $config['css_framework']);
+        self::assertSame('never', $config['setup']['locale']['in_path']);
+        self::assertSame('en', $config['setup']['locale']['default']);
+        self::assertSame(['en'], $config['setup']['locale']['enabled']);
+        self::assertSame('redirect', $config['setup']['locale']['unlocalized']);
         self::assertSame(
             '@NowoSiteBackupBundle/setup/layout.html.twig',
             $config['templates']['setup_layout'],
@@ -100,5 +104,67 @@ final class ConfigurationTest extends TestCase
             ],
         ]]);
         self::assertSame('kit/site_backup_setup_layout.html.twig', $config['setup']['layout_template']);
+    }
+
+    public function testSetupLocaleDefaults(): void
+    {
+        $config = (new Processor())->processConfiguration(new Configuration(), [[]]);
+        self::assertSame('never', $config['setup']['locale']['in_path']);
+        self::assertSame('en', $config['setup']['locale']['default']);
+        self::assertSame(['en'], $config['setup']['locale']['enabled']);
+        self::assertSame('redirect', $config['setup']['locale']['unlocalized']);
+    }
+
+    public function testSetupLocaleCustomValues(): void
+    {
+        $config = (new Processor())->processConfiguration(new Configuration(), [[
+            'setup' => [
+                'locale' => [
+                    'in_path'     => 'both',
+                    'default'     => 'es',
+                    'enabled'     => ['en', 'es', 'fr'],
+                    'unlocalized' => 'serve',
+                ],
+            ],
+        ]]);
+        self::assertSame('both', $config['setup']['locale']['in_path']);
+        self::assertSame('es', $config['setup']['locale']['default']);
+        self::assertSame(['en', 'es', 'fr'], $config['setup']['locale']['enabled']);
+        self::assertSame('serve', $config['setup']['locale']['unlocalized']);
+    }
+
+    public function testSetupLocaleAlwaysMode(): void
+    {
+        $config = (new Processor())->processConfiguration(new Configuration(), [[
+            'setup' => [
+                'locale' => [
+                    'in_path' => 'always',
+                    'default' => 'de',
+                    'enabled' => ['de', 'en'],
+                ],
+            ],
+        ]]);
+        self::assertSame('always', $config['setup']['locale']['in_path']);
+        self::assertSame('de', $config['setup']['locale']['default']);
+    }
+
+    public function testSetupLocaleInvalidInPathRejected(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+        (new Processor())->processConfiguration(new Configuration(), [[
+            'setup' => [
+                'locale' => ['in_path' => 'invalid'],
+            ],
+        ]]);
+    }
+
+    public function testSetupLocaleInvalidUnlocalizedRejected(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+        (new Processor())->processConfiguration(new Configuration(), [[
+            'setup' => [
+                'locale' => ['unlocalized' => 'invalid'],
+            ],
+        ]]);
     }
 }

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\EventSubscriber;
 
 use Nowo\SiteBackupBundle\Exclusion\SiteBackupExclusionMatcher;
+use Nowo\SiteBackupBundle\Routing\SetupPathPrefixResolver;
 use Nowo\SiteBackupBundle\Service\SiteBackupManager;
 use Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator;
 use Symfony\Component\HttpFoundation\RedirectResponse;
@@ -12,6 +13,7 @@ use Symfony\Component\HttpKernel\Event\RequestEvent;
 
 use function is_string;
 use function rawurlencode;
+use function rtrim;
 use function str_contains;
 use function str_starts_with;
 
@@ -20,6 +22,9 @@ use function str_starts_with;
  */
 final class SetupRequestSubscriber
 {
+    /**
+     * @param list<string> $enabledLocales
+     */
     public function __construct(
         private readonly bool $enabled,
         private readonly SetupNeedEvaluator $needEvaluator,
@@ -27,6 +32,8 @@ final class SetupRequestSubscriber
         private readonly SiteBackupExclusionMatcher $exclusionMatcher,
         private readonly string $setupPathPrefix = '/_setup',
         private readonly string $panelPathPrefix = '/_site_backup',
+        private readonly array $enabledLocales = [],
+        private readonly ?SetupPathPrefixResolver $pathPrefixResolver = null,
     ) {
     }
 
@@ -47,7 +54,7 @@ final class SetupRequestSubscriber
         $request = $event->getRequest();
         $path    = $request->getPathInfo();
 
-        if ($this->setupPathPrefix !== '' && str_starts_with($path, $this->setupPathPrefix)) {
+        if ($this->isSetupPath($path)) {
             return;
         }
 
@@ -59,12 +66,32 @@ final class SetupRequestSubscriber
             return;
         }
 
-        $target = $this->setupPathPrefix;
+        $target = $this->pathPrefixResolver?->resolve() ?? $this->setupPathPrefix;
         $token  = $request->query->get('token');
         if (is_string($token) && $token !== '') {
             $target .= (str_contains($target, '?') ? '&' : '?') . 'token=' . rawurlencode($token);
         }
 
         $event->setResponse(new RedirectResponse($target));
+    }
+
+    private function isSetupPath(string $path): bool
+    {
+        $prefix = rtrim($this->setupPathPrefix, '/');
+        if ($prefix === '') {
+            return false;
+        }
+
+        if (str_starts_with($path, $prefix)) {
+            return true;
+        }
+
+        foreach ($this->enabledLocales as $locale) {
+            if (str_starts_with($path, '/' . $locale . $prefix)) {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

@@ -6,6 +6,7 @@ namespace Nowo\SiteBackupBundle\Controller;
 
 use JsonException;
 use Nowo\SiteBackupBundle\Model\SetupProgress;
+use Nowo\SiteBackupBundle\Routing\SetupPathPrefixResolver;
 use Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator;
 use Nowo\SiteBackupBundle\Setup\SetupOrchestrator;
 use Nowo\SiteBackupBundle\Setup\SetupStepInput;
@@ -13,7 +14,6 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Csrf\CsrfToken;
 use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
 use Twig\Environment;
@@ -41,19 +41,21 @@ final class SetupWizardController
         private readonly string $brandName,
         private readonly ?string $setupToken,
         private readonly ?CsrfTokenManagerInterface $csrfTokenManager = null,
+        private readonly ?SetupPathPrefixResolver $pathPrefixResolver = null,
     ) {
     }
 
-    #[Route('', name: 'nowo_site_backup_setup', methods: ['GET', 'POST'])]
     public function index(Request $request): Response
     {
+        $pathPrefix = $this->effectivePathPrefix();
+
         if (!$this->needEvaluator->isSetupRequired() && $this->orchestrator->getProgress()->getPhase() === SetupProgress::PHASE_COMPLETED) {
             return new RedirectResponse('/');
         }
 
         if (!$this->isTokenValid($request)) {
             return new Response($this->twig->render($this->templates['setup_token'], $this->setupViewVars([
-                'pathPrefix' => $this->pathPrefix,
+                'pathPrefix' => $pathPrefix,
                 'brandName'  => $this->brandName,
             ])), 403);
         }
@@ -76,7 +78,7 @@ final class SetupWizardController
                 }
                 $progress = $this->orchestrator->advance($profile, $input);
                 if ($progress->getPhase() === SetupProgress::PHASE_COMPLETED) {
-                    return new RedirectResponse(rtrim($this->pathPrefix, '/') . '/done');
+                    return new RedirectResponse(rtrim($pathPrefix, '/') . '/done');
                 }
                 if ($progress->getPhase() === SetupProgress::PHASE_FAILED) {
                     $error = $progress->getError();
@@ -85,7 +87,7 @@ final class SetupWizardController
         } elseif ($progress->getPhase() === SetupProgress::PHASE_IDLE) {
             $progress = $this->orchestrator->advance($profile);
             if ($progress->getPhase() === SetupProgress::PHASE_COMPLETED) {
-                return new RedirectResponse(rtrim($this->pathPrefix, '/') . '/done');
+                return new RedirectResponse(rtrim($pathPrefix, '/') . '/done');
             }
         }
 
@@ -102,7 +104,7 @@ final class SetupWizardController
         // (do not switch to admin/sample/database templates that extend the full HTML
         // document — that path is redundant and fragile with Twig yield + inspectors).
         return new Response($this->twig->render($this->templates['setup_wizard'], $this->setupViewVars([
-            'pathPrefix'  => $this->pathPrefix,
+            'pathPrefix'  => $pathPrefix,
             'brandName'   => $this->brandName,
             'progress'    => $progress,
             'steps'       => $steps,
@@ -110,28 +112,25 @@ final class SetupWizardController
             'reasons'     => $this->needEvaluator->getReasons(),
             'error'       => $error,
             'csrfToken'   => $this->csrfTokenManager?->getToken('nowo_site_backup_setup')->getValue(),
-            'progressUrl' => rtrim($this->pathPrefix, '/') . '/api/progress',
+            'progressUrl' => rtrim($pathPrefix, '/') . '/api/progress',
             'advanceMode' => $this->orchestrator->getAdvanceMode($progress->getProfile()),
         ])));
     }
 
-    #[Route('/done', name: 'nowo_site_backup_setup_done', methods: ['GET'])]
     public function done(): Response
     {
         return new Response($this->twig->render($this->templates['setup_done'], $this->setupViewVars([
-            'pathPrefix' => $this->pathPrefix,
+            'pathPrefix' => $this->effectivePathPrefix(),
             'brandName'  => $this->brandName,
             'progress'   => $this->orchestrator->getProgress(),
         ])));
     }
 
-    #[Route('/api/progress', name: 'nowo_site_backup_setup_progress', methods: ['GET'])]
     public function progress(): JsonResponse
     {
         return new JsonResponse($this->orchestrator->getProgress()->toArray());
     }
 
-    #[Route('/api/advance', name: 'nowo_site_backup_setup_advance', methods: ['POST'])]
     public function advanceApi(Request $request): JsonResponse
     {
         if (!$this->isTokenValid($request)) {
@@ -158,6 +157,11 @@ final class SetupWizardController
         );
 
         return new JsonResponse($progress->toArray());
+    }
+
+    private function effectivePathPrefix(): string
+    {
+        return $this->pathPrefixResolver?->resolve() ?? $this->pathPrefix;
     }
 
     private function isTokenValid(Request $request): bool

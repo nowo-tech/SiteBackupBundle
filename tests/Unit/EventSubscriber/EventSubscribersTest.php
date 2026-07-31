@@ -58,6 +58,52 @@ final class EventSubscribersTest extends TestCase
         self::assertStringContainsString('/_setup', (string) $event->getResponse()->headers->get('Location'));
     }
 
+    public function testSetupRequestSubscriberSkipsLocalizedSetupPath(): void
+    {
+        $setupDir  = $this->harnessProjectDir . '/_setup';
+        $markers   = new SetupMarkerManager($setupDir . '/required', $setupDir . '/done');
+        $evaluator = new SetupNeedEvaluator([new MarkerFileDetector($markers, true, true)], true);
+        $manager   = $this->createManager();
+
+        $subscriber = new SetupRequestSubscriber(
+            enabled: true,
+            needEvaluator: $evaluator,
+            backupManager: $manager,
+            exclusionMatcher: new SiteBackupExclusionMatcher([], [], [], [], []),
+            setupPathPrefix: '/_setup',
+            panelPathPrefix: '/_site_backup',
+            enabledLocales: ['en', 'es'],
+        );
+
+        $request = Request::create('/es/_setup');
+        $event   = new RequestEvent($this->createMock(HttpKernelInterface::class), $request, HttpKernelInterface::MAIN_REQUEST);
+        $subscriber->onKernelRequest($event);
+        self::assertNull($event->getResponse());
+    }
+
+    public function testSetupRequestSubscriberEmptyPrefixDoesNotMatch(): void
+    {
+        $setupDir  = $this->harnessProjectDir . '/_setup';
+        $markers   = new SetupMarkerManager($setupDir . '/required', $setupDir . '/done');
+        $evaluator = new SetupNeedEvaluator([new MarkerFileDetector($markers, true, true)], true);
+
+        $subscriber = new SetupRequestSubscriber(
+            enabled: true,
+            needEvaluator: $evaluator,
+            backupManager: $this->createManager(),
+            exclusionMatcher: new SiteBackupExclusionMatcher([], [], [], [], []),
+            setupPathPrefix: '/',
+            panelPathPrefix: '/_site_backup',
+            enabledLocales: ['en'],
+        );
+
+        // rtrim('/', '/') === '' → isSetupPath returns false; still redirects to '/'
+        $request = Request::create('/blog');
+        $event   = new RequestEvent($this->createMock(HttpKernelInterface::class), $request, HttpKernelInterface::MAIN_REQUEST);
+        $subscriber->onKernelRequest($event);
+        self::assertNotNull($event->getResponse());
+    }
+
     public function testSetupRequestSubscriberSkips(): void
     {
         $subscriber = new SetupRequestSubscriber(

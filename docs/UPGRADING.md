@@ -1,5 +1,47 @@
 # Upgrading
 
+## To 1.7.0
+
+Optional **locale-in-path** for the setup wizard (same model as AuthKit). **Non-breaking** — default `setup.locale.in_path: never` keeps bare `/_setup` URLs.
+
+### Install / update
+
+```bash
+composer require nowo-tech/site-backup-bundle:^1.7.0
+php bin/console cache:clear
+```
+
+### Behaviour
+
+| `setup.locale.in_path` | URLs |
+| --- | --- |
+| `never` (default) | `/_setup`, `/_setup/done`, … |
+| `always` | `/{_locale}/_setup`, … |
+| `both` | Localized + bare; bare uses `unlocalized: redirect` (default) or `serve` |
+
+- Route names stay `nowo_site_backup_setup*` (bare aliases use `_unlocalized` suffix when `both`).
+- Site gate redirects via `SetupPathPrefixResolver` (respects current locale when `always`/`both`).
+- Localized setup prefixes are auto-added to restore exclusions.
+
+### Migration notes
+
+| Topic | Before | After |
+| --- | --- | --- |
+| Setup route loading | Attribute controller + YAML `prefix` | `SetupRouteLoader` (`type: nowo_site_backup_setup`) |
+| Locale in wizard URL | Not supported | Optional `setup.locale` |
+| Host apps with `/{locale}/…` | Manual redirects / forks | Prefer `in_path: always` or `both` |
+
+```yaml
+nowo_site_backup:
+    setup:
+        path_prefix: '/_setup'
+        locale:
+            in_path: both              # never | always | both
+            default: en
+            enabled: [en, es]
+            unlocalized: redirect      # serve | redirect (when both)
+```
+
 ## To 1.6.0
 
 Optional host CSS stack hint for setup/panel Web UI (REQ-UI-001). **Non-breaking** — default remains `custom` (semantic `nowo-ui-*`).

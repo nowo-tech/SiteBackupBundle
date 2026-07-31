@@ -978,6 +978,7 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *     status_code?: int|Param, // HTTP status code while restore mode is active. // Default: 503
  *     subscriber_priority?: int|Param, // kernel.request listener priority (default 31: after router). // Default: 31
  *     process_timeout?: int|Param, // Timeout in seconds for tar / dump subprocesses (REQ-RUNTIME-001). // Default: 600
+ *     css_framework?: "bootstrap"|"bootstrap4"|"bootstrap5"|"tailwind"|"foundation"|"custom"|"tabler"|"none"|Param, // Host CSS stack hint for setup/panel Web UI (REQ-UI-001). Twig global nowo_site_backup_css_framework. Demo default: custom (semantic nowo-ui-*). // Default: "custom"
  *     backup?: array{ // What is included in an integral backup.
  *         include_paths?: list<scalar|Param|null>,
  *         exclude_patterns?: list<scalar|Param|null>,
@@ -1046,6 +1047,12 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *         },
  *         default_profile?: scalar|Param|null, // Default: "fresh_install"
  *         advance_mode?: "automatic"|"manual"|Param, // automatic = chain auto tabs until interaction; manual = one auto tab per Continuar. // Default: "automatic"
+ *         locale?: array{ // Locale-in-path for setup wizard routes (mirrors AuthKit locale config).
+ *             in_path?: "never"|"always"|"both"|Param, // never = bare prefix only (BC); always = /{_locale}{prefix}; both = dual URLs. // Default: "never"
+ *             default?: scalar|Param|null, // Default locale for localized routes. // Default: "en"
+ *             enabled?: list<scalar|Param|null>,
+ *             unlocalized?: "serve"|"redirect"|Param, // When in_path=both: serve renders with default locale; redirect bounces to /{locale}/…. // Default: "redirect"
+ *         },
  *         profiles?: array<string, array{ // Default: {"fresh_install":{"steps":[{"type":"requirements"},{"type":"bootstrap_mode"},{"type":"database_url","optional":true},{"type":"database_create"},{"type":"cache_clear"},{"type":"sql_file","id":"full_database_import","paths":["var/site-backup/full-import.sql","var/site-backup/last-restore-dump.sql"],"if_exists":false,"when_answer":{"bootstrap_mode":"full_database"}},{"type":"migrations"},{"type":"admin_user","roles":["ROLE_SUPER_ADMIN"],"skip_if_admin_exists":true},{"type":"marker","write_done":true}]},"post_restore":{"steps":[{"type":"requirements"},{"type":"database_create"},{"type":"cache_clear"},{"type":"sql_file","paths":["var/site-backup/last-restore-dump.sql"],"if_exists":true},{"type":"migrations"},{"type":"admin_user","skip_if_admin_exists":true},{"type":"marker","write_done":true}]},"full_database":{"steps":[{"type":"requirements"},{"type":"database_url","optional":true},{"type":"database_create"},{"type":"cache_clear"},{"type":"sql_file","id":"full_database_import","paths":["var/site-backup/full-import.sql","var/site-backup/last-restore-dump.sql"],"if_exists":false},{"type":"migrations"},{"type":"admin_user","skip_if_admin_exists":true},{"type":"marker","write_done":true}]},"minimal":{"steps":[{"type":"database_create"},{"type":"migrations"},{"type":"admin_user"},{"type":"marker","write_done":true}]}}
  *             advance_mode?: scalar|Param|null, // Override setup.advance_mode for this profile (automatic|manual). // Default: null
  *             steps?: list<array{ // Default: []
