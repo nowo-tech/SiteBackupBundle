@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\Routing;
 
 use Nowo\SiteBackupBundle\Enum\LocaleInPathMode;
+use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\RequestStack;
 
 use function in_array;
@@ -44,7 +45,7 @@ final class SetupPathPrefixResolver
             return $prefix;
         }
 
-        if ($request instanceof \Symfony\Component\HttpFoundation\Request) {
+        if ($request instanceof Request) {
             $path = $request->getPathInfo();
 
             foreach ($this->enabledLocales as $locale) {

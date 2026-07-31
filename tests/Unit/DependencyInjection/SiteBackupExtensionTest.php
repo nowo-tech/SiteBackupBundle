@@ -9,6 +9,7 @@ use Nowo\SiteBackupBundle\Controller\SetupWizardController;
 use Nowo\SiteBackupBundle\Controller\SiteBackupPanelController;
 use Nowo\SiteBackupBundle\DependencyInjection\Configuration;
 use Nowo\SiteBackupBundle\DependencyInjection\SiteBackupExtension;
+use Nowo\SiteBackupBundle\Exclusion\SiteBackupExclusionMatcher;
 use Nowo\SiteBackupBundle\Routing\SetupPathPrefixResolver;
 use Nowo\SiteBackupBundle\Routing\SetupRouteLoader;
 use Nowo\SiteBackupBundle\Security\PasswordSiteBackupAccessGate;
@@ -66,7 +67,7 @@ final class SiteBackupExtensionTest extends TestCase
         self::assertSame('kit/setup_layout.html.twig', $templates['setup_layout']);
         self::assertSame('kit/panel_layout.html.twig', $templates['panel_layout']);
 
-        $matcher = $container->getDefinition(\Nowo\SiteBackupBundle\Exclusion\SiteBackupExclusionMatcher::class);
+        $matcher = $container->getDefinition(SiteBackupExclusionMatcher::class);
         /** @var list<string> $patterns */
         $patterns = $matcher->getArgument('$patterns');
         self::assertNotEmpty($patterns);
