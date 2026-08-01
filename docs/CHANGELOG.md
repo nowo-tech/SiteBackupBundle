@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.1] - 2026-08-01
+
+### Documentation
+
+- FrankenPHP demo showcases recent features: host `setup`/`panel.layout_template`, `css_framework`, `setup.locale.in_path: both`, `#[AsSetupNeedDetector]` toggle, and profile `demo_features` (custom tab + checker + `app:demo:seed-catalog`).
+- [DEMO-FRANKENPHP.md](DEMO-FRANKENPHP.md) / [demo/README.md](../demo/README.md) / [demo/symfony8/README.md](../demo/symfony8/README.md).
+
 ## [1.8.0] - 2026-08-01
 
 ### Added

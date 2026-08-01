@@ -1,24 +1,84 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-    <meta charset="utf-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>Site Backup Bundle demo</title>
-    <style>
-        body { font-family: system-ui, sans-serif; max-width: 720px; margin: 2rem auto; padding: 0 1rem; line-height: 1.5; }
-        code { background: #f1f5f9; padding: .1rem .35rem; border-radius: 4px; }
-        a { color: #2563eb; }
-    </style>
-</head>
-<body>
+{% extends 'base.html.twig' %}
+
+{% block title %}Site Backup Bundle — demo features{% endblock %}
+
+{% block body %}
     <h1>Site Backup Bundle — demo</h1>
-    <p>Create an integral backup, verify checksums, restore safely, and finish cold bootstrap with the setup wizard.</p>
-    <ul>
-        <li><a href="/_site_backup">Backup panel</a> (password: <code>password</code>)</li>
-        <li><a href="/_setup">Setup wizard</a> (when <code>setup.required</code> is present)</li>
-        <li>CLI: <code>php bin/console nowo:site-backup:create -l demo</code></li>
-        <li>Health exclusion: <a href="/health">/health</a></li>
-    </ul>
-    <p>FrankenPHP worker mode is on by default (<code>FRANKENPHP_MODE=worker</code>). See <code>docs/DEMO-FRANKENPHP.md</code>.</p>
-</body>
-</html>
+    <p>Showcases recent bundle features (layouts, CSS hint, locale-in-path, custom gate detector, custom tab checker).</p>
+    <p>
+        <span class="pill">css_framework={{ css_framework }}</span>
+        <span class="pill">locale.in_path=both</span>
+        <span class="pill">progress_storage=chain</span>
+    </p>
+
+    <section class="card">
+        <h2>Quick links</h2>
+        <ul>
+            <li><a href="/_site_backup">Backup panel</a> (password: <code>password</code>) — host <code>panel.layout_template</code></li>
+            <li><a href="/_setup">Setup wizard</a> (bare URL redirects to <code>/en/_setup</code>)</li>
+            <li><a href="/es/_setup">Setup in Spanish path</a></li>
+            <li>CLI: <code>php bin/console nowo:site-backup:create -l demo</code></li>
+            <li>Health exclusion: <a href="/health">/health</a></li>
+        </ul>
+    </section>
+
+    <section class="card">
+        <h2>Custom setup-need detector (v1.8)</h2>
+        <p>
+            <code>DemoForceSetupNeedDetector</code> (<code>#[AsSetupNeedDetector]</code>) opens the site gate when
+            <code>var/site-backup/demo-force-setup</code> exists — distinct from tab <code>checker:</code>.
+        </p>
+        <p>
+            Flag status:
+            {% if force_setup_active %}
+                <strong class="status-warn">ACTIVE</strong> (visitors redirect to setup)
+            {% else %}
+                <strong class="status-ok">off</strong>
+            {% endif %}
+        </p>
+        <div class="row">
+            <form method="post" action="{{ path('demo_force_setup_on') }}">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token('demo_force_setup') }}">
+                <button class="btn" type="submit">Enable force-setup flag</button>
+            </form>
+            <form method="post" action="{{ path('demo_force_setup_off') }}">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token('demo_force_setup') }}">
+                <button class="btn btn--ghost" type="submit">Clear flag</button>
+            </form>
+        </div>
+    </section>
+
+    <section class="card">
+        <h2>Custom tab + checker (v1.3)</h2>
+        <p>
+            Profile <code>demo_features</code>: custom tab with <code>DemoSeedTabChecker</code> +
+            <code>app:demo:seed-catalog</code> runner, then <code>marker</code>.
+        </p>
+        <p>
+            Seed file:
+            {% if seed_done %}
+                <strong class="status-ok">present</strong> (<code>var/site-backup/demo-seed.ok</code>)
+            {% else %}
+                <strong class="status-warn">missing</strong>
+            {% endif %}
+        </p>
+        <div class="row">
+            <a class="btn" href="/_setup?profile=demo_features">Open demo_features wizard</a>
+            <a class="btn btn--ghost" href="/es/_setup?profile=demo_features">ES path</a>
+        </div>
+        <p style="margin-top:.75rem;font-size:.9rem">
+            Reset markers: <code>php bin/console nowo:site-backup:setup-reset --mark-required=demo_features -y</code>
+        </p>
+    </section>
+
+    <section class="card">
+        <h2>Feature map</h2>
+        <ul>
+            <li><strong>1.5</strong> — <code>setup</code>/<code>panel.layout_template</code> + Twig globals + <code>nowo-ui-*</code></li>
+            <li><strong>1.6</strong> — <code>css_framework</code> → <code>nowo_site_backup_css_framework</code> / <code>data-css-framework</code></li>
+            <li><strong>1.7</strong> — <code>setup.locale.in_path: both</code> (en/es)</li>
+            <li><strong>1.8</strong> — <code>#[AsSetupNeedDetector]</code> (toggle above)</li>
+        </ul>
+        <p>FrankenPHP worker: <code>FRANKENPHP_MODE=worker</code>. See <code>docs/DEMO-FRANKENPHP.md</code>.</p>
+    </section>
+{% endblock %}

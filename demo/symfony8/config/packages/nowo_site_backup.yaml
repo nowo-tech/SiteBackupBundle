@@ -1,5 +1,7 @@
 nowo_site_backup:
     enabled: true
+    # Host CSS stack hint (Twig global nowo_site_backup_css_framework) — REQ-UI-001 / v1.6
+    css_framework: custom
     # Translation id (NowoSiteBackupBundle). Demo overrides copy in translations/.
     default_message: restore.page.message
     process_timeout: 300
@@ -17,20 +19,98 @@ nowo_site_backup:
         storage_dir: '%kernel.project_dir%/var/site-backup/archives'
     panel:
         path_prefix: '/_site_backup'
+        # Brand panel chrome without forking panel/*.html.twig (v1.5+)
+        layout_template: 'kit/site_backup_panel_layout.html.twig'
     security:
         password_protection: true
         # Demo only — password: password (Laravel sample hash; regenerate for real apps)
         password_hash: '$2y$13$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi'
     exclusions:
         paths: ['/health']
-        path_prefixes: ['/api/health']
+        # /demo/* stays reachable while the custom force-setup detector holds the gate
+        path_prefixes: ['/api/health', '/demo']
 
     setup:
         enabled: true
         brand_name: 'Site Backup Demo'
         require_done_marker: false
+        # Survive wiping var/ once DB exists (v1.2+)
+        progress_storage: chain
         admin_provisioner: App\Setup\AdminUserProvisioner
+        # Host setup chrome without forking wizard/done/token (v1.4 / v1.5)
+        layout_template: 'kit/site_backup_setup_layout.html.twig'
+        # Locale-in-path (v1.7) — /{_locale}/_setup + bare /_setup → redirect
+        locale:
+            in_path: both
+            default: en
+            enabled: [en, es]
+            unlocalized: redirect
+        advance_mode: automatic
         detectors:
             marker: true
             doctrine_connect: true
             doctrine_schema_empty: true
+            incomplete_progress: true
+        # Declaring profiles replaces bundle defaults — keep stock profiles + demo_features.
+        # Reset demo tab flow: php bin/console nowo:site-backup:setup-reset --mark-required=demo_features -y
+        profiles:
+            fresh_install:
+                steps:
+                    - { type: requirements }
+                    - { type: bootstrap_mode }
+                    - { type: database_url, optional: true }
+                    - { type: database_create }
+                    - { type: cache_clear }
+                    - type: sql_file
+                      id: full_database_import
+                      paths:
+                          - var/site-backup/full-import.sql
+                          - var/site-backup/last-restore-dump.sql
+                      if_exists: false
+                      when_answer: { bootstrap_mode: full_database }
+                    - { type: migrations }
+                    - { type: admin_user, roles: [ROLE_SUPER_ADMIN], skip_if_admin_exists: true }
+                    - { type: marker, write_done: true }
+            post_restore:
+                steps:
+                    - { type: requirements }
+                    - { type: database_create }
+                    - { type: cache_clear }
+                    - { type: sql_file, paths: [var/site-backup/last-restore-dump.sql], if_exists: true }
+                    - { type: migrations }
+                    - { type: admin_user, skip_if_admin_exists: true }
+                    - { type: marker, write_done: true }
+            full_database:
+                steps:
+                    - { type: requirements }
+                    - { type: database_url, optional: true }
+                    - { type: database_create }
+                    - { type: cache_clear }
+                    - type: sql_file
+                      id: full_database_import
+                      paths:
+                          - var/site-backup/full-import.sql
+                          - var/site-backup/last-restore-dump.sql
+                      if_exists: false
+                    - { type: migrations }
+                    - { type: admin_user, skip_if_admin_exists: true }
+                    - { type: marker, write_done: true }
+            minimal:
+                steps:
+                    - { type: database_create }
+                    - { type: migrations }
+                    - { type: admin_user }
+                    - { type: marker, write_done: true }
+            # Custom tab + checker (v1.3) + gate detector toggle on homepage (v1.8)
+            demo_features:
+                tabs:
+                    - type: custom
+                      id: demo_seed
+                      label: demo.tab.seed
+                      description: demo.tab.seed_help
+                      checker: App\Setup\DemoSeedTabChecker
+                      runner:
+                          type: console
+                          command: 'app:demo:seed-catalog'
+                    - type: marker
+                      write_done: true

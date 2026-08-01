@@ -1,0 +1,20 @@
+{# Host shell for setup wizard (setup.layout_template). Content from bundle pages. #}
+{% extends 'base.html.twig' %}
+
+{% block title %}{{ brandName|default('Site Backup Demo') }} — Setup{% endblock %}
+
+{% block body %}
+    <div class="demo-kit demo-kit--setup nowo-site-backup-setup">
+        <p class="demo-kit__eyebrow">Host layout · <code>setup.layout_template</code> · css=<code>{{ nowo_site_backup_css_framework|default('custom') }}</code></p>
+        <p class="demo-kit__eyebrow" style="margin-top:-.5rem">
+            Gate escape (demo detector):
+            <form method="post" action="{{ path('demo_force_setup_off') }}" style="display:inline">
+                <input type="hidden" name="_csrf_token" value="{{ csrf_token('demo_force_setup') }}">
+                <button type="submit" class="btn btn--ghost" style="padding:.2rem .5rem;font-size:.8rem">Clear force-setup flag</button>
+            </form>
+        </p>
+        {% block nowo_ui_content %}
+            {% block nowo_site_backup_content %}{% endblock %}
+        {% endblock %}
+    </div>
+{% endblock %}

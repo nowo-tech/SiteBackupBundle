@@ -1,5 +1,28 @@
 # Upgrading
 
+## To 1.8.1
+
+Demo-only refresh (FrankenPHP Symfony 8). **No bundle API migration** from **1.8.0**.
+
+### Install / update
+
+```bash
+composer require nowo-tech/site-backup-bundle:^1.8.1
+php bin/console cache:clear
+```
+
+### Behaviour
+
+- Bundle runtime unchanged from 1.8.0 (`#[AsSetupNeedDetector]`, locale-in-path, layouts).
+- Demo wires host layouts, `css_framework`, `locale.in_path: both`, force-setup detector toggle, and profile `demo_features`.
+
+### Migration notes
+
+| Topic | Before | After |
+| --- | --- | --- |
+| Host app config | — | No change required |
+| Local demo | Older homepage links | See [demo/README.md](../demo/README.md) |
+
 ## To 1.8.0
 
 Pluggable **setup-need detectors** for the site gate. **Non-breaking** — built-in detectors keep the same toggles under `setup.detectors.*`.

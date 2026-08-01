@@ -1,0 +1,13 @@
+{# Host shell for backup panel (panel.layout_template). Content from bundle pages. #}
+{% extends 'base.html.twig' %}
+
+{% block title %}Site Backup — Panel{% endblock %}
+
+{% block body %}
+    <div class="demo-kit demo-kit--panel nowo-site-backup-panel">
+        <p class="demo-kit__eyebrow">Host layout · <code>panel.layout_template</code> · css=<code>{{ nowo_site_backup_css_framework|default('custom') }}</code></p>
+        {% block nowo_ui_content %}
+            {% block nowo_site_backup_panel_content %}{% endblock %}
+        {% endblock %}
+    </div>
+{% endblock %}

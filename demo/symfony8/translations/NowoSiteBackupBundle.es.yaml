@@ -1,3 +1,10 @@
 restore:
   page:
     message: 'Restaurando esta demo desde una copia verificada. Por favor, espera…'
+
+demo:
+  tab:
+    seed: 'Catálogo demo (seed)'
+    seed_help: 'Escribe var/site-backup/demo-seed.ok con app:demo:seed-catalog (tab custom + checker).'
+  check:
+    seed: 'El catálogo aún no está listo — pulsa Continuar para ejecutar el runner demo.'

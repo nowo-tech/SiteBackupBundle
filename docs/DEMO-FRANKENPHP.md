@@ -11,9 +11,12 @@ make -C demo help
 make -C demo up-symfony8
 ```
 
-- Panel: `/_site_backup` (demo password: `password`)
-- Setup wizard: `/_setup` after `php bin/console nowo:site-backup:setup-reset --mark-required=fresh_install -y`
+- Panel: `/_site_backup` (demo password: `password`) — host `panel.layout_template`
+- Setup wizard: `/_setup` redirects to `/en/_setup` (`locale.in_path: both`); also `/es/_setup`
+- Fresh install reset: `php bin/console nowo:site-backup:setup-reset --mark-required=fresh_install -y`
+- Custom tab profile: `… --mark-required=demo_features -y` then `/_setup?profile=demo_features`
+- Custom gate detector: toggle on homepage (`#[AsSetupNeedDetector]`)
 - Health exclusion: `/health`
 - `DATABASE_URL` points at service `mysql` (no host DB ports — REQ-DEMO-006)
 
-See [SETUP-WIZARD.md](SETUP-WIZARD.md) and [USAGE.md](USAGE.md).
+See [SETUP-WIZARD.md](SETUP-WIZARD.md), [USAGE.md](USAGE.md), and [demo/README.md](../demo/README.md).

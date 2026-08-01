@@ -1,24 +1,78 @@
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ app.request.locale|default('en') }}"
+      class="nowo-ui-root nowo-ui-css-{{ nowo_site_backup_css_framework|default('custom') }}"
+      data-css-framework="{{ nowo_site_backup_css_framework|default('custom') }}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block title %}Site Backup Mode Demo{% endblock %}</title>
+    <title>{% block title %}Site Backup Bundle demo{% endblock %}</title>
     <style>
-        body { font-family: system-ui, sans-serif; margin: 0; background: #f4f6f8; color: #1a1a1a; }
-        main { max-width: 52rem; margin: 0 auto; padding: 2.5rem 1.25rem; }
-        a { color: #0b5fff; }
-        .card { background: #fff; border: 1px solid #ddd; border-radius: .75rem; padding: 1.25rem; margin-top: 1rem; overflow-x: auto; }
-        table { width: 100%; border-collapse: collapse; font-size: 0.95rem; }
-        th, td { text-align: left; padding: 0.55rem 0.4rem; border-bottom: 1px solid #e6e6e6; vertical-align: top; }
-        th { font-size: 0.8rem; text-transform: uppercase; letter-spacing: 0.04em; color: #666; }
-        code { font-size: 0.88em; }
-        ul { padding-left: 1.2rem; }
+        :root {
+            --demo-bg: #f1f5f9;
+            --demo-ink: #0f172a;
+            --demo-accent: #2563eb;
+            --demo-card: #fff;
+            --demo-line: #e2e8f0;
+        }
+        * { box-sizing: border-box; }
+        body {
+            margin: 0;
+            font-family: "Segoe UI", system-ui, sans-serif;
+            background:
+                radial-gradient(900px 320px at 0% 0%, #dbeafe 0%, transparent 55%),
+                var(--demo-bg);
+            color: var(--demo-ink);
+            line-height: 1.5;
+        }
+        a { color: var(--demo-accent); }
+        .demo-shell { max-width: 52rem; margin: 0 auto; padding: 1.5rem 1.25rem 3rem; }
+        .demo-nav {
+            display: flex; flex-wrap: wrap; gap: .75rem 1.25rem; align-items: center;
+            margin-bottom: 1.5rem; font-size: .92rem;
+        }
+        .demo-nav strong { letter-spacing: .04em; text-transform: uppercase; font-size: .75rem; color: #64748b; }
+        .demo-kit__eyebrow {
+            margin: 0 0 1rem; font-size: .78rem; letter-spacing: .06em; text-transform: uppercase; color: #64748b;
+        }
+        .demo-kit__eyebrow code { font-size: .85em; background: #e2e8f0; padding: .05rem .3rem; border-radius: 4px; }
+        .card {
+            background: var(--demo-card); border: 1px solid var(--demo-line);
+            border-radius: .75rem; padding: 1.15rem 1.25rem; margin: 1rem 0;
+        }
+        .card h2 { margin: 0 0 .5rem; font-size: 1.05rem; }
+        .card p, .card li { font-size: .95rem; color: #334155; }
+        ul { padding-left: 1.2rem; margin: .4rem 0; }
+        code { background: #e2e8f0; padding: .1rem .35rem; border-radius: 4px; font-size: .88em; }
+        .btn {
+            display: inline-block; background: var(--demo-accent); color: #fff !important;
+            text-decoration: none; border: 0; border-radius: 8px; padding: .45rem .85rem;
+            font: inherit; cursor: pointer;
+        }
+        .btn--ghost { background: #fff; color: var(--demo-accent) !important; border: 1px solid #bfdbfe; }
+        .btn--danger { background: #dc2626; }
+        .row { display: flex; flex-wrap: wrap; gap: .5rem; margin-top: .75rem; }
+        .pill {
+            display: inline-block; background: #e0f2fe; color: #075985;
+            border-radius: 999px; padding: .15rem .55rem; font-size: .78rem; margin: .15rem .2rem .15rem 0;
+        }
+        .status-ok { color: #15803d; }
+        .status-warn { color: #b45309; }
     </style>
+    {% block stylesheets %}{% endblock %}
 </head>
-<body>
-<main>
+<body class="nowo-ui-body">
+<div class="demo-shell">
+    <nav class="demo-nav" aria-label="Demo">
+        <strong>Demo</strong>
+        <a href="{{ path('homepage') }}">Home</a>
+        <a href="/_site_backup">Panel</a>
+        <a href="/_setup">Setup (bare → locale)</a>
+        <a href="/en/_setup">/en/_setup</a>
+        <a href="/es/_setup">/es/_setup</a>
+        <a href="/health">/health</a>
+    </nav>
     {% block body %}{% endblock %}
-</main>
+</div>
+{% block javascripts %}{% endblock %}
 </body>
 </html>
