@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle;
 
+use Nowo\SiteBackupBundle\Attribute\AsSetupNeedDetector;
 use Nowo\SiteBackupBundle\Attribute\AsSetupTabChecker;
 use Nowo\SiteBackupBundle\DependencyInjection\Compiler\TwigPathsPass;
 use Nowo\SiteBackupBundle\DependencyInjection\SiteBackupExtension;
@@ -18,6 +19,16 @@ final class NowoSiteBackupBundle extends Bundle
     {
         parent::build($container);
         $container->addCompilerPass(new TwigPathsPass());
+        // Attribute-only (same pattern as AsSetupTabChecker) — avoids double-tagging
+        // if we also autoconfigured SetupNeedDetectorInterface.
+        $container->registerAttributeForAutoconfiguration(
+            AsSetupNeedDetector::class,
+            static function (ChildDefinition $definition, AsSetupNeedDetector $attribute): void {
+                $definition->addTag('nowo.site_backup.setup_need_detector', [
+                    'priority' => $attribute->priority,
+                ]);
+            },
+        );
         $container->registerAttributeForAutoconfiguration(
             AsSetupTabChecker::class,
             static function (ChildDefinition $definition): void {

@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.8.0] - 2026-08-01
+
+### Added
+
+- Custom **setup-need detectors** for the site gate: `#[AsSetupNeedDetector(priority: int)]` → tag `nowo.site_backup.setup_need_detector` (same attribute pattern as tab `#[AsSetupTabChecker]`).
+- `SetupNeedEvaluator` collects detectors via `tagged_iterator` (built-ins + host apps). OR semantics unchanged.
+
+### Documentation
+
+- Clarify **gate detector** vs wizard tab **`checker:`** / `SetupTabCheckerInterface` ([SETUP-WIZARD.md](SETUP-WIZARD.md), [CONFIGURATION.md](CONFIGURATION.md), [UPGRADING.md](UPGRADING.md)).
+
 ## [1.7.0] - 2026-07-31
 
 ### Added

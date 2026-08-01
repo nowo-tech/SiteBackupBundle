@@ -39,6 +39,7 @@ use Nowo\SiteBackupBundle\Storage\FilesystemRestoreProgressStorage;
 use Nowo\SiteBackupBundle\Storage\RestoreProgressStorageInterface;
 use Nowo\SiteBackupBundle\Twig\SiteBackupExtension as SiteBackupTwigExtension;
 use Symfony\Component\Config\FileLocator;
+use Symfony\Component\DependencyInjection\Argument\TaggedIteratorArgument;
 use Symfony\Component\DependencyInjection\Compiler\ServiceLocatorTagPass;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Extension\Extension;
@@ -371,28 +372,29 @@ final class SiteBackupExtension extends Extension
         $container->getDefinition(MarkerFileDetector::class)
             ->setArgument('$markers', new Reference(SetupMarkerManager::class))
             ->setArgument('$requireDoneMarker', (bool) $setup['require_done_marker'])
-            ->setArgument('$enabled', (bool) ($setup['detectors']['marker'] ?? true));
+            ->setArgument('$enabled', (bool) ($setup['detectors']['marker'] ?? true))
+            ->addTag('nowo.site_backup.setup_need_detector', ['priority' => 100]);
 
         $container->getDefinition(DoctrineConnectDetector::class)
             ->setArgument('$connection', $dbalRef)
-            ->setArgument('$enabled', (bool) ($setup['detectors']['doctrine_connect'] ?? false));
+            ->setArgument('$enabled', (bool) ($setup['detectors']['doctrine_connect'] ?? false))
+            ->addTag('nowo.site_backup.setup_need_detector', ['priority' => 90]);
 
         $container->getDefinition(DoctrineSchemaEmptyDetector::class)
             ->setArgument('$connection', $dbalRef)
-            ->setArgument('$enabled', (bool) ($setup['detectors']['doctrine_schema_empty'] ?? false));
+            ->setArgument('$enabled', (bool) ($setup['detectors']['doctrine_schema_empty'] ?? false))
+            ->addTag('nowo.site_backup.setup_need_detector', ['priority' => 80]);
 
         $container->getDefinition(IncompleteSetupProgressDetector::class)
             ->setArgument('$progressStorage', new Reference(SetupProgressStorageInterface::class))
             ->setArgument('$markers', new Reference(SetupMarkerManager::class))
-            ->setArgument('$enabled', (bool) ($setup['detectors']['incomplete_progress'] ?? true));
+            ->setArgument('$enabled', (bool) ($setup['detectors']['incomplete_progress'] ?? true))
+            ->addTag('nowo.site_backup.setup_need_detector', ['priority' => 70]);
 
+        // Built-ins (above) + host apps via SetupNeedDetectorInterface / #[AsSetupNeedDetector].
+        // Distinct from profile tab checkers (SetupTabCheckerInterface / checker: YAML).
         $container->getDefinition(SetupNeedEvaluator::class)
-            ->setArgument('$detectors', [
-                new Reference(MarkerFileDetector::class),
-                new Reference(DoctrineConnectDetector::class),
-                new Reference(DoctrineSchemaEmptyDetector::class),
-                new Reference(IncompleteSetupProgressDetector::class),
-            ])
+            ->setArgument('$detectors', new TaggedIteratorArgument('nowo.site_backup.setup_need_detector'))
             ->setArgument('$setupEnabled', (bool) $setup['enabled']);
 
         $container->getDefinition(SetupStepFactory::class)

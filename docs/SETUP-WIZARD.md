@@ -55,10 +55,10 @@ flowchart TD
 Priority (first match wins):
 
 1. **Restore mode** — `RestoreProgress.active` → restore loading page (existing behaviour).
-2. **Setup mode** — any `SetupNeedDetectorInterface` says “needed” **and** `setup.lock` / `setup.done` allow it → wizard.
+2. **Setup mode** — any `SetupNeedDetectorInterface` says “needed” → wizard (until `setup.done` clears the gate).
 3. **Ready** — normal kernel.
 
-Detectors (wired in `SetupNeedEvaluator`; each can be toggled under `setup.detectors`):
+Detectors (wired in `SetupNeedEvaluator` via tag `nowo.site_backup.setup_need_detector`; built-ins toggled under `setup.detectors`):
 
 | Detector | When it triggers |
 | --- | --- |
@@ -66,7 +66,42 @@ Detectors (wired in `SetupNeedEvaluator`; each can be toggled under `setup.detec
 | `DoctrineConnectDetector` | DBAL cannot connect |
 | `DoctrineSchemaEmptyDetector` | connected but no tables |
 | `IncompleteSetupProgressDetector` | progress phase is `running` / `waiting_input` / `failed` (and `setup.done` is absent) — resumes mid-wizard even if markers/`var/` were wiped when using Doctrine/`chain` storage |
-| Custom | App-specific health (implement `SetupNeedDetectorInterface`) |
+| **Custom (app)** | `#[AsSetupNeedDetector(priority: …)]` + `SetupNeedDetectorInterface` (same idea as tab `#[AsSetupTabChecker]`) |
+
+**Gate detector ≠ tab checker.**
+
+| Concern | API | Wired by |
+| --- | --- | --- |
+| Site gate “open setup?” | `SetupNeedDetectorInterface` + `#[AsSetupNeedDetector]` | Tag `nowo.site_backup.setup_need_detector` → `SetupNeedEvaluator` |
+| Wizard tab needs input / blocked | `SetupTabCheckerInterface` + `#[AsSetupTabChecker]` | Profile YAML `checker: App\Setup\MenusTabChecker` |
+
+Do not write `setup.required` from an app subscriber to encode app health — register a detector instead (avoids sticky markers across container recreates).
+
+```php
+use Nowo\SiteBackupBundle\Attribute\AsSetupNeedDetector;
+use Nowo\SiteBackupBundle\Setup\SetupNeedDetectorInterface;
+
+#[AsSetupNeedDetector(priority: 50)]
+final class PlatformCatalogsSetupNeedDetector implements SetupNeedDetectorInterface
+{
+    public function isSetupRequired(): bool { /* menus / breadcrumbs missing? */ }
+
+    public function getReason(): string { return 'platform catalogs missing'; }
+}
+```
+
+Tab example (unchanged — not a gate detector):
+
+```yaml
+tabs:
+  - type: custom
+    id: menus
+    label: setup.tab.custom
+    checker: App\Setup\MenusTabChecker   # SetupTabCheckerInterface
+    runner:
+      type: console
+      command: 'app:menus:sync'
+```
 
 ### Progress storage
 
@@ -155,7 +190,7 @@ interface SetupStepInterface
     public function run(SetupContext $ctx, SetupStepInput $input): SetupStepResult;
 }
 
-interface SetupNeedDetectorInterface
+interface SetupNeedDetectorInterface  // site gate (tagged); not a tab checker
 {
     public function isSetupRequired(): bool;
     public function getReason(): string;

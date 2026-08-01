@@ -60,13 +60,18 @@ services:
 
     Nowo\SiteBackupBundle\Setup\SetupOrchestrator: ~
 
-    Nowo\SiteBackupBundle\Setup\Detector\MarkerFileDetector: ~
+    # Tags + args set in SiteBackupExtension (avoid autoconfigure double-tag).
+    Nowo\SiteBackupBundle\Setup\Detector\MarkerFileDetector:
+        autoconfigure: false
 
-    Nowo\SiteBackupBundle\Setup\Detector\DoctrineConnectDetector: ~
+    Nowo\SiteBackupBundle\Setup\Detector\DoctrineConnectDetector:
+        autoconfigure: false
 
-    Nowo\SiteBackupBundle\Setup\Detector\DoctrineSchemaEmptyDetector: ~
+    Nowo\SiteBackupBundle\Setup\Detector\DoctrineSchemaEmptyDetector:
+        autoconfigure: false
 
-    Nowo\SiteBackupBundle\Setup\Detector\IncompleteSetupProgressDetector: ~
+    Nowo\SiteBackupBundle\Setup\Detector\IncompleteSetupProgressDetector:
+        autoconfigure: false
 
     Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator: ~
 

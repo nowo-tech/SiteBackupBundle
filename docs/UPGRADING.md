@@ -1,5 +1,44 @@
 # Upgrading
 
+## To 1.8.0
+
+Pluggable **setup-need detectors** for the site gate. **Non-breaking** — built-in detectors keep the same toggles under `setup.detectors.*`.
+
+### Install / update
+
+```bash
+composer require nowo-tech/site-backup-bundle:^1.8.0
+php bin/console cache:clear
+```
+
+### Behaviour
+
+- Host apps register `#[AsSetupNeedDetector(priority: 50)]` + `SetupNeedDetectorInterface` (mirror of `#[AsSetupTabChecker]` for tabs).
+- Aggregated by `SetupNeedEvaluator` via tag `nowo.site_backup.setup_need_detector`.
+- **Not** the same as profile tab `checker:` (`SetupTabCheckerInterface` / `#[AsSetupTabChecker]`), which only affects a wizard tab.
+
+### Migration notes
+
+| Topic | Before | After |
+| --- | --- | --- |
+| App-specific “setup required?” | Host `kernel.request` subscriber + often `markRequired()` | Prefer a custom detector (no sticky `setup.required` marker) |
+| Tab completeness / seed sync | `tabs[].checker` | Unchanged |
+
+```php
+use Nowo\SiteBackupBundle\Attribute\AsSetupNeedDetector;
+use Nowo\SiteBackupBundle\Setup\SetupNeedDetectorInterface;
+
+#[AsSetupNeedDetector(priority: 50)]
+final class PlatformCatalogsSetupNeedDetector implements SetupNeedDetectorInterface
+{
+    public function isSetupRequired(): bool { /* … */ }
+
+    public function getReason(): string { return 'platform catalogs missing'; }
+}
+```
+
+If an older host wrote `var/site-backup/setup.required` from a catalog check, delete that marker once after upgrading so only live detectors decide the gate.
+
 ## To 1.7.0
 
 Optional **locale-in-path** for the setup wizard (same model as AuthKit). **Non-breaking** — default `setup.locale.in_path: never` keeps bare `/_setup` URLs.

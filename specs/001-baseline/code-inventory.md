@@ -8,11 +8,12 @@ Every production source under `src/` is listed below (REQ-SPECKIT-001 / REQ-SPEC
 
 | Source files | Count |
 | --- | --- |
-| Total | **108** |
+| Total | **109** |
 
 | Source file | Requirement IDs |
 | --- | --- |
 | `Attribute/ExcludeFromRestore.php` | FR-ATTR-001 |
+| `Attribute/AsSetupNeedDetector.php` | FR-SETUP-003 |
 | `Attribute/AsSetupTabChecker.php` | FR-SETUP-010 |
 | `Backup/BackupArchiver.php` | FR-BACKUP-001 |
 | `Command/CreateBackupCommand.php` | FR-CLI-001 |

@@ -32,6 +32,7 @@ Root key: `nowo_site_backup`.
 | `setup.progress_table` | `nowo_site_backup_setup_progress` | DBAL table for doctrine/chain |
 | `setup.progress_file` | `%kernel.project_dir%/var/site-backup/setup-progress.json` | JSON progress when filesystem/chain |
 | `setup.detectors.incomplete_progress` | `true` | Gate when progress phase is running/waiting/failed |
+| Custom setup-need detectors | — | `#[AsSetupNeedDetector]` + `SetupNeedDetectorInterface` → tag `nowo.site_backup.setup_need_detector`. Distinct from tab `checker:` / `SetupTabCheckerInterface`. |
 | `setup.advance_mode` | `automatic` | `automatic` \| `manual` — chain auto tabs vs one Continuar per auto tab (CLI always chains) |
 | `setup.profiles.*.advance_mode` | inherit | Optional per-profile override |
 | `setup.profiles.*.tabs` | `[]` | Preferred ordered flow (checker/runner; optional `template` — prefer bundle `@NowoSiteBackupBundle/...` or omit); when non-empty, ignores `steps` |

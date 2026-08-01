@@ -14,9 +14,15 @@ use Nowo\SiteBackupBundle\Routing\SetupPathPrefixResolver;
 use Nowo\SiteBackupBundle\Routing\SetupRouteLoader;
 use Nowo\SiteBackupBundle\Security\PasswordSiteBackupAccessGate;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessGateInterface;
+use Nowo\SiteBackupBundle\Setup\Detector\DoctrineConnectDetector;
+use Nowo\SiteBackupBundle\Setup\Detector\DoctrineSchemaEmptyDetector;
+use Nowo\SiteBackupBundle\Setup\Detector\IncompleteSetupProgressDetector;
+use Nowo\SiteBackupBundle\Setup\Detector\MarkerFileDetector;
+use Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator;
 use Nowo\SiteBackupBundle\Setup\SetupOrchestrator;
 use Nowo\SiteBackupBundle\Setup\SetupTabCheckerLocator;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\DependencyInjection\Argument\TaggedIteratorArgument;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 
 final class SiteBackupExtensionTest extends TestCase
@@ -181,5 +187,28 @@ final class SiteBackupExtensionTest extends TestCase
         self::assertSame('console', $profiles['with_tabs']['steps'][1]['runner']['type']);
         self::assertSame('manual', $orch->getArgument('$defaultAdvanceMode'));
         self::assertTrue($container->hasDefinition(SetupTabCheckerLocator::class));
+    }
+
+    public function testSetupNeedEvaluatorUsesTaggedDetectors(): void
+    {
+        $container = new ContainerBuilder();
+        $container->setParameter('kernel.project_dir', sys_get_temp_dir());
+
+        (new SiteBackupExtension())->load([['enabled' => true]], $container);
+
+        $evaluator = $container->getDefinition(SetupNeedEvaluator::class);
+        $detectors = $evaluator->getArgument('$detectors');
+        self::assertInstanceOf(TaggedIteratorArgument::class, $detectors);
+        self::assertSame('nowo.site_backup.setup_need_detector', $detectors->getTag());
+
+        foreach ([
+            MarkerFileDetector::class,
+            DoctrineConnectDetector::class,
+            DoctrineSchemaEmptyDetector::class,
+            IncompleteSetupProgressDetector::class,
+        ] as $class) {
+            $def = $container->getDefinition($class);
+            self::assertTrue($def->hasTag('nowo.site_backup.setup_need_detector'), $class);
+        }
     }
 }

@@ -86,7 +86,7 @@ Given `setup.profiles.*.tabs` (ordered), When the wizard runs, Then each tab may
 | FR-CLI-001 | Console commands for backup/restore/setup/hash |
 | FR-SETUP-001 | Wizard steps, orchestrator, markers, profiles, admin provisioner |
 | FR-SETUP-002 | Progress storage: `filesystem` \| `doctrine` \| `chain`; `started_at` / `completed_at`; optional DBAL table auto-create |
-| FR-SETUP-003 | Detectors: marker, doctrine connect, schema empty, **incomplete progress** (toggleable); evaluator ORs enabled detectors |
+| FR-SETUP-003 | Detectors: marker, doctrine connect, schema empty, **incomplete progress** (toggleable) + **app-tagged** `SetupNeedDetectorInterface`; evaluator ORs enabled detectors |
 | FR-SETUP-004 | Default `setup.path_prefix` is `/_setup`; routes honour config via parameters; path auto-added to exclusions |
 | FR-SETUP-005 | Starting the wizard marks `setup.required` until `setup.done`; gate stays on while progress is incomplete |
 | FR-SETUP-006 | Step type `bootstrap_mode` (`guided` \| `full_database`) + answer `sql_import_path`; `when_answer` filters steps |
