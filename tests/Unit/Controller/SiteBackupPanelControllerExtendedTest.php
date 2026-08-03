@@ -6,6 +6,7 @@ namespace Nowo\SiteBackupBundle\Tests\Unit\Controller;
 
 use Nowo\SiteBackupBundle\Controller\SiteBackupPanelController;
 use Nowo\SiteBackupBundle\Security\PasswordSiteBackupAccessGate;
+use Nowo\SiteBackupBundle\Security\SiteBackupAccessCheckerInterface;
 use Nowo\SiteBackupBundle\Tests\Unit\CreatesSiteBackupTestHarness;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
@@ -123,5 +124,62 @@ final class SiteBackupPanelControllerExtendedTest extends TestCase
         $request->setSession($session);
         self::assertSame(200, $controller->index($request)->getStatusCode());
         $this->harnessFs->chmod($this->harnessStorageDir, 0777);
+    }
+
+    public function testIndexReturnsForbiddenWhenRoleAccessDenied(): void
+    {
+        $checker = $this->createMock(SiteBackupAccessCheckerInterface::class);
+        $checker->method('canAccess')->willReturn(false);
+
+        $controller = new SiteBackupPanelController(
+            $this->createManager(),
+            new PasswordSiteBackupAccessGate(null, false),
+            $this->createMock(Environment::class),
+            ['panel_index' => 'index', 'panel_login' => 'login', 'panel_history' => 'history'],
+            '/_site_backup',
+            null,
+            $checker,
+            false,
+        );
+
+        self::assertSame(403, $controller->index(Request::create('/'))->getStatusCode());
+        self::assertSame(403, $controller->history(Request::create('/history'))->getStatusCode());
+    }
+
+    public function testIndexReturnsForbiddenWhenAccessCheckerMissingAndUnauthenticatedDisallowed(): void
+    {
+        $controller = new SiteBackupPanelController(
+            $this->createManager(),
+            new PasswordSiteBackupAccessGate(null, false),
+            $this->createMock(Environment::class),
+            ['panel_index' => 'index', 'panel_login' => 'login', 'panel_history' => 'history'],
+            '/_site_backup',
+            null,
+            null,
+            false,
+        );
+
+        self::assertSame(403, $controller->index(Request::create('/'))->getStatusCode());
+    }
+
+    public function testIndexAllowsWhenAccessCheckerGrants(): void
+    {
+        $checker = $this->createMock(SiteBackupAccessCheckerInterface::class);
+        $checker->method('canAccess')->willReturn(true);
+        $twig = $this->createMock(Environment::class);
+        $twig->method('render')->willReturn('html');
+
+        $controller = new SiteBackupPanelController(
+            $this->createManager(),
+            new PasswordSiteBackupAccessGate(null, false),
+            $twig,
+            ['panel_index' => 'index', 'panel_login' => 'login', 'panel_history' => 'history'],
+            '/_site_backup',
+            null,
+            $checker,
+            false,
+        );
+
+        self::assertSame(200, $controller->index(Request::create('/'))->getStatusCode());
     }
 }

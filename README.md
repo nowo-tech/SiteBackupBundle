@@ -50,6 +50,8 @@ nowo_site_backup:
     security:
         password_protection: true
         password_hash: '%env(SITE_BACKUP_PASSWORD_HASH)%'
+        access_roles: [ROLE_ADMIN]
+        # allow_unauthenticated: false
     setup:
         admin_provisioner: App\Setup\AdminUserProvisioner
 ```

@@ -38,6 +38,9 @@ final class ConfigurationTest extends TestCase
         self::assertSame('en', $config['setup']['locale']['default']);
         self::assertSame(['en'], $config['setup']['locale']['enabled']);
         self::assertSame('redirect', $config['setup']['locale']['unlocalized']);
+        self::assertSame(['ROLE_ADMIN'], $config['security']['access_roles']);
+        self::assertNull($config['security']['access_checker']);
+        self::assertFalse($config['security']['allow_unauthenticated']);
         self::assertSame(
             '@NowoSiteBackupBundle/setup/layout.html.twig',
             $config['templates']['setup_layout'],

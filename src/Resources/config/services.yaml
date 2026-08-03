@@ -16,6 +16,9 @@ services:
             - '../../Routing/'
             - '../../Setup/Step/'
             - '../../NowoSiteBackupBundle.php'
+            - '../../Security/SiteBackupAccessCheckerInterface.php'
+            - '../../Security/ConfigurableSiteBackupAccessChecker.php'
+            - '../../Security/AllowAllSiteBackupAccessChecker.php'
 
     Nowo\SiteBackupBundle\Storage\FilesystemRestoreProgressStorage:
         arguments:

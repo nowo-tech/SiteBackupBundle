@@ -14,7 +14,7 @@
 - Symfony HttpKernel / Console components as declared in `composer.json`
 - `symfony/twig-bundle` (or `twig/twig`) to render the public restore loading page, the admin panel, and the setup wizard
 - **`symfony/security-csrf`** (or Framework CSRF) — panel and setup POSTs **fail closed** without a CSRF token manager
-- Optional: `symfony/security-bundle` if you replace `SiteBackupAccessGateInterface`
+- Optional: `symfony/security-bundle` when the panel is enabled and `security.allow_unauthenticated` is `false` (default). Also used if you replace `SiteBackupAccessGateInterface`
 - Optional: Doctrine DBAL for `sql_file` import / connect detectors; apps bind `AdminUserProvisionerInterface` for the setup wizard
 - System `tar` binary for create/extract
 
@@ -33,6 +33,8 @@ nowo_site_backup:
 ```
 
 ## Panel password (required by default)
+
+The panel also follows REQ-UI-002: `security.access_roles` (default `[ROLE_ADMIN]`), optional `access_checker`, and `allow_unauthenticated` (default `false`). The password gate is **additional**.
 
 When `security.password_protection` is `true` (default), **`password_hash` must be set**. Without a hash the panel stays locked (fail-closed).
 

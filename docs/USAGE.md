@@ -66,7 +66,19 @@ Or configure `exclusions.paths` / `path_prefixes` / `routes` / `ips`.
 
 ## Admin panel
 
-Open `/_site_backup` (password gate when configured). Create, verify, restore, delete, and view history.
+Open `/_site_backup`. By default the panel requires Symfony Security (`access_roles: [ROLE_ADMIN]`) unless `security.allow_unauthenticated: true` (demos only). The ops **password gate** is an **additional** layer when `password_protection` is true.
+
+```yaml
+nowo_site_backup:
+    security:
+        access_roles: [ROLE_ADMIN]
+        access_checker: null
+        allow_unauthenticated: false
+        password_protection: true
+        password_hash: '%env(SITE_BACKUP_PASSWORD_HASH)%'
+```
+
+Create, verify, restore, delete, and view history from the UI.
 
 ## Setup wizard
 

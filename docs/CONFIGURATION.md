@@ -19,7 +19,12 @@ Root key: `nowo_site_backup`.
 | `panel.path_prefix` | `/_site_backup` | Auto-excluded from loading page; drives imported panel routes |
 | `panel.layout_template` | `null` (bundle `panel/layout.html.twig`) | Host Twig shell; Twig global `nowo_site_backup_panel_layout_template`; blocks `nowo_ui_content` / `nowo_site_backup_panel_content` |
 | `templates.panel_layout` | `@NowoSiteBackupBundle/panel/layout.html.twig` | Same as `panel.layout_template` when set |
+| `security.access_roles` | `[ROLE_ADMIN]` | REQ-UI-002: at least one role grants panel access when `allow_unauthenticated` is false |
+| `security.access_checker` | `null` | Optional service id implementing `SiteBackupAccessCheckerInterface` |
+| `security.allow_unauthenticated` | `false` | DEV/DEMO only: skip Symfony role check (password gate may still apply). Requires SecurityBundle when `false` and panel is enabled |
+| `security.password_protection` | `true` | Ops password gate (additional to role check). Fail-closed without `password_hash` when true |
 | `security.password_hash` | `null` | Prefer env `SITE_BACKUP_PASSWORD_HASH` |
+| `security.access_gate` | `null` | Custom `SiteBackupAccessGateInterface` service |
 | `templates.*` | `@NowoSiteBackupBundle/...` | Overrideable Twig templates |
 | `setup.path_prefix` | `/_setup` | Wizard URL prefix; drives imported setup routes + site-gate exclusions |
 | `setup.locale.in_path` | `never` | `never` \| `always` \| `both` — locale prefix on setup URLs (AuthKit-style) |

@@ -62,7 +62,7 @@
     "suggest": {
         "symfony/twig-bundle": "Required to render the restore loading page and admin panel",
         "symfony/translation": "Required for |trans in panel and restore templates",
-        "symfony/security-bundle": "Optional; wire a custom SiteBackupAccessGateInterface",
+        "symfony/security-bundle": "Required for the private panel when security.allow_unauthenticated is false (default); also for custom SiteBackupAccessGateInterface / access_checker",
         "symfony/flex": "For automatic recipe installation",
         "doctrine/dbal": "Optional; setup progress doctrine/chain storage, schema detectors, and apps that rely on a DBAL connection"
     },

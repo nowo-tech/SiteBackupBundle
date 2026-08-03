@@ -369,7 +369,7 @@ final class RemainingCoverageTest extends TestCase
     {
         $container = new ContainerBuilder();
         $container->setParameter('kernel.project_dir', sys_get_temp_dir());
-        (new SiteBackupExtension())->load([['enabled' => true]], $container);
+        (new SiteBackupExtension())->load([['enabled' => true, 'security' => ['allow_unauthenticated' => true]]], $container);
         $extension = new SiteBackupExtension();
 
         $configureStorage = new ReflectionMethod(SiteBackupExtension::class, 'configureStorage');
@@ -396,7 +396,7 @@ final class RemainingCoverageTest extends TestCase
 
         $containerWithWizard = new ContainerBuilder();
         $containerWithWizard->setParameter('kernel.project_dir', sys_get_temp_dir());
-        (new SiteBackupExtension())->load([['enabled' => true, 'setup' => ['enabled' => false]]], $containerWithWizard);
+        (new SiteBackupExtension())->load([['enabled' => true, 'setup' => ['enabled' => false], 'security' => ['allow_unauthenticated' => true]]], $containerWithWizard);
         self::assertFalse($containerWithWizard->hasDefinition(SetupWizardController::class));
     }
 

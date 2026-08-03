@@ -26,6 +26,10 @@ nowo_site_backup:
         password_protection: true
         # REQUIRED when password_protection is true (panel is fail-closed without a hash):
         # password_hash: '%env(SITE_BACKUP_PASSWORD_HASH)%'
+        # REQ-UI-002 (password gate is additional):
+        # access_roles: [ROLE_ADMIN]
+        # access_checker: null
+        # allow_unauthenticated: false   # default; never true in production
     setup:
         enabled: true
         path_prefix: '/_setup'
