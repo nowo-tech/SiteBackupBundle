@@ -62,7 +62,8 @@ final class FinalCoverageTest extends TestCase
         $container->setParameter('kernel.project_dir', sys_get_temp_dir());
 
         (new SiteBackupExtension())->load([[
-            'setup' => [
+            'security' => ['allow_unauthenticated' => true],
+            'setup'    => [
                 'enabled'           => true,
                 'admin_provisioner' => 'App\\Setup\\AdminProvisioner',
             ],

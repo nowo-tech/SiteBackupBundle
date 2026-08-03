@@ -22,6 +22,9 @@ nowo_site_backup:
         # Brand panel chrome without forking panel/*.html.twig (v1.5+)
         layout_template: 'kit/site_backup_panel_layout.html.twig'
     security:
+        # Demo: password gate only (no SecurityBundle). Never copy allow_unauthenticated to production.
+        allow_unauthenticated: true
+        access_roles: [ROLE_ADMIN]
         password_protection: true
         # Demo only — password: password (Laravel sample hash; regenerate for real apps)
         password_hash: '$2y$13$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi'

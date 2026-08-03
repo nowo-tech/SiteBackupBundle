@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Controller;
 
+use Nowo\SiteBackupBundle\Security\SiteBackupAccessCheckerInterface;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessGateInterface;
 use Nowo\SiteBackupBundle\Service\SiteBackupManager;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -30,12 +31,18 @@ final class SiteBackupPanelController
         private readonly array $templates,
         private readonly string $pathPrefix,
         private readonly ?CsrfTokenManagerInterface $csrfTokenManager = null,
+        private readonly ?SiteBackupAccessCheckerInterface $accessChecker = null,
+        private readonly bool $allowUnauthenticated = true,
     ) {
     }
 
     #[Route('', name: 'nowo_site_backup_panel', methods: ['GET', 'POST'])]
     public function index(Request $request): Response
     {
+        if (($response = $this->denyUnlessRoleAccess()) instanceof Response) {
+            return $response;
+        }
+
         if (!$this->accessGate->isAuthenticated($request)) {
             return $this->login($request);
         }
@@ -91,6 +98,10 @@ final class SiteBackupPanelController
     #[Route('/history', name: 'nowo_site_backup_history', methods: ['GET'])]
     public function history(Request $request): Response
     {
+        if (($response = $this->denyUnlessRoleAccess()) instanceof Response) {
+            return $response;
+        }
+
         if (!$this->accessGate->isAuthenticated($request)) {
             return new RedirectResponse($this->pathPrefix);
         }
@@ -174,5 +185,18 @@ final class SiteBackupPanelController
         $token = $request->request->getString('_csrf_token');
 
         return $this->csrfTokenManager->isTokenValid(new CsrfToken($id, $token));
+    }
+
+    private function denyUnlessRoleAccess(): ?Response
+    {
+        if ($this->allowUnauthenticated) {
+            return null;
+        }
+
+        if (!$this->accessChecker instanceof SiteBackupAccessCheckerInterface || !$this->accessChecker->canAccess(null)) {
+            return new Response('Access denied.', Response::HTTP_FORBIDDEN);
+        }
+
+        return null;
     }
 }

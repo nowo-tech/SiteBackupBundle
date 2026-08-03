@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Tests\Unit\DependencyInjection;
 
+use LogicException;
 use Nowo\SiteBackupBundle\Controller\SetupUnlocalizedLocaleRedirectController;
 use Nowo\SiteBackupBundle\Controller\SetupWizardController;
 use Nowo\SiteBackupBundle\Controller\SiteBackupPanelController;
@@ -12,7 +13,10 @@ use Nowo\SiteBackupBundle\DependencyInjection\SiteBackupExtension;
 use Nowo\SiteBackupBundle\Exclusion\SiteBackupExclusionMatcher;
 use Nowo\SiteBackupBundle\Routing\SetupPathPrefixResolver;
 use Nowo\SiteBackupBundle\Routing\SetupRouteLoader;
+use Nowo\SiteBackupBundle\Security\AllowAllSiteBackupAccessChecker;
+use Nowo\SiteBackupBundle\Security\ConfigurableSiteBackupAccessChecker;
 use Nowo\SiteBackupBundle\Security\PasswordSiteBackupAccessGate;
+use Nowo\SiteBackupBundle\Security\SiteBackupAccessCheckerInterface;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessGateInterface;
 use Nowo\SiteBackupBundle\Setup\Detector\DoctrineConnectDetector;
 use Nowo\SiteBackupBundle\Setup\Detector\DoctrineSchemaEmptyDetector;
@@ -24,6 +28,7 @@ use Nowo\SiteBackupBundle\Setup\SetupTabCheckerLocator;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\DependencyInjection\Argument\TaggedIteratorArgument;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\Definition;
 
 final class SiteBackupExtensionTest extends TestCase
 {
@@ -32,7 +37,10 @@ final class SiteBackupExtensionTest extends TestCase
         $container = new ContainerBuilder();
         $container->setParameter('kernel.project_dir', sys_get_temp_dir());
 
-        (new SiteBackupExtension())->load([['enabled' => true]], $container);
+        (new SiteBackupExtension())->load([[
+            'enabled'  => true,
+            'security' => ['allow_unauthenticated' => true],
+        ]], $container);
 
         self::assertTrue($container->getParameter('nowo.site_backup.enabled'));
         self::assertTrue($container->hasDefinition(SiteBackupPanelController::class));
@@ -54,7 +62,8 @@ final class SiteBackupExtensionTest extends TestCase
         $container->setParameter('kernel.project_dir', sys_get_temp_dir());
 
         (new SiteBackupExtension())->load([[
-            'setup' => [
+            'security' => ['allow_unauthenticated' => true],
+            'setup'    => [
                 'layout_template' => 'kit/setup_layout.html.twig',
                 'locale'          => [
                     'in_path' => 'always',
@@ -100,7 +109,7 @@ final class SiteBackupExtensionTest extends TestCase
         $container->setParameter('kernel.project_dir', sys_get_temp_dir());
 
         (new SiteBackupExtension())->load([[
-            'security' => ['access_gate' => 'App\\Security\\CustomGate'],
+            'security' => ['access_gate' => 'App\\Security\\CustomGate', 'allow_unauthenticated' => true],
         ]], $container);
 
         self::assertSame('App\\Security\\CustomGate', (string) $container->getAlias(SiteBackupAccessGateInterface::class));
@@ -117,7 +126,8 @@ final class SiteBackupExtensionTest extends TestCase
         $container->setParameter('kernel.project_dir', sys_get_temp_dir());
 
         (new SiteBackupExtension())->load([[
-            'setup' => [
+            'security' => ['allow_unauthenticated' => true],
+            'setup'    => [
                 'locale' => [
                     'in_path'     => 'both',
                     'default'     => 'es',
@@ -145,7 +155,8 @@ final class SiteBackupExtensionTest extends TestCase
         $container->setParameter('kernel.project_dir', sys_get_temp_dir());
 
         (new SiteBackupExtension())->load([[
-            'setup' => [
+            'security' => ['allow_unauthenticated' => true],
+            'setup'    => [
                 'advance_mode' => 'manual',
                 'profiles'     => [
                     'with_tabs' => [
@@ -194,7 +205,7 @@ final class SiteBackupExtensionTest extends TestCase
         $container = new ContainerBuilder();
         $container->setParameter('kernel.project_dir', sys_get_temp_dir());
 
-        (new SiteBackupExtension())->load([['enabled' => true]], $container);
+        (new SiteBackupExtension())->load([['enabled' => true, 'security' => ['allow_unauthenticated' => true]]], $container);
 
         $evaluator = $container->getDefinition(SetupNeedEvaluator::class);
         $detectors = $evaluator->getArgument('$detectors');
@@ -210,5 +221,82 @@ final class SiteBackupExtensionTest extends TestCase
             $def = $container->getDefinition($class);
             self::assertTrue($def->hasTag('nowo.site_backup.setup_need_detector'), $class);
         }
+    }
+
+    public function testLoadThrowsWhenPanelEnabledWithoutSecurityBundle(): void
+    {
+        $container = new ContainerBuilder();
+        $container->setParameter('kernel.project_dir', sys_get_temp_dir());
+
+        $this->expectException(LogicException::class);
+        $this->expectExceptionMessage('allow_unauthenticated');
+
+        (new SiteBackupExtension())->load([[
+            'panel'    => ['enabled' => true],
+            'security' => ['allow_unauthenticated' => false],
+        ]], $container);
+    }
+
+    public function testLoadRegistersAllowAllAccessCheckerWhenUnauthenticatedAllowed(): void
+    {
+        $container = new ContainerBuilder();
+        $container->setParameter('kernel.project_dir', sys_get_temp_dir());
+
+        (new SiteBackupExtension())->load([[
+            'security' => ['allow_unauthenticated' => true],
+        ]], $container);
+
+        self::assertTrue($container->hasDefinition('nowo_site_backup.access_checker.allow_all'));
+        self::assertSame(
+            AllowAllSiteBackupAccessChecker::class,
+            $container->getDefinition('nowo_site_backup.access_checker.allow_all')->getClass(),
+        );
+        self::assertSame(
+            'nowo_site_backup.access_checker.allow_all',
+            (string) $container->getAlias(SiteBackupAccessCheckerInterface::class),
+        );
+        self::assertTrue($container->getDefinition(SiteBackupPanelController::class)->getArgument('$allowUnauthenticated'));
+    }
+
+    public function testLoadRegistersDefaultAccessCheckerWhenSecurityBundlePresentViaKernelBundles(): void
+    {
+        $container = new ContainerBuilder();
+        $container->setParameter('kernel.project_dir', sys_get_temp_dir());
+        $container->setParameter('kernel.bundles', ['SecurityBundle' => 'Symfony\\Bundle\\SecurityBundle\\SecurityBundle']);
+
+        (new SiteBackupExtension())->load([[
+            'security' => [
+                'allow_unauthenticated' => false,
+                'access_roles'          => ['ROLE_ADMIN', 'ROLE_BACKUP'],
+            ],
+        ]], $container);
+
+        self::assertTrue($container->hasDefinition('nowo_site_backup.access_checker.default'));
+        $def = $container->getDefinition('nowo_site_backup.access_checker.default');
+        self::assertSame(ConfigurableSiteBackupAccessChecker::class, $def->getClass());
+        self::assertSame(['ROLE_ADMIN', 'ROLE_BACKUP'], $def->getArgument('$accessRoles'));
+        self::assertFalse($container->getDefinition(SiteBackupPanelController::class)->getArgument('$allowUnauthenticated'));
+    }
+
+    public function testLoadUsesCustomAccessCheckerServiceId(): void
+    {
+        $container = new ContainerBuilder();
+        $container->setParameter('kernel.project_dir', sys_get_temp_dir());
+        $container->setParameter('kernel.bundles', ['SecurityBundle' => 'Symfony\\Bundle\\SecurityBundle\\SecurityBundle']);
+        $container->setDefinition('app.custom_access_checker', new Definition('stdClass'));
+
+        (new SiteBackupExtension())->load([[
+            'security' => [
+                'allow_unauthenticated' => false,
+                'access_checker'        => 'app.custom_access_checker',
+            ],
+        ]], $container);
+
+        self::assertSame(
+            'app.custom_access_checker',
+            (string) $container->getAlias(SiteBackupAccessCheckerInterface::class),
+        );
+        self::assertFalse($container->hasDefinition('nowo_site_backup.access_checker.default'));
+        self::assertFalse($container->hasDefinition('nowo_site_backup.access_checker.allow_all'));
     }
 }

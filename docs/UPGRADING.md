@@ -1,5 +1,53 @@
 # Upgrading
 
+## To 1.9.0
+
+Minor release: REQ-UI-002 role-based panel access (`access_roles` / `access_checker`). Default panel security is stricter. The ops password gate remains an **additional** layer.
+
+### Requirements
+
+- **PHP** `>=8.2` and `<8.6`. Symfony **8.x** still needs **PHP 8.4+**.
+- **Symfony** `^7.0 || ^8.0` (CI minors: **7.4**, **8.0**, **8.1**).
+- **SecurityBundle** when the panel is enabled and `security.allow_unauthenticated` is `false` (default).
+
+### Install / update
+
+```bash
+composer require nowo-tech/site-backup-bundle:^1.9
+php bin/console cache:clear
+```
+
+### Behaviour change (panel roles)
+
+| Topic | Before | 1.9.0 |
+| --- | --- | --- |
+| Default panel auth | Ops password gate only | Symfony roles (`ROLE_ADMIN` by default) **plus** optional password gate |
+| Apps without SecurityBundle | Panel could boot | Boot fails with `LogicException` unless `allow_unauthenticated: true` |
+
+**Demos / trusted local kernels** without SecurityBundle:
+
+```yaml
+nowo_site_backup:
+    security:
+        allow_unauthenticated: true   # never in production
+```
+
+**Production** (recommended): keep `allow_unauthenticated: false`, ensure SecurityBundle is installed, and grant at least one of `access_roles` (or provide a custom `access_checker`).
+
+### New optional config
+
+```yaml
+nowo_site_backup:
+    security:
+        access_roles: [ROLE_ADMIN]
+        access_checker: null
+        allow_unauthenticated: false
+```
+
+### Breaking changes
+
+Apps that enabled the panel without SecurityBundle (or without a matching `access_roles` grant) must either install/configure SecurityBundle roles or set `allow_unauthenticated: true` for non-production use.
+
 ## To 1.8.1
 
 Demo-only refresh (FrankenPHP Symfony 8). **No bundle API migration** from **1.8.0**.

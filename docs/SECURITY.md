@@ -27,7 +27,7 @@ Covers backup creation, integrity verification, restore orchestration, restore l
 
 | Threat | Risk | Mitigation |
 | --- | --- | --- |
-| Unauthorized restore/delete | High | Password gate / custom `SiteBackupAccessGateInterface` (**fail-closed** when `password_protection` is true but `password_hash` is empty); CSRF on panel POSTs (**fail-closed** if CSRF manager missing — require `symfony/security-csrf`) |
+| Unauthorized restore/delete | High | REQ-UI-002 `access_roles` / `SiteBackupAccessCheckerInterface` (default `ROLE_ADMIN`) unless `allow_unauthenticated`; plus password gate / custom `SiteBackupAccessGateInterface` (**fail-closed** when `password_protection` is true but `password_hash` is empty); CSRF on panel POSTs (**fail-closed** if CSRF manager missing — require `symfony/security-csrf`). Password gate is **additional** to role check. `allow_unauthenticated: true` is demo/dev only |
 | Unauthorized setup / admin creation | High | Wizard only while detectors say required; optional `setup_token`; CSRF fail-closed; `AdminUserProvisionerInterface` is app-owned |
 | Path traversal on apply | High | Relative paths from archive; protected paths; never overwrite `var/site-backup/` |
 | Command injection via dump/setup cmd | High | Dump / console commands are **operator-configured** only (not from free-form HTTP input) |

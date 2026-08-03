@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\DependencyInjection;
 
+use LogicException;
 use Nowo\SiteBackupBundle\Backup\BackupArchiver;
 use Nowo\SiteBackupBundle\Controller\SetupUnlocalizedLocaleRedirectController;
 use Nowo\SiteBackupBundle\Controller\SetupWizardController;
@@ -14,7 +15,10 @@ use Nowo\SiteBackupBundle\Exclusion\SiteBackupExclusionMatcher;
 use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
 use Nowo\SiteBackupBundle\Routing\SetupPathPrefixResolver;
 use Nowo\SiteBackupBundle\Routing\SetupRouteLoader;
+use Nowo\SiteBackupBundle\Security\AllowAllSiteBackupAccessChecker;
+use Nowo\SiteBackupBundle\Security\ConfigurableSiteBackupAccessChecker;
 use Nowo\SiteBackupBundle\Security\PasswordSiteBackupAccessGate;
+use Nowo\SiteBackupBundle\Security\SiteBackupAccessCheckerInterface;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessGateInterface;
 use Nowo\SiteBackupBundle\Service\SiteBackupManager;
 use Nowo\SiteBackupBundle\Setup\AdminUserProvisionerInterface;
@@ -42,6 +46,7 @@ use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\Argument\TaggedIteratorArgument;
 use Symfony\Component\DependencyInjection\Compiler\ServiceLocatorTagPass;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
+use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Extension\Extension;
 use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
 use Symfony\Component\DependencyInjection\Reference;
@@ -90,12 +95,23 @@ final class SiteBackupExtension extends Extension
         $container->setParameter('nowo.site_backup.templates', $config['templates']);
         $container->setParameter('nowo.site_backup.setup', $config['setup']);
         $container->setParameter('nowo.site_backup.panel', $config['panel']);
+        $container->setParameter('nowo.site_backup.security', $config['security']);
+        $container->setParameter('nowo.site_backup.security.allow_unauthenticated', $config['security']['allow_unauthenticated']);
+
+        if (
+            (bool) $config['panel']['enabled']
+            && !$config['security']['allow_unauthenticated']
+            && !$this->isSecurityBundleAvailable($container)
+        ) {
+            throw new LogicException('NowoSiteBackupBundle panel requires symfony/security-bundle when security.allow_unauthenticated is false.');
+        }
 
         $this->configureStorage($container, $config);
         $this->configureArchiver($container, $config);
         $this->configureRestore($container, $config);
         $this->configureExclusions($container, $config);
         $this->configureAccessGate($container, $config['security']);
+        $this->registerAccessChecker($container, $config['security']);
         $this->configureManager($container);
         $this->configureSubscriber($container, $config);
         $this->configureTwigGlobals($container, $config);
@@ -221,6 +237,49 @@ final class SiteBackupExtension extends Extension
         $container->setAlias(SiteBackupAccessGateInterface::class, PasswordSiteBackupAccessGate::class)->setPublic(false);
     }
 
+    /** @param array<string, mixed> $security */
+    private function registerAccessChecker(ContainerBuilder $container, array $security): void
+    {
+        $accessCheckerId = $security['access_checker'] ?? null;
+        if (is_string($accessCheckerId) && $accessCheckerId !== '') {
+            $container->setAlias(SiteBackupAccessCheckerInterface::class, $accessCheckerId)->setPublic(false);
+
+            return;
+        }
+
+        if ((bool) ($security['allow_unauthenticated'] ?? false)) {
+            $accessCheckerId = 'nowo_site_backup.access_checker.allow_all';
+            $container->setDefinition($accessCheckerId, new Definition(AllowAllSiteBackupAccessChecker::class));
+        } else {
+            $accessCheckerId = 'nowo_site_backup.access_checker.default';
+            $container->setDefinition($accessCheckerId, (new Definition(ConfigurableSiteBackupAccessChecker::class))
+                ->setAutowired(true)
+                ->setArgument('$accessRoles', $security['access_roles']));
+        }
+
+        $container->setAlias(SiteBackupAccessCheckerInterface::class, $accessCheckerId)->setPublic(false);
+    }
+
+    /**
+     * Prefer kernel.bundles: ContainerBuilder::hasExtension() can be false while SecurityBundle
+     * is already registered (e.g. during early Flex cache:clear boots).
+     */
+    private function isSecurityBundleAvailable(ContainerBuilder $container): bool
+    {
+        if ($container->hasExtension('security')) {
+            return true;
+        }
+
+        if (!$container->hasParameter('kernel.bundles')) {
+            return false;
+        }
+
+        /** @var array<string, class-string> $bundles */
+        $bundles = $container->getParameter('kernel.bundles');
+
+        return isset($bundles['SecurityBundle']);
+    }
+
     private function configureManager(ContainerBuilder $container): void
     {
         $container->getDefinition(SiteBackupManager::class)
@@ -300,6 +359,8 @@ final class SiteBackupExtension extends Extension
             ->setArgument('$templates', $config['templates'])
             ->setArgument('$pathPrefix', $config['panel']['path_prefix'])
             ->setArgument('$csrfTokenManager', new Reference(CsrfTokenManagerInterface::class, ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
+            ->setArgument('$accessChecker', new Reference(SiteBackupAccessCheckerInterface::class))
+            ->setArgument('$allowUnauthenticated', (bool) $config['security']['allow_unauthenticated'])
             ->setPublic(true);
     }
 

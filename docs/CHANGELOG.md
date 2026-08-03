@@ -7,6 +7,25 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.0] - 2026-08-03
+
+### Added
+
+- REQ-UI-002 panel access control: `security.access_roles` (default `[ROLE_ADMIN]`), optional `security.access_checker`, and `SiteBackupAccessCheckerInterface` (`ConfigurableSiteBackupAccessChecker` / `AllowAllSiteBackupAccessChecker`).
+- `security.allow_unauthenticated` (default `false`): when `false` and the panel is enabled, `symfony/security-bundle` is required (boot fails with `LogicException` otherwise).
+
+### Changed
+
+- Ops password gate remains an **additional** layer on top of role / access-checker checks.
+- Demo sets `allow_unauthenticated: true` (password gate only; never copy to production).
+- Docs / recipe / suggest text updated for the dual-layer security model ([CONFIGURATION.md](CONFIGURATION.md), [USAGE.md](USAGE.md), [SECURITY.md](SECURITY.md), [INSTALLATION.md](INSTALLATION.md)).
+- CI: `actions/stale` v11; lock refresh (`rector/rector` 2.6.0, `nowo-tech/phpstan-frankenphp` 1.0.3).
+
+### Compatibility
+
+- PHP `>=8.2`, `<8.6`; Symfony `^7.0 || ^8.0` (CI minors **7.4**, **8.0**, **8.1**).
+- Panel with default security settings requires **SecurityBundle** (or set `allow_unauthenticated: true` for trusted local demos).
+
 ## [1.8.1] - 2026-08-01
 
 ### Documentation
@@ -216,7 +235,10 @@ First stable release of **Site Backup Bundle**.
 - Symfony `^7.0 || ^8.0` (CI / mandatory minors: **7.4**, **8.0**, **8.1**)
 - System `tar` required for archive create/extract
 
-[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.7.0...HEAD
+[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.9.0...HEAD
+[1.9.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.8.1...v1.9.0
+[1.8.1]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.8.0...v1.8.1
+[1.8.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.7.0...v1.8.0
 [1.7.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.6.0...v1.7.0
 [1.6.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.5.0...v1.6.0
 [1.5.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.4.0...v1.5.0
