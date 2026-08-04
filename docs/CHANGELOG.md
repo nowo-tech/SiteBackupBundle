@@ -7,6 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.9.1] - 2026-08-04
+
+### Fixed
+- **CI:** `destroyHarness()` removes history/progress files instead of their `dirname` (`/tmp`), which broke GHA runners.
+
+[1.9.1]: https://github.com/nowo-tech/SiteBackupBundle/releases/tag/v1.9.1
+
 ## [1.9.0] - 2026-08-03
 
 ### Added
