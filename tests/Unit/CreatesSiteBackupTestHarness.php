@@ -18,7 +18,6 @@ use Nowo\SiteBackupBundle\Storage\FilesystemRestoreProgressStorage;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\Filesystem\Filesystem;
 
-use function dirname;
 use function is_string;
 
 use const PHP_BINARY;
@@ -45,11 +44,12 @@ trait CreatesSiteBackupTestHarness
 
     protected function destroyHarness(): void
     {
+        // Do not remove dirname(history/progress): that is sys_get_temp_dir() (/tmp on GHA).
         $this->harnessFs->remove([
             $this->harnessProjectDir,
             $this->harnessStorageDir,
-            dirname($this->harnessHistoryFile),
-            dirname($this->harnessProgressFile),
+            $this->harnessHistoryFile,
+            $this->harnessProgressFile,
         ]);
     }
 
