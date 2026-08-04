@@ -1,5 +1,37 @@
 # Upgrading
 
+## To 1.10.0
+
+From **1.9.x** — UiKit composition, Twig Extra (REQ-TWIG-004), and Twig-CS-Fixer. Register TwigExtraBundle and NowoUiKitBundle if Flex did not. See CHANGELOG.
+
+```bash
+composer update nowo-tech/site-backup-bundle
+php bin/console cache:clear
+php bin/console assets:install
+```
+
+### UiKit composition (REQ-UI-001-kit)
+
+Panel/setup UI depends on **[UiKitBundle](https://github.com/nowo-tech/UiKitBundle)** (`nowo-tech/ui-kit-bundle` `^1.4`).
+
+1. The package is pulled transitively; run `assets:install`.
+2. Layouts load `asset('css/nowo-ui.css', 'nowo_ui_kit')`.
+3. Optional: set `nowo_ui_kit.css_framework` / `icon_set` in the host. If unset, SiteBackup seeds those keys from panel/setup CSS settings.
+
+### Twig Extra Bundle (REQ-TWIG-004)
+
+Hosts that render this bundle's Twig templates must install:
+
+```bash
+composer require twig/extra-bundle twig/string-extra
+```
+
+and enable `Twig\Extra\TwigExtraBundle\TwigExtraBundle`. Flex recipes usually register it automatically.
+
+### Twig-CS-Fixer (maintainers)
+
+Package maintainers: `composer twig:lint` / `composer twig:fix` use `.twig-cs-fixer.php` over `src/` (and `templates/` when present).
+
 ## To 1.9.0
 
 Minor release: REQ-UI-002 role-based panel access (`access_roles` / `access_checker`). Default panel security is stricter. The ops password gate remains an **additional** layer.

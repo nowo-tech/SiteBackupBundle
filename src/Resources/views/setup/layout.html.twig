@@ -10,6 +10,7 @@
     {# Demo root layout: no parent() (full HTML). Pages do not reopen stylesheets/javascripts. #}
     {% block stylesheets %}
         {% block nowo_ui_styles %}
+            <link href="{{ asset('css/nowo-ui.css', 'nowo_ui_kit') }}" rel="stylesheet">
             {% block nowo_site_backup_styles %}
                 <style>
                     :root {

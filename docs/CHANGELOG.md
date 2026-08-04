@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.10.0] - 2026-08-04
+
+### Added
+- **REQ-TWIG-004:** require `twig/extra-bundle` + `twig/string-extra`; `make check-twig-extra` in `release-check`; demos register `TwigExtraBundle`.
+- **Twig-CS-Fixer:** `vincentlanglet/twig-cs-fixer`, `.twig-cs-fixer.php`, `composer twig:lint` / `twig:fix`.
+
+### Changed
+- **REQ-UI-001-kit:** Requires **[UiKitBundle](https://github.com/nowo-tech/UiKitBundle)** (`nowo-tech/ui-kit-bundle` `^1.4`). Panel/setup layouts load `asset('css/nowo-ui.css', 'nowo_ui_kit')` and import UiKit macros. Extension seeds `nowo_ui_kit` from panel/setup CSS framework settings when the host has not configured UiKit.
+
+### Documentation
+- [INSTALLATION.md](INSTALLATION.md) / [UPGRADING.md](UPGRADING.md) — UiKit, Twig Extra, and Twig-CS-Fixer notes.
+
+[1.10.0]: https://github.com/nowo-tech/SiteBackupBundle/releases/tag/v1.10.0
+
 ## [1.9.1] - 2026-08-04
 
 ### Fixed
