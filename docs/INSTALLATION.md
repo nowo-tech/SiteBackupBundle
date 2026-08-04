@@ -45,6 +45,16 @@ php bin/console nowo:site-backup:hash-password
 
 Put the hash in `nowo_site_backup.security.password_hash` or `SITE_BACKUP_PASSWORD_HASH`.
 
+## Twig Extra Bundle (REQ-TWIG-004)
+
+This package ships Twig templates. Host applications **must** install and enable Twig Extra:
+
+```bash
+composer require twig/extra-bundle twig/string-extra
+```
+
+Register `Twig\Extra\TwigExtraBundle\TwigExtraBundle` in `config/bundles.php` (Flex usually does this). Demos already include the same stack. The package `release-check` runs `make check-twig-extra` to guard this contract.
+
 ## Next steps
 
 See [CONFIGURATION.md](CONFIGURATION.md), [USAGE.md](USAGE.md), and [SETUP-WIZARD.md](SETUP-WIZARD.md).

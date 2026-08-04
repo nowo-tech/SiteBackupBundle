@@ -10,6 +10,7 @@
     {# Demo root layout: no parent() (full HTML). Pages do not reopen stylesheets/javascripts. #}
     {% block stylesheets %}
         {% block nowo_ui_styles %}
+            <link href="{{ asset('css/nowo-ui.css', 'nowo_ui_kit') }}" rel="stylesheet">
             <style>
                 .nowo-site-backup-panel body,
                 .nowo-ui-body { font-family: system-ui, sans-serif; margin: 0; background: #f8fafc; color: #0f172a; }

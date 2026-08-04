@@ -1,4 +1,6 @@
 {% extends nowo_site_backup_panel_layout_template %}
+{% import '@NowoUiKitBundle/macros/ui.html.twig' as ui %}
+{% set _sbb_fw = nowo_site_backup_css_framework|default('custom') %}
 
 {% block nowo_ui_document_title %}Site Backup panel{% endblock %}
 
@@ -9,7 +11,7 @@
         <input type="hidden" name="_csrf_token" value="{{ csrfToken }}">
         <input type="hidden" name="action" value="create">
         <label>Label <input type="text" name="label" placeholder="pre-deploy"></label>
-        <button type="submit" class="nowo-ui-btn">Create integral backup</button>
+        <button type="submit" class="{{ ui.btn('primary', null, _sbb_fw) }} nowo-ui-btn">Create integral backup</button>
     </form>
 </section>
 
