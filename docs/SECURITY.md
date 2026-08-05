@@ -8,6 +8,7 @@
 - [Secrets & cryptography](#secrets-cryptography)
 - [Logging](#logging)
 - [Dependency and updates](#dependency-and-updates)
+- [Firewall / `access_control` (host app)](#firewall--access_control-host-app)
 - [Release security checklist (12.4.1)](#release-security-checklist-1241)
 
 ## Scope
@@ -47,6 +48,24 @@ History JSONL stores action, actor, backup id, messages — avoid putting secret
 ## Dependency and updates
 
 Run `composer audit` before releases. See checklist 12.4.1 below.
+
+## Firewall / `access_control` (host app)
+
+The bundle's own guards are **fail-closed** (roles, password hash, CSRF). Still configure Symfony Security so panel and setup URLs are not anonymously reachable:
+
+```yaml
+# config/packages/security.yaml
+security:
+    access_control:
+        - { path: ^/_site_backup, roles: ROLE_ADMIN }
+        # Setup wizard — only while setup is required; optional setup_token is additional
+        - { path: ^/_setup, roles: ROLE_ADMIN }
+```
+
+- `/_site_backup` — admin panel (create/delete/restore). Match `ROLE_ADMIN` (or your `security.access_roles`).
+- `/_setup` — setup wizard routes. Restrict similarly; prefer disabling or blocking after setup completes. See [INSTALLATION.md](INSTALLATION.md) and [SETUP-WIZARD.md](SETUP-WIZARD.md).
+
+Progress JSON used by the restore loading UI may need to stay reachable during an active restore — do not open the full panel anonymously for that reason.
 
 ## Release security checklist (12.4.1)
 

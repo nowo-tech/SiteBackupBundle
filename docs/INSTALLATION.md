@@ -5,6 +5,7 @@
 - [Requirements](#requirements)
 - [Composer](#composer)
 - [Routes](#routes)
+- [Firewall / access control](#firewall--access-control)
 - [Panel password (required by default)](#panel-password-required-by-default)
 - [Next steps](#next-steps)
 
@@ -31,6 +32,20 @@ composer require nowo-tech/site-backup-bundle
 nowo_site_backup:
     resource: '@NowoSiteBackupBundle/Resources/config/routes.yaml'
 ```
+
+## Firewall / access control
+
+Protect the admin panel and setup wizard in the host application:
+
+```yaml
+# config/packages/security.yaml
+security:
+    access_control:
+        - { path: ^/_site_backup, roles: ROLE_ADMIN }
+        - { path: ^/_setup, roles: ROLE_ADMIN }
+```
+
+`/_setup` is only meaningful while setup detectors say setup is required; keep it locked down (and remove or block after go-live). Bundle-level role/password/CSRF checks are fail-closed but do not replace Symfony `access_control`. See [SECURITY.md](SECURITY.md).
 
 ## Panel password (required by default)
 
