@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.10.1] - 2026-08-07
+
+### Documentation
+- **SECURITY:** host firewall / `access_control` examples for panel (`/_site_backup`) and setup (`/_setup`).
+
+### Fixed
+- **REQ-GIT-001:** removed Cursor co-author trailers from git history (CI `git-hygiene`).
+
+[1.10.1]: https://github.com/nowo-tech/SiteBackupBundle/releases/tag/v1.10.1
+
 ## [1.10.0] - 2026-08-04
 
 ### Added

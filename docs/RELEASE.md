@@ -1,6 +1,6 @@
 # Release
 
-Current stable target: **v1.9.0**.
+Current stable target: **v1.10.1**.
 
 ## Checklist
 
@@ -12,6 +12,18 @@ Current stable target: **v1.9.0**.
 6. Tag the commit `vX.Y.Z`.
 7. Push the branch and the tag to `git@github.com:nowo-tech/SiteBackupBundle.git` — `.github/workflows/release.yml` creates the GitHub Release from the tag + changelog entry.
 8. Confirm [Packagist](https://packagist.org/packages/nowo-tech/site-backup-bundle) picks up the tag (submit the GitHub repo once if the package is new).
+
+
+## Example: v1.10.1
+
+```bash
+make release-check
+git add docs/CHANGELOG.md docs/UPGRADING.md docs/RELEASE.md
+git commit -m "Release v1.10.1: SECURITY firewall docs and REQ-GIT-001 history hygiene."
+git tag -a v1.10.1 -m "Release v1.10.1"
+git push origin main
+git push origin v1.10.1
+```
 
 ## Example: v1.9.0
 

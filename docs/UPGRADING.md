@@ -1,5 +1,13 @@
 # Upgrading
 
+## To 1.10.1
+
+Patch release: documentation and git-hygiene only. No config or API changes from **1.10.0**.
+
+```bash
+composer update nowo-tech/site-backup-bundle
+```
+
 ## To 1.10.0
 
 From **1.9.x** — UiKit composition, Twig Extra (REQ-TWIG-004), and Twig-CS-Fixer. Register TwigExtraBundle and NowoUiKitBundle if Flex did not. See CHANGELOG.
