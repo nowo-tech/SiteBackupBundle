@@ -20,6 +20,7 @@ use const PASSWORD_DEFAULT;
 
 final class SiteBackupPanelControllerExtendedTest extends TestCase
 {
+    use CreatesFormFactory;
     use CreatesSiteBackupTestHarness;
 
     protected function setUp(): void
@@ -45,6 +46,7 @@ final class SiteBackupPanelControllerExtendedTest extends TestCase
         return new SiteBackupPanelController(
             $manager,
             $gate,
+            $this->createFormFactory($csrf),
             $twig,
             ['panel_index' => 'index', 'panel_login' => 'login', 'panel_history' => 'history'],
             '/_site_backup',
@@ -73,6 +75,7 @@ final class SiteBackupPanelControllerExtendedTest extends TestCase
         $controllerCsrf = new SiteBackupPanelController(
             $this->createManager(),
             new PasswordSiteBackupAccessGate(password_hash('secret', PASSWORD_DEFAULT), true),
+            $this->createFormFactory($csrf),
             $this->createMock(Environment::class),
             ['panel_index' => 'index', 'panel_login' => 'login', 'panel_history' => 'history'],
             '/_site_backup',
@@ -115,6 +118,7 @@ final class SiteBackupPanelControllerExtendedTest extends TestCase
         $controller = new SiteBackupPanelController(
             $this->createManager(),
             new PasswordSiteBackupAccessGate(null, false),
+            $this->createFormFactory($csrf),
             $twig,
             ['panel_index' => 'index', 'panel_login' => 'login', 'panel_history' => 'history'],
             '/_site_backup',
@@ -134,6 +138,7 @@ final class SiteBackupPanelControllerExtendedTest extends TestCase
         $controller = new SiteBackupPanelController(
             $this->createManager(),
             new PasswordSiteBackupAccessGate(null, false),
+            $this->createFormFactory(),
             $this->createMock(Environment::class),
             ['panel_index' => 'index', 'panel_login' => 'login', 'panel_history' => 'history'],
             '/_site_backup',
@@ -151,6 +156,7 @@ final class SiteBackupPanelControllerExtendedTest extends TestCase
         $controller = new SiteBackupPanelController(
             $this->createManager(),
             new PasswordSiteBackupAccessGate(null, false),
+            $this->createFormFactory(),
             $this->createMock(Environment::class),
             ['panel_index' => 'index', 'panel_login' => 'login', 'panel_history' => 'history'],
             '/_site_backup',
@@ -172,6 +178,7 @@ final class SiteBackupPanelControllerExtendedTest extends TestCase
         $controller = new SiteBackupPanelController(
             $this->createManager(),
             new PasswordSiteBackupAccessGate(null, false),
+            $this->createFormFactory(),
             $twig,
             ['panel_index' => 'index', 'panel_login' => 'login', 'panel_history' => 'history'],
             '/_site_backup',
