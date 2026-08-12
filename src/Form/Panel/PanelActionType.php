@@ -9,6 +9,8 @@ use Symfony\Component\Form\Extension\Core\Type\HiddenType;
 use Symfony\Component\Form\FormBuilderInterface;
 use Symfony\Component\OptionsResolver\OptionsResolver;
 
+use function is_string;
+
 final class PanelActionType extends AbstractSiteBackupFormType
 {
     public function buildForm(FormBuilderInterface $builder, array $options): void
@@ -29,7 +31,7 @@ final class PanelActionType extends AbstractSiteBackupFormType
         parent::configureOptions($resolver);
 
         $resolver->setDefaults([
-            'action' => '',
+            'action'    => '',
             'backup_id' => null,
         ]);
         $resolver->setAllowedTypes('action', 'string');

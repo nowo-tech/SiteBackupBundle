@@ -73,13 +73,13 @@ final class SiteBackupPanelController
                 } else {
                     try {
                         $success = match ($submittedAction) {
-                            'create' => $this->handleCreate($request),
-                            'delete' => $this->handleDelete($request),
-                            'verify' => $this->handleVerify($request),
-                            'restore' => $this->handleRestore($request),
+                            'create'        => $this->handleCreate($request),
+                            'delete'        => $this->handleDelete($request),
+                            'verify'        => $this->handleVerify($request),
+                            'restore'       => $this->handleRestore($request),
                             'clear_restore' => $this->clearRestore(),
-                            'logout' => null,
-                            default => null,
+                            'logout'        => null,
+                            default         => null,
                         };
                         if ($submittedAction === 'logout') {
                             $this->accessGate->logout($request);
@@ -96,17 +96,17 @@ final class SiteBackupPanelController
         $backups = $this->manager->listBackups();
 
         return new Response($this->twig->render($this->templates['panel_index'], [
-            'backups' => $backups,
-            'progress' => $this->manager->getRestoreProgress(),
-            'history' => $this->manager->history(30),
-            'pathPrefix' => $this->pathPrefix,
-            'error' => $error,
-            'success' => $success,
-            'csrfToken' => $this->csrfTokenManager?->getToken('nowo_site_backup_panel')->getValue(),
-            'createForm' => $this->resolveCreateFormView($submittedAction, $submittedForm),
+            'backups'          => $backups,
+            'progress'         => $this->manager->getRestoreProgress(),
+            'history'          => $this->manager->history(30),
+            'pathPrefix'       => $this->pathPrefix,
+            'error'            => $error,
+            'success'          => $success,
+            'csrfToken'        => $this->csrfTokenManager?->getToken('nowo_site_backup_panel')->getValue(),
+            'createForm'       => $this->resolveCreateFormView($submittedAction, $submittedForm),
             'clearRestoreForm' => $this->createPanelActionForm('clear_restore')->createView(),
-            'logoutForm' => $this->createPanelActionForm('logout')->createView(),
-            'backupForms' => $this->createBackupFormViews($backups),
+            'logoutForm'       => $this->createPanelActionForm('logout')->createView(),
+            'backupForms'      => $this->createBackupFormViews($backups),
         ]));
     }
 
@@ -130,7 +130,7 @@ final class SiteBackupPanelController
         }
 
         return new Response($this->twig->render($this->templates['panel_history'], [
-            'history' => $this->manager->history(100),
+            'history'    => $this->manager->history(100),
             'pathPrefix' => $this->pathPrefix,
         ]));
     }
@@ -156,12 +156,12 @@ final class SiteBackupPanelController
         }
 
         return new Response($this->twig->render($this->templates['panel_login'], [
-            'pathPrefix' => $this->pathPrefix,
-            'error' => $error,
+            'pathPrefix'        => $this->pathPrefix,
+            'error'             => $error,
             'protectionEnabled' => $this->accessGate->isProtectionEnabled(),
-            'misconfigured' => $this->accessGate->isMisconfigured(),
-            'csrfToken' => $this->csrfTokenManager?->getToken('nowo_site_backup_login')->getValue(),
-            'loginForm' => $loginForm->createView(),
+            'misconfigured'     => $this->accessGate->isMisconfigured(),
+            'csrfToken'         => $this->csrfTokenManager?->getToken('nowo_site_backup_login')->getValue(),
+            'loginForm'         => $loginForm->createView(),
         ]), $error || $this->accessGate->isMisconfigured() ? 401 : 200);
     }
 
@@ -232,11 +232,11 @@ final class SiteBackupPanelController
                 continue;
             }
 
-            $id = $backup->getId();
+            $id         = $backup->getId();
             $views[$id] = [
-                'verify' => $this->createPanelActionForm('verify', $id)->createView(),
+                'verify'  => $this->createPanelActionForm('verify', $id)->createView(),
                 'restore' => $this->createPanelActionForm('restore', $id)->createView(),
-                'delete' => $this->createPanelActionForm('delete', $id)->createView(),
+                'delete'  => $this->createPanelActionForm('delete', $id)->createView(),
             ];
         }
 
@@ -256,7 +256,7 @@ final class SiteBackupPanelController
     private function createPanelActionForm(string $action, ?string $backupId = null): FormInterface
     {
         return $this->formFactory->createNamed('', PanelActionType::class, null, $this->formOptions([
-            'action' => $action,
+            'action'    => $action,
             'backup_id' => $backupId,
         ]));
     }
@@ -264,10 +264,10 @@ final class SiteBackupPanelController
     private function createSubmittedPanelForm(Request $request, string $action): FormInterface
     {
         return match ($action) {
-            'create' => $this->createCreateForm(),
-            'login' => $this->createLoginForm(),
+            'create'                      => $this->createCreateForm(),
+            'login'                       => $this->createLoginForm(),
             'verify', 'restore', 'delete' => $this->createPanelActionForm($action, $request->request->getString('backup_id')),
-            default => $this->createPanelActionForm($action),
+            default                       => $this->createPanelActionForm($action),
         };
     }
 

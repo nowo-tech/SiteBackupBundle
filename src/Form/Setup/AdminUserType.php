@@ -21,7 +21,7 @@ final class AdminUserType extends AbstractSiteBackupFormType
             ])
             ->add('password', PasswordType::class, [
                 'always_empty' => true,
-                'attr' => [
+                'attr'         => [
                     'autocomplete' => 'new-password',
                 ],
             ]);

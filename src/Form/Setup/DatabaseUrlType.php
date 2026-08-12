@@ -16,7 +16,7 @@ final class DatabaseUrlType extends AbstractSiteBackupFormType
         $builder->add('database_url', UrlType::class, [
             'attr' => [
                 'autocomplete' => 'off',
-                'placeholder' => 'postgresql://user:pass@db:5432/app',
+                'placeholder'  => 'postgresql://user:pass@db:5432/app',
             ],
             'required' => $options['db_connection_failed'],
         ]);

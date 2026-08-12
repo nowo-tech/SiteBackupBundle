@@ -13,11 +13,11 @@ abstract class AbstractSiteBackupFormType extends AbstractType
     {
         $resolver->setDefaults([
             'allow_extra_fields' => true,
-            'csrf_field_name' => '_csrf_token',
-            'csrf_protection' => true,
-            'csrf_token_id' => $this->csrfTokenId(),
-            'data_class' => null,
-            'method' => 'POST',
+            'csrf_field_name'    => '_csrf_token',
+            'csrf_protection'    => true,
+            'csrf_token_id'      => $this->csrfTokenId(),
+            'data_class'         => null,
+            'method'             => 'POST',
         ]);
     }
 

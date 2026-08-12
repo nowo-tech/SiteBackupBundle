@@ -25,11 +25,11 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
 use Twig\Environment;
 
+use function array_merge;
 use function hash_equals;
+use function in_array;
 use function is_array;
 use function is_string;
-use function array_merge;
-use function in_array;
 use function json_decode;
 use function method_exists;
 use function rtrim;
@@ -67,17 +67,17 @@ final class SetupWizardController
         if (!$this->isTokenValid($request)) {
             return new Response($this->twig->render($this->templates['setup_token'], $this->setupViewVars([
                 'pathPrefix' => $pathPrefix,
-                'brandName' => $this->brandName,
+                'brandName'  => $this->brandName,
             ])), 403);
         }
 
-        $profile = $request->query->getString('profile') ?: null;
-        $progress = $this->orchestrator->getProgress();
-        $error = null;
-        $reasons = $this->needEvaluator->getReasons();
-        $steps = $this->orchestrator->getSteps($progress->getProfile());
+        $profile     = $request->query->getString('profile') ?: null;
+        $progress    = $this->orchestrator->getProgress();
+        $error       = null;
+        $reasons     = $this->needEvaluator->getReasons();
+        $steps       = $this->orchestrator->getSteps($progress->getProfile());
         $currentStep = $this->findCurrentStep($steps, $progress);
-        $wizardForm = $this->createSetupForm($progress, $currentStep, $reasons);
+        $wizardForm  = $this->createSetupForm($progress, $currentStep, $reasons);
 
         if ($request->isMethod('POST')) {
             if (!$this->csrfTokenManager instanceof CsrfTokenManagerInterface) {
@@ -108,9 +108,9 @@ final class SetupWizardController
                     if ($progress->getPhase() === SetupProgress::PHASE_FAILED) {
                         $error = $progress->getError();
                     }
-                    $steps = $this->orchestrator->getSteps($progress->getProfile());
+                    $steps       = $this->orchestrator->getSteps($progress->getProfile());
                     $currentStep = $this->findCurrentStep($steps, $progress);
-                    $wizardForm = $this->createSetupForm($progress, $currentStep, $reasons);
+                    $wizardForm  = $this->createSetupForm($progress, $currentStep, $reasons);
                 }
             }
         } elseif ($progress->getPhase() === SetupProgress::PHASE_IDLE) {
@@ -118,23 +118,23 @@ final class SetupWizardController
             if ($progress->getPhase() === SetupProgress::PHASE_COMPLETED) {
                 return new RedirectResponse(rtrim($pathPrefix, '/') . '/done');
             }
-            $steps = $this->orchestrator->getSteps($progress->getProfile());
+            $steps       = $this->orchestrator->getSteps($progress->getProfile());
             $currentStep = $this->findCurrentStep($steps, $progress);
-            $wizardForm = $this->createSetupForm($progress, $currentStep, $reasons);
+            $wizardForm  = $this->createSetupForm($progress, $currentStep, $reasons);
         }
 
         return new Response($this->twig->render($this->templates['setup_wizard'], $this->setupViewVars([
-            'pathPrefix' => $pathPrefix,
-            'brandName' => $this->brandName,
-            'progress' => $progress,
-            'steps' => $steps,
+            'pathPrefix'  => $pathPrefix,
+            'brandName'   => $this->brandName,
+            'progress'    => $progress,
+            'steps'       => $steps,
             'currentStep' => $currentStep,
-            'reasons' => $reasons,
-            'error' => $error,
-            'csrfToken' => $this->csrfTokenManager?->getToken('nowo_site_backup_setup')->getValue(),
+            'reasons'     => $reasons,
+            'error'       => $error,
+            'csrfToken'   => $this->csrfTokenManager?->getToken('nowo_site_backup_setup')->getValue(),
             'progressUrl' => rtrim($pathPrefix, '/') . '/api/progress',
             'advanceMode' => $this->orchestrator->getAdvanceMode($progress->getProfile()),
-            'wizardForm' => $wizardForm?->createView(),
+            'wizardForm'  => $wizardForm?->createView(),
         ])));
     }
 
@@ -142,8 +142,8 @@ final class SetupWizardController
     {
         return new Response($this->twig->render($this->templates['setup_done'], $this->setupViewVars([
             'pathPrefix' => $this->effectivePathPrefix(),
-            'brandName' => $this->brandName,
-            'progress' => $this->orchestrator->getProgress(),
+            'brandName'  => $this->brandName,
+            'progress'   => $this->orchestrator->getProgress(),
         ])));
     }
 
@@ -220,8 +220,8 @@ final class SetupWizardController
             return null;
         }
 
-        $stepId = method_exists($currentStep, 'getId') ? $currentStep->getId() : '';
-        $answers = $progress->getAnswers();
+        $stepId   = method_exists($currentStep, 'getId') ? $currentStep->getId() : '';
+        $answers  = $progress->getAnswers();
         $dbFailed = in_array('database connection failed', $reasons, true);
 
         if (str_contains($stepId, 'bootstrap')) {
@@ -232,7 +232,7 @@ final class SetupWizardController
 
         if (str_contains($stepId, 'admin')) {
             return $this->formFactory->createNamed('', AdminUserType::class, [
-                'email' => is_string($answers['admin_email'] ?? null) ? $answers['admin_email'] : '',
+                'email'    => is_string($answers['admin_email'] ?? null) ? $answers['admin_email'] : '',
                 'password' => '',
             ], $this->formOptions());
         }

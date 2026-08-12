@@ -19,8 +19,8 @@ final class PanelLoginType extends AbstractSiteBackupFormType
             ])
             ->add('password', PasswordType::class, [
                 'always_empty' => true,
-                'attr' => [
-                    'autofocus' => true,
+                'attr'         => [
+                    'autofocus'    => true,
                     'autocomplete' => 'current-password',
                 ],
             ]);

@@ -8,6 +8,7 @@ use PHPUnit\Framework\TestCase;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
 
+use function dirname;
 use function file_get_contents;
 use function sprintf;
 use function str_contains;
