@@ -17,6 +17,7 @@ use Twig\Environment;
 
 final class SetupWizardControllerExtendedTest extends TestCase
 {
+    use CreatesFormFactory;
     use CreatesSiteBackupTestHarness;
 
     protected function setUp(): void
@@ -40,6 +41,7 @@ final class SetupWizardControllerExtendedTest extends TestCase
         $controller = new SetupWizardController(
             $orchestrator,
             $evaluator,
+            $this->createFormFactory(),
             $this->createMock(Environment::class),
             ['setup_wizard' => 'wizard', 'setup_done' => 'done', 'setup_token' => 'token'],
             '/_setup',
@@ -69,6 +71,7 @@ final class SetupWizardControllerExtendedTest extends TestCase
         $controller = new SetupWizardController(
             $orchestrator,
             $evaluator,
+            $this->createFormFactory($csrf),
             $twig,
             ['setup_wizard' => 'wizard', 'setup_done' => 'done', 'setup_token' => 'token'],
             '/_setup',
@@ -96,6 +99,7 @@ final class SetupWizardControllerExtendedTest extends TestCase
         $noCsrfManager = new SetupWizardController(
             $orchestrator,
             $evaluator,
+            $this->createFormFactory(),
             $twig,
             ['setup_wizard' => 'wizard', 'setup_done' => 'done', 'setup_token' => 'token'],
             '/_setup',
@@ -125,6 +129,7 @@ final class SetupWizardControllerExtendedTest extends TestCase
         $controller = new SetupWizardController(
             $orchestrator,
             $evaluator,
+            $this->createFormFactory($csrf),
             $twig,
             ['setup_wizard' => 'wizard', 'setup_done' => 'done', 'setup_token' => 'token'],
             '/_setup',
@@ -142,6 +147,7 @@ final class SetupWizardControllerExtendedTest extends TestCase
         $failController = new SetupWizardController(
             $failOrch,
             $evaluator,
+            $this->createFormFactory($csrf),
             $twig,
             ['setup_wizard' => 'wizard', 'setup_done' => 'done', 'setup_token' => 'token'],
             '/_setup',
@@ -158,6 +164,7 @@ final class SetupWizardControllerExtendedTest extends TestCase
         $forbidden = new SetupWizardController(
             $orchestrator,
             $evaluator,
+            $this->createFormFactory($csrf),
             $twig,
             ['setup_wizard' => 'wizard', 'setup_done' => 'done', 'setup_token' => 'token'],
             '/_setup',
@@ -171,6 +178,7 @@ final class SetupWizardControllerExtendedTest extends TestCase
         $headerController = new SetupWizardController(
             $orchestrator,
             $evaluator,
+            $this->createFormFactory($csrf),
             $twig,
             ['setup_wizard' => 'wizard', 'setup_done' => 'done', 'setup_token' => 'token'],
             '/_setup',

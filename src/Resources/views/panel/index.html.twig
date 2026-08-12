@@ -7,25 +7,24 @@
 {% block nowo_site_backup_panel_content %}
 <section class="nowo-ui-card card">
     <h2>Create backup</h2>
-    <form method="post" class="nowo-ui-form">
-        <input type="hidden" name="_csrf_token" value="{{ csrfToken }}">
-        <input type="hidden" name="action" value="create">
-        <label>Label <input type="text" name="label" placeholder="pre-deploy"></label>
+    {{ form_start(createForm, {attr: {class: 'nowo-ui-form'}}) }}
+        <div>
+            {{ form_label(createForm.label, 'Label') }}
+            {{ form_widget(createForm.label, {attr: {placeholder: 'pre-deploy'}}) }}
+        </div>
         <button type="submit" class="{{ ui.btn('primary', null, _sbb_fw) }} nowo-ui-btn">Create integral backup</button>
-    </form>
+    {{ form_end(createForm) }}
 </section>
 
 <section class="nowo-ui-card card">
     <h2>Restore progress</h2>
-    <p>Phase: <strong>{{ progress.phase }}</strong> — {{ progress.percent|number_format(1) }}%</p>
+    <p>Phase: <strong>{{ progress.phase }}</strong> - {{ progress.percent|number_format(1) }}%</p>
     <p>{{ progress.message }}</p>
     {% if progress.error %}<p class="nowo-ui-flash nowo-ui-flash--err">{{ progress.error }}</p>{% endif %}
     {% if progress.phase in ['completed', 'failed'] %}
-        <form method="post" class="nowo-ui-form">
-            <input type="hidden" name="_csrf_token" value="{{ csrfToken }}">
-            <input type="hidden" name="action" value="clear_restore">
+        {{ form_start(clearRestoreForm, {attr: {class: 'nowo-ui-form'}}) }}
             <button type="submit" class="nowo-ui-btn">Clear status</button>
-        </form>
+        {{ form_end(clearRestoreForm) }}
     {% endif %}
 </section>
 
@@ -46,24 +45,15 @@
                     <td>{{ b.sizeBytes }}</td>
                     <td>{{ b.label }}</td>
                     <td>
-                        <form class="nowo-ui-form--inline inline" method="post">
-                            <input type="hidden" name="_csrf_token" value="{{ csrfToken }}">
-                            <input type="hidden" name="action" value="verify">
-                            <input type="hidden" name="backup_id" value="{{ b.id }}">
+                        {{ form_start(backupForms[b.id].verify, {attr: {class: 'nowo-ui-form--inline inline'}}) }}
                             <button type="submit" class="nowo-ui-btn">Verify</button>
-                        </form>
-                        <form class="nowo-ui-form--inline inline" method="post" onsubmit="return confirm('Restore this backup now? Visitors will see the loading page.');">
-                            <input type="hidden" name="_csrf_token" value="{{ csrfToken }}">
-                            <input type="hidden" name="action" value="restore">
-                            <input type="hidden" name="backup_id" value="{{ b.id }}">
+                        {{ form_end(backupForms[b.id].verify) }}
+                        {{ form_start(backupForms[b.id].restore, {attr: {class: 'nowo-ui-form--inline inline', onsubmit: "return confirm('Restore this backup now? Visitors will see the loading page.');"}}) }}
                             <button type="submit" class="nowo-ui-btn">Restore</button>
-                        </form>
-                        <form class="nowo-ui-form--inline inline" method="post" onsubmit="return confirm('Delete backup?');">
-                            <input type="hidden" name="_csrf_token" value="{{ csrfToken }}">
-                            <input type="hidden" name="action" value="delete">
-                            <input type="hidden" name="backup_id" value="{{ b.id }}">
+                        {{ form_end(backupForms[b.id].restore) }}
+                        {{ form_start(backupForms[b.id].delete, {attr: {class: 'nowo-ui-form--inline inline', onsubmit: "return confirm('Delete backup?');"}}) }}
                             <button class="nowo-ui-btn nowo-ui-btn--danger danger" type="submit">Delete</button>
-                        </form>
+                        {{ form_end(backupForms[b.id].delete) }}
                     </td>
                 </tr>
             {% endfor %}
@@ -72,9 +62,7 @@
     {% endif %}
 </section>
 
-<form method="post" class="nowo-ui-form">
-    <input type="hidden" name="_csrf_token" value="{{ csrfToken }}">
-    <input type="hidden" name="action" value="logout">
+{{ form_start(logoutForm, {attr: {class: 'nowo-ui-form'}}) }}
     <button type="submit" class="nowo-ui-btn">Logout</button>
-</form>
+{{ form_end(logoutForm) }}
 {% endblock %}

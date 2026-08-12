@@ -436,6 +436,9 @@ Routes are registered by `SetupRouteLoader` (type `nowo_site_backup_setup`) inst
 
 ## Twig overrides
 
+REQ-TWIG-005: bundle setup partials now use Symfony Forms end-to-end. If you override setup wizard partials or provide a custom waiting-input template, keep the form shell on `form_*` helpers and preserve the flat request field names expected by setup steps (`action`, `bootstrap_mode`, `database_url`, `email`, `password`, `sql_import_path`, ...).
+
+
 **Prefer `setup.layout_template`** (REQ-TWIG-001 / REQ-UI-001): keep wizard/done/token markup in the package; only supply a host chrome shell that defines block `nowo_site_backup_content` (and optionally `nowo_ui_content`). Pages extend Twig global `nowo_site_backup_setup_layout_template`.
 
 ```yaml

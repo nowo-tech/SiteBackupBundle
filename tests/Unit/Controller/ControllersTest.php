@@ -23,6 +23,7 @@ use const PASSWORD_DEFAULT;
 
 final class ControllersTest extends TestCase
 {
+    use CreatesFormFactory;
     use CreatesSiteBackupTestHarness;
 
     protected function setUp(): void
@@ -50,6 +51,7 @@ final class ControllersTest extends TestCase
         $controller = new SiteBackupPanelController(
             $manager,
             $gate,
+            $this->createFormFactory($csrf),
             $twig,
             ['panel_index' => 'index', 'panel_login' => 'login', 'panel_history' => 'history'],
             '/_site_backup',
@@ -115,6 +117,7 @@ final class ControllersTest extends TestCase
         $controller = new SiteBackupPanelController(
             $this->createManager(),
             $gate,
+            $this->createFormFactory(),
             $twig,
             ['panel_index' => 'index', 'panel_login' => 'login', 'panel_history' => 'history'],
             '/_site_backup',
@@ -132,6 +135,7 @@ final class ControllersTest extends TestCase
         $controller = new SiteBackupPanelController(
             $this->createManager(),
             $gate,
+            $this->createFormFactory(),
             $twig,
             ['panel_index' => 'index', 'panel_login' => 'login', 'panel_history' => 'history'],
             '/_site_backup',
@@ -159,6 +163,7 @@ final class ControllersTest extends TestCase
         $controller = new SetupWizardController(
             $orchestrator,
             $evaluator,
+            $this->createFormFactory($csrf),
             $twig,
             ['setup_wizard' => 'wizard', 'setup_done' => 'done', 'setup_token' => 'token'],
             '/_setup',

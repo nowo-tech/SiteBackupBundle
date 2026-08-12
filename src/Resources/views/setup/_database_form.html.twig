@@ -3,24 +3,22 @@
     {% set db_connection_failed = 'database connection failed' in reasons %}
 {% endif %}
 
-<form method="post">
-    <input type="hidden" name="_csrf_token" value="{{ csrfToken }}">
+{{ form_start(form) }}
     {% if db_connection_failed %}
         <p class="warn" role="alert">{{ 'setup.reason.db_connection_form'|trans({}, 'NowoSiteBackupBundle') }}</p>
     {% endif %}
-    <label for="nowo-sbb-database-url">DATABASE_URL</label>
-    <input
-        id="nowo-sbb-database-url"
-        type="url"
-        name="database_url"
-        placeholder="postgresql://user:pass@db:5432/app"
-        {% if db_connection_failed %}required{% endif %}
-        autocomplete="off"
-    >
+    {{ form_label(form.database_url, 'DATABASE_URL', {label_attr: {for: 'nowo-sbb-database-url'}}) }}
+    {{ form_widget(form.database_url, {
+        id: 'nowo-sbb-database-url',
+        attr: {
+            autocomplete: 'off',
+            placeholder: 'postgresql://user:pass@db:5432/app',
+        },
+    }) }}
     <div class="actions">
         <button type="submit">{{ 'setup.database.save'|trans({}, 'NowoSiteBackupBundle') }}</button>
         {% if not db_connection_failed %}
             <button class="secondary" type="submit" name="action" value="skip">{{ 'setup.database.skip'|trans({}, 'NowoSiteBackupBundle') }}</button>
         {% endif %}
     </div>
-</form>
+{{ form_end(form) }}

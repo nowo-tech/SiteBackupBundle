@@ -5,23 +5,33 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\Controller;
 
 use JsonException;
+use Nowo\SiteBackupBundle\Form\Setup\AdminUserType;
+use Nowo\SiteBackupBundle\Form\Setup\BootstrapModeType;
+use Nowo\SiteBackupBundle\Form\Setup\ContinueType;
+use Nowo\SiteBackupBundle\Form\Setup\DatabaseUrlType;
+use Nowo\SiteBackupBundle\Form\Setup\ResetType;
+use Nowo\SiteBackupBundle\Form\Setup\SampleDataType;
 use Nowo\SiteBackupBundle\Model\SetupProgress;
 use Nowo\SiteBackupBundle\Routing\SetupPathPrefixResolver;
 use Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator;
 use Nowo\SiteBackupBundle\Setup\SetupOrchestrator;
 use Nowo\SiteBackupBundle\Setup\SetupStepInput;
+use Symfony\Component\Form\FormFactoryInterface;
+use Symfony\Component\Form\FormInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
-use Symfony\Component\Security\Csrf\CsrfToken;
 use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
 use Twig\Environment;
 
 use function hash_equals;
 use function is_array;
 use function is_string;
+use function array_merge;
+use function in_array;
 use function json_decode;
+use function method_exists;
 use function rtrim;
 use function str_contains;
 
@@ -35,6 +45,7 @@ final class SetupWizardController
     public function __construct(
         private readonly SetupOrchestrator $orchestrator,
         private readonly SetupNeedEvaluator $needEvaluator,
+        private readonly FormFactoryInterface $formFactory,
         private readonly Environment $twig,
         private readonly array $templates,
         private readonly string $pathPrefix,
@@ -56,32 +67,50 @@ final class SetupWizardController
         if (!$this->isTokenValid($request)) {
             return new Response($this->twig->render($this->templates['setup_token'], $this->setupViewVars([
                 'pathPrefix' => $pathPrefix,
-                'brandName'  => $this->brandName,
+                'brandName' => $this->brandName,
             ])), 403);
         }
 
-        $profile  = $request->query->getString('profile') ?: null;
+        $profile = $request->query->getString('profile') ?: null;
         $progress = $this->orchestrator->getProgress();
-        $error    = null;
+        $error = null;
+        $reasons = $this->needEvaluator->getReasons();
+        $steps = $this->orchestrator->getSteps($progress->getProfile());
+        $currentStep = $this->findCurrentStep($steps, $progress);
+        $wizardForm = $this->createSetupForm($progress, $currentStep, $reasons);
 
         if ($request->isMethod('POST')) {
-            if (!$this->isCsrfValid($request)) {
+            if (!$this->csrfTokenManager instanceof CsrfTokenManagerInterface) {
                 $error = 'Invalid CSRF token.';
+            } elseif (!$wizardForm instanceof FormInterface) {
+                $error = 'Invalid setup request.';
             } else {
-                $postedProfile = $request->request->getString('profile');
-                if ($postedProfile !== '') {
-                    $profile = $postedProfile;
+                $wizardForm->handleRequest($request);
+                if (!$wizardForm->isSubmitted()) {
+                    $wizardForm->submit($request->request->all(), false);
                 }
-                $input = new SetupStepInput($request->request->all());
-                if ($request->request->getString('reset') === '1') {
-                    $this->orchestrator->resetProgress();
-                }
-                $progress = $this->orchestrator->advance($profile, $input);
-                if ($progress->getPhase() === SetupProgress::PHASE_COMPLETED) {
-                    return new RedirectResponse(rtrim($pathPrefix, '/') . '/done');
-                }
-                if ($progress->getPhase() === SetupProgress::PHASE_FAILED) {
-                    $error = $progress->getError();
+
+                if (!$wizardForm->isSubmitted() || !$wizardForm->isValid()) {
+                    $error = 'Invalid CSRF token.';
+                } else {
+                    $postedProfile = $request->request->getString('profile');
+                    if ($postedProfile !== '') {
+                        $profile = $postedProfile;
+                    }
+                    $input = new SetupStepInput($request->request->all());
+                    if ($request->request->getString('reset') === '1') {
+                        $this->orchestrator->resetProgress();
+                    }
+                    $progress = $this->orchestrator->advance($profile, $input);
+                    if ($progress->getPhase() === SetupProgress::PHASE_COMPLETED) {
+                        return new RedirectResponse(rtrim($pathPrefix, '/') . '/done');
+                    }
+                    if ($progress->getPhase() === SetupProgress::PHASE_FAILED) {
+                        $error = $progress->getError();
+                    }
+                    $steps = $this->orchestrator->getSteps($progress->getProfile());
+                    $currentStep = $this->findCurrentStep($steps, $progress);
+                    $wizardForm = $this->createSetupForm($progress, $currentStep, $reasons);
                 }
             }
         } elseif ($progress->getPhase() === SetupProgress::PHASE_IDLE) {
@@ -89,31 +118,23 @@ final class SetupWizardController
             if ($progress->getPhase() === SetupProgress::PHASE_COMPLETED) {
                 return new RedirectResponse(rtrim($pathPrefix, '/') . '/done');
             }
+            $steps = $this->orchestrator->getSteps($progress->getProfile());
+            $currentStep = $this->findCurrentStep($steps, $progress);
+            $wizardForm = $this->createSetupForm($progress, $currentStep, $reasons);
         }
 
-        $steps       = $this->orchestrator->getSteps($progress->getProfile());
-        $currentStep = null;
-        foreach ($steps as $step) {
-            if ($step->getId() === $progress->getCurrentStepId()) {
-                $currentStep = $step;
-                break;
-            }
-        }
-
-        // Always render the wizard shell. Form steps use partials inside setup_body
-        // (do not switch to admin/sample/database templates that extend the full HTML
-        // document — that path is redundant and fragile with Twig yield + inspectors).
         return new Response($this->twig->render($this->templates['setup_wizard'], $this->setupViewVars([
-            'pathPrefix'  => $pathPrefix,
-            'brandName'   => $this->brandName,
-            'progress'    => $progress,
-            'steps'       => $steps,
+            'pathPrefix' => $pathPrefix,
+            'brandName' => $this->brandName,
+            'progress' => $progress,
+            'steps' => $steps,
             'currentStep' => $currentStep,
-            'reasons'     => $this->needEvaluator->getReasons(),
-            'error'       => $error,
-            'csrfToken'   => $this->csrfTokenManager?->getToken('nowo_site_backup_setup')->getValue(),
+            'reasons' => $reasons,
+            'error' => $error,
+            'csrfToken' => $this->csrfTokenManager?->getToken('nowo_site_backup_setup')->getValue(),
             'progressUrl' => rtrim($pathPrefix, '/') . '/api/progress',
             'advanceMode' => $this->orchestrator->getAdvanceMode($progress->getProfile()),
+            'wizardForm' => $wizardForm?->createView(),
         ])));
     }
 
@@ -121,8 +142,8 @@ final class SetupWizardController
     {
         return new Response($this->twig->render($this->templates['setup_done'], $this->setupViewVars([
             'pathPrefix' => $this->effectivePathPrefix(),
-            'brandName'  => $this->brandName,
-            'progress'   => $this->orchestrator->getProgress(),
+            'brandName' => $this->brandName,
+            'progress' => $this->orchestrator->getProgress(),
         ])));
     }
 
@@ -147,7 +168,7 @@ final class SetupWizardController
                     $payload = $decoded;
                 }
             } catch (JsonException) {
-                // keep form/request bag
+                // Keep form/request bag payload on malformed JSON.
             }
         }
 
@@ -164,6 +185,73 @@ final class SetupWizardController
         return $this->pathPrefixResolver?->resolve() ?? $this->pathPrefix;
     }
 
+    /**
+     * @param array<int, object> $steps
+     */
+    private function findCurrentStep(array $steps, SetupProgress $progress): ?object
+    {
+        foreach ($steps as $step) {
+            if (!method_exists($step, 'getId')) {
+                continue;
+            }
+
+            if ($step->getId() === $progress->getCurrentStepId()) {
+                return $step;
+            }
+        }
+
+        return null;
+    }
+
+    /**
+     * @param list<string> $reasons
+     */
+    private function createSetupForm(SetupProgress $progress, ?object $currentStep, array $reasons): ?FormInterface
+    {
+        if ($progress->getPhase() === SetupProgress::PHASE_FAILED) {
+            return $this->formFactory->createNamed('', ResetType::class, null, $this->formOptions());
+        }
+
+        if ($progress->getPhase() !== SetupProgress::PHASE_WAITING) {
+            return $this->formFactory->createNamed('', ContinueType::class, null, $this->formOptions());
+        }
+
+        if ($currentStep === null) {
+            return null;
+        }
+
+        $stepId = method_exists($currentStep, 'getId') ? $currentStep->getId() : '';
+        $answers = $progress->getAnswers();
+        $dbFailed = in_array('database connection failed', $reasons, true);
+
+        if (str_contains($stepId, 'bootstrap')) {
+            return $this->formFactory->createNamed('', BootstrapModeType::class, [
+                'sql_import_path' => is_string($answers['sql_import_path'] ?? null) ? $answers['sql_import_path'] : '',
+            ], $this->formOptions());
+        }
+
+        if (str_contains($stepId, 'admin')) {
+            return $this->formFactory->createNamed('', AdminUserType::class, [
+                'email' => is_string($answers['admin_email'] ?? null) ? $answers['admin_email'] : '',
+                'password' => '',
+            ], $this->formOptions());
+        }
+
+        if (str_contains($stepId, 'sample')) {
+            return $this->formFactory->createNamed('', SampleDataType::class, null, $this->formOptions());
+        }
+
+        if (str_contains($stepId, 'database_url')) {
+            return $this->formFactory->createNamed('', DatabaseUrlType::class, [
+                'database_url' => is_string($answers['database_url'] ?? null) ? $answers['database_url'] : '',
+            ], $this->formOptions([
+                'db_connection_failed' => $dbFailed,
+            ]));
+        }
+
+        return $this->formFactory->createNamed('', ContinueType::class, null, $this->formOptions());
+    }
+
     private function isTokenValid(Request $request): bool
     {
         if ($this->setupToken === null || $this->setupToken === '') {
@@ -178,16 +266,14 @@ final class SetupWizardController
         return is_string($provided) && $provided !== '' && hash_equals($this->setupToken, $provided);
     }
 
-    private function isCsrfValid(Request $request): bool
+    /**
+     * @param array<string, mixed> $options
+     *
+     * @return array<string, mixed>
+     */
+    private function formOptions(array $options = []): array
     {
-        // Fail closed: setup POSTs require CSRF (REQ-UI-002 / SEC-004).
-        if (!$this->csrfTokenManager instanceof CsrfTokenManagerInterface) {
-            return false;
-        }
-
-        return $this->csrfTokenManager->isTokenValid(
-            new CsrfToken('nowo_site_backup_setup', $request->request->getString('_csrf_token')),
-        );
+        return array_merge(['csrf_protection' => $this->csrfTokenManager instanceof CsrfTokenManagerInterface], $options);
     }
 
     /**

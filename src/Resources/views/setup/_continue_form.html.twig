@@ -1,8 +1,6 @@
 {% if currentStep.description|default(null) %}
     <p class="sub">{{ currentStep.description|trans({}, currentStep.labelDomain|default('NowoSiteBackupBundle')) }}</p>
 {% endif %}
-<form method="post">
-    <input type="hidden" name="_csrf_token" value="{{ csrfToken }}">
-    <input type="hidden" name="action" value="continue">
+{{ form_start(form) }}
     <button type="submit">{{ 'setup.wizard.continue'|trans({}, 'NowoSiteBackupBundle') }}</button>
-</form>
+{{ form_end(form) }}

@@ -1,6 +1,6 @@
 {% extends nowo_site_backup_panel_layout_template %}
 
-{% block nowo_ui_document_title %}Login — Site Backup{% endblock %}
+{% block nowo_ui_document_title %}Login - Site Backup{% endblock %}
 
 {% block nowo_site_backup_panel_content %}
 <section class="nowo-ui-card card">
@@ -8,14 +8,15 @@
     {% if misconfigured|default(false) %}
         <p class="nowo-ui-flash nowo-ui-flash--err error">Password protection is enabled but <code>security.password_hash</code> is not set. Configure a hash (see <code>nowo:site-backup:hash-password</code>) before using the panel.</p>
     {% elseif not protectionEnabled %}
-        <p>Password protection is disabled. The panel is open to whoever can reach this URL — enable a hash in production.</p>
+        <p>Password protection is disabled. The panel is open to whoever can reach this URL - enable a hash in production.</p>
     {% else %}
-        <form method="post" class="nowo-ui-form">
-            <input type="hidden" name="_csrf_token" value="{{ csrfToken }}">
-            <input type="hidden" name="action" value="login">
-            <label>Password <input type="password" name="password" required autofocus></label>
+        {{ form_start(loginForm, {attr: {class: 'nowo-ui-form'}}) }}
+            <div>
+                {{ form_label(loginForm.password, 'Password') }}
+                {{ form_widget(loginForm.password, {attr: {autofocus: true, autocomplete: 'current-password'}}) }}
+            </div>
             <button type="submit" class="nowo-ui-btn">Sign in</button>
-        </form>
+        {{ form_end(loginForm) }}
     {% endif %}
 </section>
 {% endblock %}

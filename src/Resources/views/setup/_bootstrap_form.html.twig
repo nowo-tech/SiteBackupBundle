@@ -1,13 +1,12 @@
 {% if progress.phase == 'waiting_input' %}
-<form method="post">
-    <input type="hidden" name="_csrf_token" value="{{ csrfToken }}">
+{{ form_start(form) }}
     <p>{{ 'setup.bootstrap.prompt'|trans({}, 'NowoSiteBackupBundle') }}</p>
-    <label for="sql_import_path">{{ 'setup.bootstrap.sql_path'|trans({}, 'NowoSiteBackupBundle') }}</label>
-    <input type="text" id="sql_import_path" name="sql_import_path" placeholder="var/site-backup/full-import.sql" value="{{ progress.answers.sql_import_path|default('') }}">
+    {{ form_label(form.sql_import_path, 'setup.bootstrap.sql_path'|trans({}, 'NowoSiteBackupBundle'), {label_attr: {for: 'sql_import_path'}}) }}
+    {{ form_widget(form.sql_import_path, {id: 'sql_import_path', attr: {placeholder: 'var/site-backup/full-import.sql'}}) }}
     <p class="sub">{{ 'setup.bootstrap.sql_hint'|trans({}, 'NowoSiteBackupBundle') }}</p>
     <div class="actions">
         <button type="submit" name="bootstrap_mode" value="guided">{{ 'setup.bootstrap.guided'|trans({}, 'NowoSiteBackupBundle') }}</button>
         <button type="submit" name="bootstrap_mode" value="full_database" class="secondary">{{ 'setup.bootstrap.full_database'|trans({}, 'NowoSiteBackupBundle') }}</button>
     </div>
-</form>
+{{ form_end(form) }}
 {% endif %}

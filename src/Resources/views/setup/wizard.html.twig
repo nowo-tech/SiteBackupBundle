@@ -1,7 +1,7 @@
 {% extends nowo_site_backup_setup_layout_template %}
 
-{% block nowo_ui_document_title %}{{ brandName }} — Setup{% endblock %}
-{% block nowo_site_backup_title %}{{ brandName }} — Setup{% endblock %}
+{% block nowo_ui_document_title %}{{ brandName }} - Setup{% endblock %}
+{% block nowo_site_backup_title %}{{ brandName }} - Setup{% endblock %}
 
 {% block nowo_site_backup_content %}
     <h1>{{ 'setup.wizard.title'|trans({}, 'NowoSiteBackupBundle') }}</h1>
@@ -15,7 +15,7 @@
             {% endfor %}
         </div>
         <div class="bar"><i style="width: {{ progress.percent }}%"></i></div>
-        <p><strong>{{ progress.percent|number_format(0) }}%</strong> — {{ progress.message|trans({}, 'NowoSiteBackupBundle') }}</p>
+        <p><strong>{{ progress.percent|number_format(0) }}%</strong> - {{ progress.message|trans({}, 'NowoSiteBackupBundle') }}</p>
 
         {% set setup_reasons = reasons|default([]) %}
         {% set db_connection_failed = 'database connection failed' in setup_reasons %}
@@ -35,7 +35,7 @@
                             {% elseif reason == 'setup.done marker missing' %}
                                 {{ 'setup.reason.marker_done_missing'|trans({}, 'NowoSiteBackupBundle') }}
                             {% elseif reason starts with 'incomplete setup progress' %}
-                                {{ 'setup.reason.incomplete'|trans({ '%detail%': reason }, 'NowoSiteBackupBundle') }}
+                                {{ 'setup.reason.incomplete'|trans({'%detail%': reason}, 'NowoSiteBackupBundle') }}
                             {% else %}
                                 {{ reason }}
                             {% endif %}
@@ -56,34 +56,32 @@
         {% block setup_body %}
             {% if progress.phase == 'waiting_input' and currentStep %}
                 {% if currentStep.template|default(null) %}
-                    {% include currentStep.template %}
+                    {{ include(currentStep.template, {form: wizardForm}) }}
                 {% elseif 'bootstrap' in currentStep.id %}
-                    {% include '@NowoSiteBackupBundle/setup/_bootstrap_form.html.twig' %}
+                    {{ include('@NowoSiteBackupBundle/setup/_bootstrap_form.html.twig', {form: wizardForm}) }}
                 {% elseif 'admin' in currentStep.id %}
-                    {% include '@NowoSiteBackupBundle/setup/_admin_form.html.twig' %}
+                    {{ include('@NowoSiteBackupBundle/setup/_admin_form.html.twig', {form: wizardForm}) }}
                 {% elseif 'sample' in currentStep.id %}
-                    {% include '@NowoSiteBackupBundle/setup/_sample_form.html.twig' %}
+                    {{ include('@NowoSiteBackupBundle/setup/_sample_form.html.twig', {form: wizardForm}) }}
                 {% elseif 'database_url' in currentStep.id %}
-                    {% include '@NowoSiteBackupBundle/setup/_database_form.html.twig' with {
-                        db_connection_failed: db_connection_failed
-                    } %}
+                    {{ include('@NowoSiteBackupBundle/setup/_database_form.html.twig', {
+                        form: wizardForm,
+                        db_connection_failed: db_connection_failed,
+                    }) }}
                 {% else %}
-                    {% include '@NowoSiteBackupBundle/setup/_continue_form.html.twig' %}
+                    {{ include('@NowoSiteBackupBundle/setup/_continue_form.html.twig', {form: wizardForm}) }}
                 {% endif %}
             {% elseif progress.phase == 'failed' %}
-                <form method="post">
-                    <input type="hidden" name="_csrf_token" value="{{ csrfToken }}">
-                    <input type="hidden" name="reset" value="1">
+                {{ form_start(wizardForm) }}
                     <div class="actions">
                         <button type="submit">{{ 'setup.wizard.retry'|trans({}, 'NowoSiteBackupBundle') }}</button>
                     </div>
-                </form>
+                {{ form_end(wizardForm) }}
             {% else %}
-                <form method="post" id="auto-advance">
-                    <input type="hidden" name="_csrf_token" value="{{ csrfToken }}">
+                {{ form_start(wizardForm, {attr: {id: 'auto-advance'}}) }}
                     <p class="sub">{{ 'setup.wizard.running'|trans({}, 'NowoSiteBackupBundle') }}</p>
                     <button type="submit">{{ 'setup.wizard.continue'|trans({}, 'NowoSiteBackupBundle') }}</button>
-                </form>
+                {{ form_end(wizardForm) }}
                 {% if advanceMode|default('automatic') == 'automatic' and progress.phase == 'running' %}
                     <script>setTimeout(function () { document.getElementById('auto-advance').submit(); }, 600);</script>
                 {% endif %}
