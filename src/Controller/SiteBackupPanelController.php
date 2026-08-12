@@ -4,20 +4,27 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Controller;
 
+use Nowo\SiteBackupBundle\Form\Panel\CreateBackupType;
+use Nowo\SiteBackupBundle\Form\Panel\PanelActionType;
+use Nowo\SiteBackupBundle\Form\Panel\PanelLoginType;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessCheckerInterface;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessGateInterface;
 use Nowo\SiteBackupBundle\Service\SiteBackupManager;
+use Symfony\Component\Form\FormFactoryInterface;
+use Symfony\Component\Form\FormInterface;
+use Symfony\Component\Form\FormView;
 use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Routing\Attribute\Route;
-use Symfony\Component\Security\Csrf\CsrfToken;
 use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
 use Throwable;
 use Twig\Environment;
 
+use function array_merge;
 use function implode;
+use function method_exists;
 
 final class SiteBackupPanelController
 {
@@ -27,6 +34,7 @@ final class SiteBackupPanelController
     public function __construct(
         private readonly SiteBackupManager $manager,
         private readonly SiteBackupAccessGateInterface $accessGate,
+        private readonly FormFactoryInterface $formFactory,
         private readonly Environment $twig,
         private readonly array $templates,
         private readonly string $pathPrefix,
@@ -47,43 +55,58 @@ final class SiteBackupPanelController
             return $this->login($request);
         }
 
-        $error   = null;
-        $success = null;
+        $error           = null;
+        $success         = null;
+        $submittedAction = null;
+        $submittedForm   = null;
 
         if ($request->isMethod('POST')) {
-            if (!$this->isCsrfValid($request, 'nowo_site_backup_panel')) {
+            $submittedAction = $request->request->getString('action');
+            $submittedForm   = $this->createSubmittedPanelForm($request, $submittedAction);
+
+            if (!$this->csrfTokenManager instanceof CsrfTokenManagerInterface) {
                 $error = 'Invalid CSRF token.';
             } else {
-                $action = $request->request->getString('action');
-                try {
-                    $success = match ($action) {
-                        'create'        => $this->handleCreate($request),
-                        'delete'        => $this->handleDelete($request),
-                        'verify'        => $this->handleVerify($request),
-                        'restore'       => $this->handleRestore($request),
-                        'clear_restore' => $this->clearRestore(),
-                        'logout'        => null,
-                        default         => null,
-                    };
-                    if ($action === 'logout') {
-                        $this->accessGate->logout($request);
+                $submittedForm->handleRequest($request);
+                if (!$submittedForm->isSubmitted() || !$submittedForm->isValid()) {
+                    $error = 'Invalid CSRF token.';
+                } else {
+                    try {
+                        $success = match ($submittedAction) {
+                            'create' => $this->handleCreate($request),
+                            'delete' => $this->handleDelete($request),
+                            'verify' => $this->handleVerify($request),
+                            'restore' => $this->handleRestore($request),
+                            'clear_restore' => $this->clearRestore(),
+                            'logout' => null,
+                            default => null,
+                        };
+                        if ($submittedAction === 'logout') {
+                            $this->accessGate->logout($request);
 
-                        return new RedirectResponse($this->pathPrefix);
+                            return new RedirectResponse($this->pathPrefix);
+                        }
+                    } catch (Throwable $e) {
+                        $error = $e->getMessage();
                     }
-                } catch (Throwable $e) {
-                    $error = $e->getMessage();
                 }
             }
         }
 
+        $backups = $this->manager->listBackups();
+
         return new Response($this->twig->render($this->templates['panel_index'], [
-            'backups'    => $this->manager->listBackups(),
-            'progress'   => $this->manager->getRestoreProgress(),
-            'history'    => $this->manager->history(30),
+            'backups' => $backups,
+            'progress' => $this->manager->getRestoreProgress(),
+            'history' => $this->manager->history(30),
             'pathPrefix' => $this->pathPrefix,
-            'error'      => $error,
-            'success'    => $success,
-            'csrfToken'  => $this->csrfTokenManager?->getToken('nowo_site_backup_panel')->getValue(),
+            'error' => $error,
+            'success' => $success,
+            'csrfToken' => $this->csrfTokenManager?->getToken('nowo_site_backup_panel')->getValue(),
+            'createForm' => $this->resolveCreateFormView($submittedAction, $submittedForm),
+            'clearRestoreForm' => $this->createPanelActionForm('clear_restore')->createView(),
+            'logoutForm' => $this->createPanelActionForm('logout')->createView(),
+            'backupForms' => $this->createBackupFormViews($backups),
         ]));
     }
 
@@ -107,30 +130,38 @@ final class SiteBackupPanelController
         }
 
         return new Response($this->twig->render($this->templates['panel_history'], [
-            'history'    => $this->manager->history(100),
+            'history' => $this->manager->history(100),
             'pathPrefix' => $this->pathPrefix,
         ]));
     }
 
     private function login(Request $request): Response
     {
-        $error = null;
+        $error     = null;
+        $loginForm = $this->createLoginForm();
+
         if ($request->isMethod('POST') && $request->request->getString('action') === 'login') {
-            if (!$this->isCsrfValid($request, 'nowo_site_backup_login')) {
+            if (!$this->csrfTokenManager instanceof CsrfTokenManagerInterface) {
                 $error = 'Invalid CSRF token.';
-            } elseif ($this->accessGate->authenticate($request, $request->request->getString('password'))) {
-                return new RedirectResponse($this->pathPrefix);
             } else {
-                $error = 'Invalid password.';
+                $loginForm->handleRequest($request);
+                if (!$loginForm->isSubmitted() || !$loginForm->isValid()) {
+                    $error = 'Invalid CSRF token.';
+                } elseif ($this->accessGate->authenticate($request, $request->request->getString('password'))) {
+                    return new RedirectResponse($this->pathPrefix);
+                } else {
+                    $error = 'Invalid password.';
+                }
             }
         }
 
         return new Response($this->twig->render($this->templates['panel_login'], [
-            'pathPrefix'        => $this->pathPrefix,
-            'error'             => $error,
+            'pathPrefix' => $this->pathPrefix,
+            'error' => $error,
             'protectionEnabled' => $this->accessGate->isProtectionEnabled(),
-            'misconfigured'     => $this->accessGate->isMisconfigured(),
-            'csrfToken'         => $this->csrfTokenManager?->getToken('nowo_site_backup_login')->getValue(),
+            'misconfigured' => $this->accessGate->isMisconfigured(),
+            'csrfToken' => $this->csrfTokenManager?->getToken('nowo_site_backup_login')->getValue(),
+            'loginForm' => $loginForm->createView(),
         ]), $error || $this->accessGate->isMisconfigured() ? 401 : 200);
     }
 
@@ -175,18 +206,6 @@ final class SiteBackupPanelController
         return 'Restore status cleared.';
     }
 
-    private function isCsrfValid(Request $request, string $id): bool
-    {
-        // Fail closed: panel mutations require CSRF (REQ-UI-002 / SEC-004).
-        if (!$this->csrfTokenManager instanceof CsrfTokenManagerInterface) {
-            return false;
-        }
-
-        $token = $request->request->getString('_csrf_token');
-
-        return $this->csrfTokenManager->isTokenValid(new CsrfToken($id, $token));
-    }
-
     private function denyUnlessRoleAccess(): ?Response
     {
         if ($this->allowUnauthenticated) {
@@ -198,5 +217,76 @@ final class SiteBackupPanelController
         }
 
         return null;
+    }
+
+    /**
+     * @param array<int, object> $backups
+     *
+     * @return array<string, array<string, FormView>>
+     */
+    private function createBackupFormViews(array $backups): array
+    {
+        $views = [];
+        foreach ($backups as $backup) {
+            if (!method_exists($backup, 'getId')) {
+                continue;
+            }
+
+            $id = $backup->getId();
+            $views[$id] = [
+                'verify' => $this->createPanelActionForm('verify', $id)->createView(),
+                'restore' => $this->createPanelActionForm('restore', $id)->createView(),
+                'delete' => $this->createPanelActionForm('delete', $id)->createView(),
+            ];
+        }
+
+        return $views;
+    }
+
+    private function createCreateForm(): FormInterface
+    {
+        return $this->formFactory->createNamed('', CreateBackupType::class, null, $this->formOptions());
+    }
+
+    private function createLoginForm(): FormInterface
+    {
+        return $this->formFactory->createNamed('', PanelLoginType::class, null, $this->formOptions());
+    }
+
+    private function createPanelActionForm(string $action, ?string $backupId = null): FormInterface
+    {
+        return $this->formFactory->createNamed('', PanelActionType::class, null, $this->formOptions([
+            'action' => $action,
+            'backup_id' => $backupId,
+        ]));
+    }
+
+    private function createSubmittedPanelForm(Request $request, string $action): FormInterface
+    {
+        return match ($action) {
+            'create' => $this->createCreateForm(),
+            'login' => $this->createLoginForm(),
+            'verify', 'restore', 'delete' => $this->createPanelActionForm($action, $request->request->getString('backup_id')),
+            default => $this->createPanelActionForm($action),
+        };
+    }
+
+    /**
+     * @param array<string, mixed> $options
+     *
+     * @return array<string, mixed>
+     */
+    private function formOptions(array $options = []): array
+    {
+        return array_merge(['csrf_protection' => $this->csrfTokenManager instanceof CsrfTokenManagerInterface], $options);
+    }
+
+    private function resolveCreateFormView(?string $submittedAction, ?FormInterface $submittedForm): FormView
+    {
+        if ($submittedAction === 'create' && $submittedForm instanceof FormInterface) {
+            return $submittedForm->createView();
+        }
+
+        return $this->createCreateForm()->createView();
     }
 }

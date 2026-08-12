@@ -1,8 +1,7 @@
-<form method="post">
-    <input type="hidden" name="_csrf_token" value="{{ csrfToken }}">
+{{ form_start(form) }}
     <p>{{ 'setup.sample.prompt'|trans({}, 'NowoSiteBackupBundle') }}</p>
     <div class="actions">
         <button type="submit" name="action" value="load">{{ 'setup.sample.load'|trans({}, 'NowoSiteBackupBundle') }}</button>
         <button class="secondary" type="submit" name="action" value="skip">{{ 'setup.sample.skip'|trans({}, 'NowoSiteBackupBundle') }}</button>
     </div>
-</form>
+{{ form_end(form) }}

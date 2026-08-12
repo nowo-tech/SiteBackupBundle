@@ -103,6 +103,9 @@ See [SETUP-WIZARD.md](SETUP-WIZARD.md) for profiles, step types, and security.
 
 ## Twig helpers
 
+Panel and setup bundle templates now render POST actions via Symfony Forms (`form_start`, `form_widget`, `form_end`) instead of raw HTML `<form>` tags. When you override these templates, keep using Symfony Form Types and preserve the legacy flat field names (`action`, `backup_id`, `label`, `database_url`, ...) for controller compatibility.
+
+
 ```twig
 {% if nowo_site_backup_is_restoring() %}
   {# optional banner when not fully intercepted #}
