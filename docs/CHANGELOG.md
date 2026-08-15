@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.12.0] - 2026-08-15
+
 ### Added
 - **Durable setup done** (`003-durable-done-cold-start`): `DurableSetupDoneStoreInterface` + `NullDurableSetupDoneStore` (default alias). Optional `SetupDbDoneGuard` heals ephemeral markers/progress when the host store says complete. `SetupDbDoneRedirectSubscriber` (priority 3) closes the wizard when `setup.durable_done.enabled: true`.
 - **Cold-start schema gate**: `ColdStartSchemaGateSubscriber` (priorities 35/34/20) redirects to the setup path when MySQL schema is unreachable; configurable `setup.cold_start.safe_path_prefixes` and `stop_propagation`. `MysqlSchemaExistenceChecker` probes DBAL or PDO credentials.
@@ -23,6 +25,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 - [SETUP-WIZARD.md](SETUP-WIZARD.md) / [CONFIGURATION.md](CONFIGURATION.md) / [UPGRADING.md](UPGRADING.md) — cold-start progress storage and per-step journal.
 - Spec `specs/002-setup-step-rows/` and baseline FR-SETUP-002 update.
+
+[1.12.0]: https://github.com/nowo-tech/SiteBackupBundle/releases/tag/v1.12.0
 
 [1.11.0]: https://github.com/nowo-tech/SiteBackupBundle/releases/tag/v1.11.0
 
