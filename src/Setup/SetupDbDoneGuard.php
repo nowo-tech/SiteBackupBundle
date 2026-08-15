@@ -64,7 +64,7 @@ final readonly class SetupDbDoneGuard
             return;
         }
 
-        if (SetupProgress::PHASE_COMPLETED === $progress->getPhase()) {
+        if ($progress->getPhase() === SetupProgress::PHASE_COMPLETED) {
             return;
         }
 

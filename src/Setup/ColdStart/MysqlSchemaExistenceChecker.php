@@ -10,6 +10,7 @@ use PDO;
 use Throwable;
 
 use function is_string;
+use function sprintf;
 use function str_contains;
 
 /**
