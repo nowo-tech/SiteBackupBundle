@@ -314,7 +314,7 @@ final class DoctrineAndChainStorageTest extends TestCase
         self::assertSame('migrations', $latest['step_id']);
 
         // Thin payload: enrich from journal rows.
-        $thin = new SetupProgress(phase: SetupProgress::PHASE_WAITING, profile: 'fresh_install', currentStepId: 'admin_user');
+        $thin     = new SetupProgress(phase: SetupProgress::PHASE_WAITING, profile: 'fresh_install', currentStepId: 'admin_user');
         $enriched = $journal->enrich($thin);
         self::assertSame(['requirements', 'migrations'], $enriched->getCompletedStepIds());
     }
@@ -413,9 +413,9 @@ final class FakeDbalConnection
         }
 
         if (str_contains($normalized, 'insert into') && $this->looksLikeStepTable($normalized)) {
-            $profile = (string) $params[0];
-            $stepId  = (string) $params[1];
-            $this->stepTableReady = true;
+            $profile                                   = (string) $params[0];
+            $stepId                                    = (string) $params[1];
+            $this->stepTableReady                      = true;
             $this->stepRows[$profile . "\0" . $stepId] = [
                 'profile'     => $profile,
                 'step_id'     => $stepId,
@@ -431,9 +431,9 @@ final class FakeDbalConnection
         }
 
         if (str_starts_with(trim($normalized), 'update') && $this->looksLikeStepTable($normalized)) {
-            $profile = (string) $params[6];
-            $stepId  = (string) $params[7];
-            $key     = $profile . "\0" . $stepId;
+            $profile              = (string) $params[6];
+            $stepId               = (string) $params[7];
+            $key                  = $profile . "\0" . $stepId;
             $this->stepRows[$key] = [
                 'profile'     => $profile,
                 'step_id'     => $stepId,
@@ -450,7 +450,7 @@ final class FakeDbalConnection
 
         if (str_starts_with(trim($normalized), 'insert')) {
             $this->progressTableReady = true;
-            $this->progressRows[1] = [
+            $this->progressRows[1]    = [
                 'phase'           => $params[1],
                 'profile'         => $params[2],
                 'current_step_id' => $params[3],
@@ -514,7 +514,7 @@ final class FakeDbalConnection
             $rows = array_values($this->stepRows);
             if (str_contains($normalized, 'where profile') && isset($params[0])) {
                 $profile = (string) $params[0];
-                $rows = array_values(array_filter(
+                $rows    = array_values(array_filter(
                     $rows,
                     static fn (array $row): bool => ($row['profile'] ?? '') === $profile,
                 ));

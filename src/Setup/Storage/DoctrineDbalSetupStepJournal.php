@@ -85,9 +85,9 @@ final class DoctrineDbalSetupStepJournal
         }
 
         $status = match ($progress->getPhase()) {
-            SetupProgress::PHASE_FAILED => self::STATUS_FAILED,
+            SetupProgress::PHASE_FAILED    => self::STATUS_FAILED,
             SetupProgress::PHASE_COMPLETED => self::STATUS_COMPLETED,
-            default => self::STATUS_RUNNING,
+            default                        => self::STATUS_RUNNING,
         };
 
         $finishedAt = null;
@@ -190,8 +190,8 @@ final class DoctrineDbalSetupStepJournal
             return null;
         }
 
-        $best = null;
-        $bestTs = null;
+        $best      = null;
+        $bestTs    = null;
         $bestOrder = -1;
         foreach ($rows as $row) {
             $finished = $row['finished_at'] ?? null;
@@ -200,9 +200,9 @@ final class DoctrineDbalSetupStepJournal
             }
             $order = (int) ($row['step_order'] ?? 0);
             if ($bestTs === null || $finished > $bestTs || ($finished === $bestTs && $order >= $bestOrder)) {
-                $bestTs = $finished;
+                $bestTs    = $finished;
                 $bestOrder = $order;
-                $best = [
+                $best      = [
                     'profile'     => (string) ($row['profile'] ?? ''),
                     'step_id'     => (string) ($row['step_id'] ?? ''),
                     'status'      => (string) ($row['status'] ?? ''),
