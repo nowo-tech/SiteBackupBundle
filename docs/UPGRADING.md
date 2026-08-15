@@ -1,5 +1,26 @@
 # Upgrading
 
+## To 1.11.0 (Unreleased)
+
+Optional **per-step setup journal** when using `progress_storage: doctrine` or `chain`:
+
+```yaml
+nowo_site_backup:
+    setup:
+        progress_storage: chain
+        progress_step_rows: true   # default
+        # progress_steps_table: nowo_site_backup_setup_step
+```
+
+- Tables are created with **runtime DDL** on first DB write — **do not** add a host Doctrine Migration for them (wizard steps run before migrations exist).
+- Disable with `progress_step_rows: false` if you only want the singleton progress row.
+- See [SETUP-WIZARD.md](SETUP-WIZARD.md) § Progress storage.
+
+```bash
+composer update nowo-tech/site-backup-bundle
+php bin/console cache:clear
+```
+
 ## To 1.10.1
 
 Patch release: documentation and git-hygiene only. No config or API changes from **1.10.0**.

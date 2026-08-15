@@ -111,6 +111,10 @@ tabs:
 | `doctrine` | Singleton row in DBAL table `setup.progress_table` (default `nowo_site_backup_setup_progress`); table auto-created on first write |
 | `chain` | Write JSON **and** DB when possible; **load prefers DB** so wiping `var/` does not lose the current step |
 
+**Cold-start (no migrations yet):** the first wizard steps often run **before** the host database exists or before Symfony Migrations have been applied. Progress/step tables are created with **runtime DDL** (`CREATE TABLE IF NOT EXISTS`) on first successful DBAL write — **never** via a Doctrine Migration shipped by this bundle. Until DBAL is usable, `chain` keeps the filesystem JSON as the source of truth and soft-fails DB mirrors.
+
+**Per-step journal (doctrine/chain):** when `setup.progress_step_rows` is `true` (default), each save also upserts rows into `setup.progress_steps_table` (default `nowo_site_backup_setup_step`: `profile`, `step_id`, `status`, `finished_at`, …). Resume still uses `completed_step_ids` (merged from journal on load). Operators can query the last finished step without decoding the singleton JSON payload.
+
 Progress payload includes `started_at`, `current_step_id`, `phase`, `percent`, `completed_at`, plus log/answers.
 
 After a successful wizard finish: write `setup.done`, remove `setup.required`, emit `SetupCompletedEvent`.
