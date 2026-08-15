@@ -15,9 +15,17 @@ use function str_contains;
 
 /**
  * MySQL schema probe via optional DBAL connection or direct PDO credentials.
+ *
+ * {@see self::schemaExists()} is true only when the named database answers
+ * {@code SELECT 1} and (when {@see $requireApplicationTables} is true) contains
+ * at least one table that is not a SiteBackup runtime-DDL progress table.
+ * An empty schema after {@code database_create} must stay "cold" so hosts do not
+ * query missing Doctrine tables from Twig while migrations have not run yet.
  */
 final readonly class MysqlSchemaExistenceChecker implements SchemaExistenceCheckerInterface
 {
+    private const SETUP_TABLE_PREFIX = 'nowo_site_backup%';
+
     public function __construct(
         private ?Connection $connection = null,
         private ?string $host = null,
@@ -25,6 +33,7 @@ final readonly class MysqlSchemaExistenceChecker implements SchemaExistenceCheck
         private ?string $user = null,
         private ?string $password = null,
         private ?string $database = null,
+        private bool $requireApplicationTables = true,
     ) {
     }
 
@@ -41,8 +50,6 @@ final readonly class MysqlSchemaExistenceChecker implements SchemaExistenceCheck
     {
         try {
             $connection->executeQuery('SELECT 1');
-
-            return true;
         } catch (Throwable $e) {
             if ($this->isUnknownDatabase($e)) {
                 return false;
@@ -50,6 +57,12 @@ final readonly class MysqlSchemaExistenceChecker implements SchemaExistenceCheck
 
             return false;
         }
+
+        if (!$this->requireApplicationTables) {
+            return true;
+        }
+
+        return $this->hasNonSetupTablesViaConnection($connection);
     }
 
     private function probePdo(): bool
@@ -69,13 +82,58 @@ final readonly class MysqlSchemaExistenceChecker implements SchemaExistenceCheck
                 [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
             );
             $pdo->query('SELECT 1');
-
-            return true;
         } catch (Throwable $e) {
             if ($this->isUnknownDatabase($e)) {
                 return false;
             }
 
+            return false;
+        }
+
+        if (!$this->requireApplicationTables) {
+            return true;
+        }
+
+        return $this->hasNonSetupTablesViaPdo($pdo);
+    }
+
+    private function hasNonSetupTablesViaConnection(Connection $connection): bool
+    {
+        if (!is_string($this->database) || $this->database === '') {
+            // Without a configured database name, treat SELECT 1 as enough.
+            return true;
+        }
+
+        try {
+            $result = $connection->executeQuery(
+                'SELECT 1
+                 FROM information_schema.TABLES
+                 WHERE TABLE_SCHEMA = ?
+                   AND TABLE_NAME NOT LIKE ?
+                 LIMIT 1',
+                [$this->database, self::SETUP_TABLE_PREFIX],
+            );
+
+            return false !== $result->fetchOne();
+        } catch (Throwable) {
+            return false;
+        }
+    }
+
+    private function hasNonSetupTablesViaPdo(PDO $pdo): bool
+    {
+        try {
+            $statement = $pdo->prepare(
+                'SELECT 1
+                 FROM information_schema.TABLES
+                 WHERE TABLE_SCHEMA = ?
+                   AND TABLE_NAME NOT LIKE ?
+                 LIMIT 1',
+            );
+            $statement->execute([$this->database, self::SETUP_TABLE_PREFIX]);
+
+            return false !== $statement->fetchColumn();
+        } catch (Throwable) {
             return false;
         }
     }

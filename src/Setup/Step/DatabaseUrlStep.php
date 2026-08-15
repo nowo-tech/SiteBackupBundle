@@ -33,6 +33,11 @@ final class DatabaseUrlStep extends AbstractSetupStep
         parent::__construct($id, $label, 'form');
     }
 
+    public function isOptional(): bool
+    {
+        return $this->optional;
+    }
+
     public function run(SetupContext $ctx, SetupStepInput $input): SetupStepResult
     {
         $url = $input->getString('database_url', is_string($ctx->getAnswer('database_url')) ? $ctx->getAnswer('database_url') : '');

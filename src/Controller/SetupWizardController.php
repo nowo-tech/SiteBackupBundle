@@ -14,6 +14,8 @@ use Nowo\SiteBackupBundle\Form\Setup\SampleDataType;
 use Nowo\SiteBackupBundle\Model\SetupProgress;
 use Nowo\SiteBackupBundle\Routing\SetupPathPrefixResolver;
 use Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator;
+use Nowo\SiteBackupBundle\Setup\Step\DatabaseUrlStep;
+use Nowo\SiteBackupBundle\Setup\Step\TabStep;
 use Nowo\SiteBackupBundle\Setup\SetupOrchestrator;
 use Nowo\SiteBackupBundle\Setup\SetupStepInput;
 use Symfony\Component\Form\FormFactoryInterface;
@@ -242,10 +244,20 @@ final class SetupWizardController
         }
 
         if (str_contains($stepId, 'database_url')) {
+            $optional = true;
+            $inner    = $currentStep;
+            if ($inner instanceof TabStep) {
+                $inner = $inner->getInner();
+            }
+            if ($inner instanceof DatabaseUrlStep) {
+                $optional = $inner->isOptional();
+            }
+
             return $this->formFactory->createNamed('', DatabaseUrlType::class, [
                 'database_url' => is_string($answers['database_url'] ?? null) ? $answers['database_url'] : '',
             ], $this->formOptions([
                 'db_connection_failed' => $dbFailed,
+                'optional'             => $optional,
             ]));
         }
 

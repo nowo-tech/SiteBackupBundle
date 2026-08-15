@@ -60,6 +60,7 @@
         "phpunit/phpunit": "^10.0",
         "rector/rector": "^2.0",
         "symfony/framework-bundle": "^7.0 || ^8.0",
+        "symfony/cache": "^7.0 || ^8.0",
         "symfony/twig-bundle": "^7.0 || ^8.0",
         "twig/twig": "^3.12",
         "vincentlanglet/twig-cs-fixer": "^3.0"
@@ -69,7 +70,8 @@
         "symfony/translation": "Required for |trans in panel and restore templates",
         "symfony/security-bundle": "Required for the private panel when security.allow_unauthenticated is false (default); also for custom SiteBackupAccessGateInterface / access_checker",
         "symfony/flex": "For automatic recipe installation",
-        "doctrine/dbal": "Optional; setup progress doctrine/chain storage, schema detectors, and apps that rely on a DBAL connection"
+        "doctrine/dbal": "Optional; setup progress doctrine/chain/cache_doctrine storage, schema detectors, and apps that rely on a DBAL connection",
+        "symfony/cache": "Optional; setup progress_storage cache / cache_doctrine (PSR-6 pool, typically Redis via cache.app)"
     },
     "autoload": {
         "psr-4": {

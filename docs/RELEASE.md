@@ -1,6 +1,6 @@
 # Release
 
-Current stable target: **v1.12.0** (unreleased; branch `feat/003-durable-done-cold-start`).
+Current stable target: **v1.13.0**.
 
 ## Checklist
 

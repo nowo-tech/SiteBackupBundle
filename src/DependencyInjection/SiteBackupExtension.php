@@ -39,6 +39,8 @@ use Nowo\SiteBackupBundle\Setup\SetupDbDoneGuard;
 use Nowo\SiteBackupBundle\Setup\SetupOrchestrator;
 use Nowo\SiteBackupBundle\Setup\SetupStepFactory;
 use Nowo\SiteBackupBundle\Setup\SetupTabCheckerLocator;
+use Nowo\SiteBackupBundle\Setup\Storage\CacheDoctrineSetupProgressStorage;
+use Nowo\SiteBackupBundle\Setup\Storage\CacheSetupProgressStorage;
 use Nowo\SiteBackupBundle\Setup\Storage\ChainSetupProgressStorage;
 use Nowo\SiteBackupBundle\Setup\Storage\DoctrineDbalSetupProgressStorage;
 use Nowo\SiteBackupBundle\Setup\Storage\DoctrineDbalSetupStepJournal;
@@ -471,7 +473,7 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
 
         $stepRowsEnabled = (bool) ($setup['progress_step_rows'] ?? true);
         $progressMode    = (string) ($setup['progress_storage'] ?? 'filesystem');
-        if ($progressMode === 'filesystem') {
+        if (\in_array($progressMode, ['filesystem', 'cache'], true)) {
             $stepRowsEnabled = false;
         }
 
@@ -485,10 +487,35 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$filesystem', new Reference(FilesystemSetupProgressStorage::class))
             ->setArgument('$doctrine', new Reference(DoctrineDbalSetupProgressStorage::class));
 
-        $progressStorage = match ((string) ($setup['progress_storage'] ?? 'filesystem')) {
-            'doctrine' => DoctrineDbalSetupProgressStorage::class,
-            'chain'    => ChainSetupProgressStorage::class,
-            default    => FilesystemSetupProgressStorage::class,
+        $usesCache = \in_array($progressMode, ['cache', 'cache_doctrine'], true);
+        if ($usesCache) {
+            $poolId = is_string($setup['progress_cache_pool'] ?? null) && $setup['progress_cache_pool'] !== ''
+                ? $setup['progress_cache_pool']
+                : 'cache.app';
+
+            $container->getDefinition(CacheSetupProgressStorage::class)
+                ->setArgument('$cache', new Reference($poolId))
+                ->setArgument('$cacheKey', (string) ($setup['progress_cache_key'] ?? CacheSetupProgressStorage::DEFAULT_CACHE_KEY))
+                ->setArgument('$ttlSeconds', (int) ($setup['progress_cache_ttl'] ?? 86400));
+
+            $container->getDefinition(CacheDoctrineSetupProgressStorage::class)
+                ->setArgument('$cache', new Reference(CacheSetupProgressStorage::class))
+                ->setArgument('$doctrine', new Reference(DoctrineDbalSetupProgressStorage::class))
+                ->setArgument(
+                    '$schemaChecker',
+                    new Reference(SchemaExistenceCheckerInterface::class, ContainerBuilder::NULL_ON_INVALID_REFERENCE),
+                );
+        } else {
+            $container->removeDefinition(CacheSetupProgressStorage::class);
+            $container->removeDefinition(CacheDoctrineSetupProgressStorage::class);
+        }
+
+        $progressStorage = match ($progressMode) {
+            'doctrine'       => DoctrineDbalSetupProgressStorage::class,
+            'chain'          => ChainSetupProgressStorage::class,
+            'cache'          => CacheSetupProgressStorage::class,
+            'cache_doctrine' => CacheDoctrineSetupProgressStorage::class,
+            default          => FilesystemSetupProgressStorage::class,
         };
         $container->setAlias(SetupProgressStorageInterface::class, $progressStorage)->setPublic(false);
 
@@ -701,7 +728,8 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$port', is_int($mysqlPort) ? $mysqlPort : 3306)
             ->setArgument('$user', is_string($mysqlUser) && $mysqlUser !== '' ? $mysqlUser : null)
             ->setArgument('$password', is_string($mysqlPass) ? $mysqlPass : null)
-            ->setArgument('$database', is_string($mysqlDb) && $mysqlDb !== '' ? $mysqlDb : null);
+            ->setArgument('$database', is_string($mysqlDb) && $mysqlDb !== '' ? $mysqlDb : null)
+            ->setArgument('$requireApplicationTables', (bool) ($coldStart['require_application_tables'] ?? true));
 
         $container->setAlias(SchemaExistenceCheckerInterface::class, MysqlSchemaExistenceChecker::class)->setPublic(false);
 

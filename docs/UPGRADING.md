@@ -1,5 +1,26 @@
 # Upgrading
 
+## To 1.13.0
+
+**Cold-start empty schema:** with `setup.cold_start.require_application_tables: true` (default), an empty MySQL database (after `database_create`, before migrations) stays cold-start. Set `false` only if you intentionally treat `SELECT 1` as enough.
+
+**Progress without `var/` JSON:** prefer Redis/cache during cold-start:
+
+```yaml
+nowo_site_backup:
+    setup:
+        progress_storage: cache_doctrine   # or cache
+        progress_cache_pool: cache.app
+        # progress_cache_key / progress_cache_ttl optional
+```
+
+**Optional DATABASE_URL:** Skip works when the step is `optional: true` even if Doctrine cannot connect yet. No host form overrides required.
+
+```bash
+composer update nowo-tech/site-backup-bundle
+php bin/console cache:clear
+```
+
 ## To 1.12.0
 
 Optional **durable setup done** and **cold-start schema gate** (see [SiteBackupBundle#9](https://github.com/nowo-tech/SiteBackupBundle/issues/9)):
