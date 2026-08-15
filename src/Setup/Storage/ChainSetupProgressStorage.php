@@ -11,6 +11,10 @@ use Throwable;
 /**
  * Writes to filesystem always; also mirrors to Doctrine when the connection works.
  * Loads Doctrine first (survives var/ wipe), then falls back to the JSON file.
+ *
+ * Cold-start: early wizard steps often have no DB yet — filesystem remains the
+ * source of truth until DBAL is usable; Doctrine writes (singleton + optional
+ * step journal) are best-effort and must not require Symfony Migrations.
  */
 final class ChainSetupProgressStorage implements SetupProgressStorageInterface
 {

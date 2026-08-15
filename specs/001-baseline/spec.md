@@ -36,8 +36,8 @@ Given `setup.progress_storage: chain` (or `doctrine`) and a working DBAL connect
 
 1. **Given** progress phase `running`/`waiting_input`/`failed` in DB and no `setup.done`, **When** the incomplete detector is enabled (default), **Then** `isSetupRequired()` is true.
 2. **Given** `progress_storage: filesystem` only, **When** `var/site-backup/setup-progress.json` is deleted mid-wizard, **Then** progress is lost (documented trade-off).
-3. **Given** chain mode, **When** save succeeds, **Then** both JSON and DBAL table (`setup.progress_table`, default `nowo_site_backup_setup_progress`) are updated; payload includes `started_at` / `completed_at`.
-
+3. **Given** chain mode, **When** save succeeds **and** DBAL is usable, **Then** both JSON and DBAL table (`setup.progress_table`, default `nowo_site_backup_setup_progress`) are updated; payload includes `started_at` / `completed_at`. When `progress_step_rows` is true, per-step rows are upserted into `setup.progress_steps_table` via runtime DDL (not Symfony Migrations). Early steps before a DB exists keep filesystem-only progress (DB mirror soft-fails).
+4. **Given** step rows with `status=completed`, **When** progress JSON lacks those ids, **Then** load merges them from the journal so resume stays correct.
 ### US-7 — Gate until setup is 100% complete
 **Priority**: P1  
 Given the operator has started the setup wizard (or `setup.required` / incomplete progress / `require_done_marker`), When a visitor hits a normal route before `setup.done` exists, Then the site gate redirects to `/_setup`. Starting the wizard writes `setup.required` so the gate cannot be left mid-flight.
@@ -85,7 +85,7 @@ Given `setup.profiles.*.tabs` (ordered), When the wizard runs, Then each tab may
 | FR-SEC-001 | Password gate fail-closed when hash missing; `isMisconfigured()` |
 | FR-CLI-001 | Console commands for backup/restore/setup/hash |
 | FR-SETUP-001 | Wizard steps, orchestrator, markers, profiles, admin provisioner |
-| FR-SETUP-002 | Progress storage: `filesystem` \| `doctrine` \| `chain`; `started_at` / `completed_at`; optional DBAL table auto-create |
+| FR-SETUP-002 | Progress storage: `filesystem` \| `doctrine` \| `chain`; `started_at` / `completed_at`; optional DBAL table auto-create (runtime DDL, not migrations); optional per-step journal (`progress_step_rows`) |
 | FR-SETUP-003 | Detectors: marker, doctrine connect, schema empty, **incomplete progress** (toggleable) + **app-tagged** `SetupNeedDetectorInterface`; evaluator ORs enabled detectors |
 | FR-SETUP-004 | Default `setup.path_prefix` is `/_setup`; routes honour config via parameters; path auto-added to exclusions |
 | FR-SETUP-005 | Starting the wizard marks `setup.required` until `setup.done`; gate stays on while progress is incomplete |

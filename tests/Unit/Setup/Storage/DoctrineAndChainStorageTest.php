@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use Nowo\SiteBackupBundle\Model\SetupProgress;
 use Nowo\SiteBackupBundle\Setup\Storage\ChainSetupProgressStorage;
 use Nowo\SiteBackupBundle\Setup\Storage\DoctrineDbalSetupProgressStorage;
+use Nowo\SiteBackupBundle\Setup\Storage\DoctrineDbalSetupStepJournal;
 use Nowo\SiteBackupBundle\Setup\Storage\FilesystemSetupProgressStorage;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
@@ -283,25 +284,101 @@ final class DoctrineAndChainStorageTest extends TestCase
         $storage->save(new SetupProgress(phase: SetupProgress::PHASE_RUNNING, currentStepId: 't', percent: 2.0));
         self::assertSame('t', $storage->load()->getCurrentStepId());
     }
-}
 
+    public function testStepJournalUpsertsAndEnrichesCompletedIds(): void
+    {
+        $conn    = new FakeDbalConnection();
+        $journal = new DoctrineDbalSetupStepJournal($conn);
+        $storage = new DoctrineDbalSetupProgressStorage($conn, DoctrineDbalSetupProgressStorage::TABLE, $journal, true);
+
+        $progress = new SetupProgress(
+            phase: SetupProgress::PHASE_WAITING,
+            profile: 'fresh_install',
+            currentStepId: 'admin_user',
+            percent: 80.0,
+            completedStepIds: ['requirements', 'migrations'],
+            updatedAt: new DateTimeImmutable('2026-08-15T10:00:00+00:00'),
+            startedAt: new DateTimeImmutable('2026-08-15T09:00:00+00:00'),
+        );
+        $storage->save($progress);
+
+        self::assertNotEmpty($conn->stepRows());
+        self::assertSame(
+            ['requirements', 'migrations'],
+            $journal->listCompletedStepIds('fresh_install'),
+        );
+
+        $latest = $journal->latestFinishedStep('fresh_install');
+        // Running current step has no finished_at; latest finished is migrations.
+        self::assertNotNull($latest);
+        self::assertSame('migrations', $latest['step_id']);
+
+        // Thin payload: enrich from journal rows.
+        $thin     = new SetupProgress(phase: SetupProgress::PHASE_WAITING, profile: 'fresh_install', currentStepId: 'admin_user');
+        $enriched = $journal->enrich($thin);
+        self::assertSame(['requirements', 'migrations'], $enriched->getCompletedStepIds());
+    }
+
+    public function testStepJournalClearsOnIdleReset(): void
+    {
+        $conn    = new FakeDbalConnection();
+        $journal = new DoctrineDbalSetupStepJournal($conn);
+        $storage = new DoctrineDbalSetupProgressStorage($conn, DoctrineDbalSetupProgressStorage::TABLE, $journal, true);
+
+        $storage->save(new SetupProgress(
+            phase: SetupProgress::PHASE_RUNNING,
+            profile: 'fresh_install',
+            currentStepId: 'migrations',
+            completedStepIds: ['requirements'],
+            startedAt: new DateTimeImmutable(),
+        ));
+        self::assertNotEmpty($conn->stepRows());
+
+        $storage->save(new SetupProgress(phase: SetupProgress::PHASE_IDLE, profile: 'fresh_install'));
+        self::assertSame([], $conn->stepRows());
+    }
+
+    public function testStepJournalNoopWithoutConnection(): void
+    {
+        $journal = new DoctrineDbalSetupStepJournal();
+        self::assertFalse($journal->isUsable());
+        $journal->sync(new SetupProgress(phase: SetupProgress::PHASE_RUNNING, currentStepId: 'x', completedStepIds: ['a']));
+        self::assertSame([], $journal->listCompletedStepIds());
+        self::assertNull($journal->latestFinishedStep());
+    }
+}
 /**
  * Minimal DBAL-like connection for unit tests (no doctrine/dbal required).
+ *
+ * Supports the progress singleton table and the per-step journal table.
  */
 final class FakeDbalConnection
 {
     /** @var array<int, array<string, mixed>> */
-    private array $rows = [];
+    private array $progressRows = [];
 
-    private bool $tableReady = false;
+    /** @var array<string, array<string, mixed>> keyed by profile\0step_id */
+    private array $stepRows = [];
+
+    private bool $progressTableReady = false;
+
+    private bool $stepTableReady = false;
 
     /**
      * @param array<string, mixed> $row
      */
     public function seedRow(array $row): void
     {
-        $this->tableReady = true;
-        $this->rows[1]    = $row;
+        $this->progressTableReady = true;
+        $this->progressRows[1]    = $row;
+    }
+
+    /**
+     * @return array<string, array<string, mixed>>
+     */
+    public function stepRows(): array
+    {
+        return $this->stepRows;
     }
 
     /**
@@ -311,13 +388,69 @@ final class FakeDbalConnection
     {
         $normalized = strtolower($sql);
         if (str_contains($normalized, 'create table')) {
-            $this->tableReady = true;
+            if (str_contains($normalized, 'step_order') || (str_contains($normalized, 'step_id') && !str_contains($normalized, 'current_step_id'))) {
+                $this->stepTableReady = true;
+            } else {
+                $this->progressTableReady = true;
+            }
 
             return 0;
         }
 
-        if (str_starts_with($normalized, 'insert')) {
-            $this->rows[1] = [
+        if (str_contains($normalized, 'delete from') && (str_contains($normalized, 'setup_step') || str_contains($normalized, 'step_id') || str_contains($normalized, 'nowo_site_backup_setup_step') || $this->looksLikeStepTable($normalized))) {
+            if (str_contains($normalized, 'where profile')) {
+                $profile = (string) ($params[0] ?? '');
+                foreach (array_keys($this->stepRows) as $key) {
+                    if (str_starts_with($key, $profile . "\0")) {
+                        unset($this->stepRows[$key]);
+                    }
+                }
+            } else {
+                $this->stepRows = [];
+            }
+
+            return 1;
+        }
+
+        if (str_contains($normalized, 'insert into') && $this->looksLikeStepTable($normalized)) {
+            $profile                                   = (string) $params[0];
+            $stepId                                    = (string) $params[1];
+            $this->stepTableReady                      = true;
+            $this->stepRows[$profile . "\0" . $stepId] = [
+                'profile'     => $profile,
+                'step_id'     => $stepId,
+                'status'      => $params[2],
+                'step_order'  => $params[3],
+                'started_at'  => $params[4],
+                'finished_at' => $params[5],
+                'updated_at'  => $params[6],
+                'message'     => $params[7],
+            ];
+
+            return 1;
+        }
+
+        if (str_starts_with(trim($normalized), 'update') && $this->looksLikeStepTable($normalized)) {
+            $profile              = (string) $params[6];
+            $stepId               = (string) $params[7];
+            $key                  = $profile . "\0" . $stepId;
+            $this->stepRows[$key] = [
+                'profile'     => $profile,
+                'step_id'     => $stepId,
+                'status'      => $params[0],
+                'step_order'  => $params[1],
+                'started_at'  => $params[2],
+                'finished_at' => $params[3],
+                'updated_at'  => $params[4],
+                'message'     => $params[5],
+            ];
+
+            return 1;
+        }
+
+        if (str_starts_with(trim($normalized), 'insert')) {
+            $this->progressTableReady = true;
+            $this->progressRows[1]    = [
                 'phase'           => $params[1],
                 'profile'         => $params[2],
                 'current_step_id' => $params[3],
@@ -331,8 +464,8 @@ final class FakeDbalConnection
             return 1;
         }
 
-        if (str_starts_with($normalized, 'update')) {
-            $this->rows[1] = [
+        if (str_starts_with(trim($normalized), 'update')) {
+            $this->progressRows[1] = [
                 'phase'           => $params[0],
                 'profile'         => $params[1],
                 'current_step_id' => $params[2],
@@ -349,20 +482,62 @@ final class FakeDbalConnection
         return 0;
     }
 
-    public function executeQuery(string $sql): FakeDbalResult
+    /**
+     * @param list<mixed> $params
+     */
+    public function executeQuery(string $sql, array $params = []): FakeDbalResult
     {
         $normalized = strtolower($sql);
         if (str_contains($normalized, 'create table')) {
-            $this->tableReady = true;
+            if (str_contains($normalized, 'step_order') || (str_contains($normalized, 'step_id') && !str_contains($normalized, 'current_step_id'))) {
+                $this->stepTableReady = true;
+            } else {
+                $this->progressTableReady = true;
+            }
 
             return new FakeDbalResult(null);
         }
 
-        if (str_contains($normalized, 'select') && $this->tableReady && isset($this->rows[1])) {
-            return new FakeDbalResult($this->rows[1]);
+        if ($this->looksLikeStepTable($normalized) && str_contains($normalized, 'select')) {
+            if (!$this->stepTableReady) {
+                return new FakeDbalResult(null, []);
+            }
+
+            if (str_contains($normalized, 'and step_id')) {
+                $profile = (string) ($params[0] ?? '');
+                $stepId  = (string) ($params[1] ?? '');
+                $row     = $this->stepRows[$profile . "\0" . $stepId] ?? null;
+
+                return new FakeDbalResult($row, $row !== null ? [$row] : []);
+            }
+
+            $rows = array_values($this->stepRows);
+            if (str_contains($normalized, 'where profile') && isset($params[0])) {
+                $profile = (string) $params[0];
+                $rows    = array_values(array_filter(
+                    $rows,
+                    static fn (array $row): bool => ($row['profile'] ?? '') === $profile,
+                ));
+            }
+
+            return new FakeDbalResult($rows[0] ?? null, $rows);
+        }
+
+        if (str_contains($normalized, 'select') && $this->progressTableReady && isset($this->progressRows[1])) {
+            return new FakeDbalResult($this->progressRows[1]);
         }
 
         return new FakeDbalResult(null);
+    }
+
+    private function looksLikeStepTable(string $normalizedSql): bool
+    {
+        if (str_contains($normalizedSql, 'setup_step') || str_contains($normalizedSql, 'step_order')) {
+            return true;
+        }
+
+        // Progress SQL uses current_step_id; journal uses bare step_id.
+        return str_contains($normalizedSql, 'step_id') && !str_contains($normalizedSql, 'current_step_id');
     }
 }
 
@@ -370,9 +545,12 @@ final class FakeDbalResult
 {
     /**
      * @param array<string, mixed>|null $row
+     * @param list<array<string, mixed>> $all
      */
-    public function __construct(private readonly ?array $row)
-    {
+    public function __construct(
+        private readonly ?array $row,
+        private readonly array $all = [],
+    ) {
     }
 
     /**
@@ -381,5 +559,17 @@ final class FakeDbalResult
     public function fetchAssociative(): array|false
     {
         return $this->row ?? false;
+    }
+
+    /**
+     * @return list<array<string, mixed>>
+     */
+    public function fetchAllAssociative(): array
+    {
+        if ($this->all !== []) {
+            return $this->all;
+        }
+
+        return $this->row !== null ? [$this->row] : [];
     }
 }

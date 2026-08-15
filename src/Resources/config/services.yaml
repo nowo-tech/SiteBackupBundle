@@ -32,6 +32,8 @@ services:
         arguments:
             $filePath: '%kernel.project_dir%/var/site-backup/setup-progress.json'
 
+    Nowo\SiteBackupBundle\Setup\Storage\DoctrineDbalSetupStepJournal: ~
+
     Nowo\SiteBackupBundle\Setup\Storage\DoctrineDbalSetupProgressStorage: ~
 
     Nowo\SiteBackupBundle\Setup\Storage\ChainSetupProgressStorage: ~
