@@ -38,6 +38,11 @@ final class ConfigurationTest extends TestCase
         self::assertSame('en', $config['setup']['locale']['default']);
         self::assertSame(['en'], $config['setup']['locale']['enabled']);
         self::assertSame('redirect', $config['setup']['locale']['unlocalized']);
+        self::assertFalse($config['setup']['durable_done']['enabled']);
+        self::assertSame('/', $config['setup']['durable_done']['redirect_target']);
+        self::assertFalse($config['setup']['cold_start']['enabled']);
+        self::assertTrue($config['setup']['cold_start']['stop_propagation']);
+        self::assertContains('/health/', $config['setup']['cold_start']['safe_path_prefixes']);
         self::assertSame(['ROLE_ADMIN'], $config['security']['access_roles']);
         self::assertNull($config['security']['access_checker']);
         self::assertFalse($config['security']['allow_unauthenticated']);

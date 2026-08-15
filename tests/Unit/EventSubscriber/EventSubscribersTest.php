@@ -56,6 +56,7 @@ final class EventSubscribersTest extends TestCase
         $subscriber->onKernelRequest($event);
         self::assertNotNull($event->getResponse());
         self::assertStringContainsString('/_setup', (string) $event->getResponse()->headers->get('Location'));
+        self::assertTrue($event->isPropagationStopped());
     }
 
     public function testSetupRequestSubscriberSkipsLocalizedSetupPath(): void

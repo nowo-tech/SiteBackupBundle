@@ -72,4 +72,12 @@ final class SetupCoreTest extends TestCase
         $this->expectException(RuntimeException::class);
         $provisioner->createAdmin(['email' => 'admin@example.com', 'password' => 'secret']);
     }
+
+    public function testNullDurableSetupDoneStore(): void
+    {
+        $store = new \Nowo\SiteBackupBundle\Setup\NullDurableSetupDoneStore();
+        self::assertFalse($store->isDone());
+        $store->markDone();
+        self::assertFalse($store->isDone());
+    }
 }

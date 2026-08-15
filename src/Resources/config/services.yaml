@@ -84,6 +84,15 @@ services:
 
     Nowo\SiteBackupBundle\EventSubscriber\SetupRequestSubscriber: ~
 
+    Nowo\SiteBackupBundle\EventSubscriber\SetupDbDoneRedirectSubscriber:
+        autoconfigure: false
+
+    Nowo\SiteBackupBundle\EventSubscriber\ColdStartSchemaGateSubscriber:
+        autoconfigure: false
+
+    Nowo\SiteBackupBundle\Setup\ColdStart\MysqlSchemaExistenceChecker:
+        autoconfigure: false
+
     Nowo\SiteBackupBundle\Controller\SiteBackupPanelController:
         public: true
         tags: ['controller.service_arguments']

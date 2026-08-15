@@ -73,6 +73,7 @@ final class SetupRequestSubscriber
         }
 
         $event->setResponse(new RedirectResponse($target));
+        $event->stopPropagation();
     }
 
     private function isSetupPath(string $path): bool
