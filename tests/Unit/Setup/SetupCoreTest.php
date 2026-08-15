@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\Tests\Unit\Setup;
 
 use Nowo\SiteBackupBundle\Setup\NullAdminUserProvisioner;
+use Nowo\SiteBackupBundle\Setup\NullDurableSetupDoneStore;
 use Nowo\SiteBackupBundle\Setup\SetupContext;
 use Nowo\SiteBackupBundle\Setup\SetupStepInput;
 use Nowo\SiteBackupBundle\Setup\SetupStepResult;
@@ -75,7 +76,7 @@ final class SetupCoreTest extends TestCase
 
     public function testNullDurableSetupDoneStore(): void
     {
-        $store = new \Nowo\SiteBackupBundle\Setup\NullDurableSetupDoneStore();
+        $store = new NullDurableSetupDoneStore();
         self::assertFalse($store->isDone());
         $store->markDone();
         self::assertFalse($store->isDone());

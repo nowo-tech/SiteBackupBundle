@@ -26,16 +26,16 @@ use Nowo\SiteBackupBundle\Service\SiteBackupManager;
 use Nowo\SiteBackupBundle\Setup\AdminUserProvisionerInterface;
 use Nowo\SiteBackupBundle\Setup\ColdStart\MysqlSchemaExistenceChecker;
 use Nowo\SiteBackupBundle\Setup\ColdStart\SchemaExistenceCheckerInterface;
-use Nowo\SiteBackupBundle\Setup\DurableSetupDoneStoreInterface;
-use Nowo\SiteBackupBundle\Setup\NullDurableSetupDoneStore;
-use Nowo\SiteBackupBundle\Setup\SetupDbDoneGuard;
 use Nowo\SiteBackupBundle\Setup\ConsoleProcessRunner;
 use Nowo\SiteBackupBundle\Setup\Detector\DoctrineConnectDetector;
 use Nowo\SiteBackupBundle\Setup\Detector\DoctrineSchemaEmptyDetector;
 use Nowo\SiteBackupBundle\Setup\Detector\IncompleteSetupProgressDetector;
 use Nowo\SiteBackupBundle\Setup\Detector\MarkerFileDetector;
 use Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator;
+use Nowo\SiteBackupBundle\Setup\DurableSetupDoneStoreInterface;
 use Nowo\SiteBackupBundle\Setup\NullAdminUserProvisioner;
+use Nowo\SiteBackupBundle\Setup\NullDurableSetupDoneStore;
+use Nowo\SiteBackupBundle\Setup\SetupDbDoneGuard;
 use Nowo\SiteBackupBundle\Setup\SetupOrchestrator;
 use Nowo\SiteBackupBundle\Setup\SetupStepFactory;
 use Nowo\SiteBackupBundle\Setup\SetupTabCheckerLocator;
@@ -65,6 +65,7 @@ use function array_key_exists;
 use function array_values;
 use function in_array;
 use function is_array;
+use function is_int;
 use function is_string;
 
 final class SiteBackupExtension extends Extension implements PrependExtensionInterface
@@ -649,7 +650,7 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
 
     /**
      * @param array<string, mixed> $setup
-     * @param list<string>         $localeEnabled
+     * @param list<string> $localeEnabled
      */
     private function configureDurableDoneAndColdStart(ContainerBuilder $container, array $setup, array $localeEnabled): void
     {
