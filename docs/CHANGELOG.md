@@ -7,8 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.11.0] - 2026-08-15
+
 ### Added
 - **Setup step journal** (`002-setup-step-rows`): optional per-step DBAL table (`setup.progress_steps_table`, default `nowo_site_backup_setup_step`) upserted when `progress_storage` is `doctrine`/`chain` and `progress_step_rows: true` (default). Runtime DDL only — **not** Symfony Migrations — so early wizard steps still work before the host schema exists. Load merges completed step ids from the journal; `latestFinishedStep()` supports ops/status queries.
+
+### Documentation
+- [SETUP-WIZARD.md](SETUP-WIZARD.md) / [CONFIGURATION.md](CONFIGURATION.md) / [UPGRADING.md](UPGRADING.md) — cold-start progress storage and per-step journal.
+- Spec `specs/002-setup-step-rows/` and baseline FR-SETUP-002 update.
+
+[1.11.0]: https://github.com/nowo-tech/SiteBackupBundle/releases/tag/v1.11.0
 
 ## [1.10.1] - 2026-08-07
 
