@@ -38,6 +38,10 @@ services:
 
     Nowo\SiteBackupBundle\Setup\Storage\ChainSetupProgressStorage: ~
 
+    Nowo\SiteBackupBundle\Setup\Storage\CacheSetupProgressStorage: ~
+
+    Nowo\SiteBackupBundle\Setup\Storage\CacheDoctrineSetupProgressStorage: ~
+
     Nowo\SiteBackupBundle\Setup\Storage\SetupMarkerManager:
         arguments:
             $requiredFile: '%kernel.project_dir%/var/site-backup/setup.required'

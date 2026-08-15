@@ -110,16 +110,18 @@ tabs:
 | `filesystem` (default) | JSON at `setup.progress_file` (`var/site-backup/setup-progress.json`) |
 | `doctrine` | Singleton row in DBAL table `setup.progress_table` (default `nowo_site_backup_setup_progress`); table auto-created on first write |
 | `chain` | Write JSON **and** DB when possible; **load prefers DB** so wiping `var/` does not lose the current step |
+| `cache` | PSR-6 pool (`setup.progress_cache_pool`, default `cache.app`) — no `var/` JSON |
+| `cache_doctrine` | Cache + DB; **load prefers DB**; soft-fails Doctrine until schema exists |
 
-**Cold-start (no migrations yet):** the first wizard steps often run **before** the host database exists or before Symfony Migrations have been applied. Progress/step tables are created with **runtime DDL** (`CREATE TABLE IF NOT EXISTS`) on first successful DBAL write — **never** via a Doctrine Migration shipped by this bundle. Until DBAL is usable, `chain` keeps the filesystem JSON as the source of truth and soft-fails DB mirrors.
+**Cold-start (no migrations yet):** the first wizard steps often run **before** the host database exists or before Symfony Migrations have been applied. Progress/step tables are created with **runtime DDL** (`CREATE TABLE IF NOT EXISTS`) on first successful DBAL write — **never** via a Doctrine Migration shipped by this bundle. Until DBAL is usable, `chain` keeps filesystem JSON and `cache` / `cache_doctrine` keep the PSR-6 pool as the source of truth (soft-fail DB mirrors). With `cold_start.require_application_tables: true` (default), an empty MySQL schema stays cold until host migrations create non-`nowo_site_backup_*` tables.
 
-**Per-step journal (doctrine/chain):** when `setup.progress_step_rows` is `true` (default), each save also upserts rows into `setup.progress_steps_table` (default `nowo_site_backup_setup_step`: `profile`, `step_id`, `status`, `finished_at`, …). Resume still uses `completed_step_ids` (merged from journal on load). Operators can query the last finished step without decoding the singleton JSON payload.
+**Per-step journal (doctrine / chain / cache_doctrine):** when `setup.progress_step_rows` is `true` (default), each save also upserts rows into `setup.progress_steps_table` (default `nowo_site_backup_setup_step`: `profile`, `step_id`, `status`, `finished_at`, …). Resume still uses `completed_step_ids` (merged from journal on load). Operators can query the last finished step without decoding the singleton JSON payload.
 
 Progress payload includes `started_at`, `current_step_id`, `phase`, `percent`, `completed_at`, plus log/answers.
 
 **Durable setup done (v1.12+):** file marker `setup.done` is ephemeral in container images. Host apps that persist completion in the database implement `DurableSetupDoneStoreInterface` and replace the default `NullDurableSetupDoneStore` alias. Enable `setup.durable_done.enabled: true` to register `SetupDbDoneRedirectSubscriber` (priority 3), which closes the wizard and heals markers/progress from the durable store when detectors no longer require setup.
 
-**Cold-start schema gate (v1.12+):** when `setup.cold_start.enabled: true`, `ColdStartSchemaGateSubscriber` probes MySQL schema reachability (DBAL `SELECT 1` or `setup.cold_start.mysql_*` PDO fallback) and redirects other paths to the setup prefix until the schema exists. Safe paths (`setup.cold_start.safe_path_prefixes`, default includes `/health/`, `/_wdt`, …) bypass the redirect; `stop_propagation` prevents lower-priority listeners from assuming a working schema.
+**Cold-start schema gate (v1.12+ / v1.13+):** when `setup.cold_start.enabled: true`, `ColdStartSchemaGateSubscriber` probes MySQL schema reachability (DBAL `SELECT 1` or `setup.cold_start.mysql_*` PDO fallback) and redirects other paths to the setup prefix until the schema exists. With `require_application_tables: true` (default since 1.13), an empty named schema is still treated as cold. Safe paths (`setup.cold_start.safe_path_prefixes`, default includes `/health/`, `/_wdt`, …) bypass the redirect; `stop_propagation` prevents lower-priority listeners from assuming a working schema.
 
 After a successful wizard finish: write `setup.done`, remove `setup.required`, emit `SetupCompletedEvent`.
 

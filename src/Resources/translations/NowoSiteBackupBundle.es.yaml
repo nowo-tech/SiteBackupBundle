@@ -48,8 +48,8 @@ setup:
   reason:
     heading: 'Hace falta completar el setup'
     db_connection: 'La base de datos no es alcanzable con el DATABASE_URL actual (falta, es incorrecto o el servicio DB está caído).'
-    db_connection_hint: 'Configura un DATABASE_URL válido en el paso de base de datos antes de continuar. Omitir está desactivado hasta que la conexión funcione.'
-    db_connection_form: 'Falló la conexión a la base de datos. Introduce un DATABASE_URL válido (se escribe en .env.local). No puedes omitir este paso hasta que la base responda.'
+    db_connection_hint: 'Si .env ya tiene DATABASE_URL, omite este paso cuando sea opcional. El siguiente puede crear el esquema (doctrine:database:create).'
+    db_connection_form: 'Doctrine aún no puede abrir el esquema (a menudo falta el nombre de la base). Si el paso es opcional, Omitir mantiene el DATABASE_URL de .env — luego crea el esquema en el siguiente paso — o pega una URL corregida.'
     db_schema_empty: 'La base conecta pero aún no tiene tablas — las migraciones / importación crearán el esquema.'
     db_schema_hint: 'Continúa el asistente para ejecutar migraciones (o importar un dump completo). No hace falta cambiar DATABASE_URL si la conexión ya funciona.'
     marker_required: 'Existe el marcador setup.required (arranque en frío o post-restore).'

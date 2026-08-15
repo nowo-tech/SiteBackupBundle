@@ -2,6 +2,10 @@
 {% if not db_connection_failed and reasons is defined %}
     {% set db_connection_failed = 'database connection failed' in reasons %}
 {% endif %}
+{% set database_url_optional = database_url_optional|default(true) %}
+{% if form.vars.optional is defined %}
+    {% set database_url_optional = form.vars.optional %}
+{% endif %}
 
 {{ form_start(form) }}
     {% if db_connection_failed %}
@@ -17,8 +21,9 @@
     }) }}
     <div class="actions">
         <button type="submit">{{ 'setup.database.save'|trans({}, 'NowoSiteBackupBundle') }}</button>
-        {% if not db_connection_failed %}
-            <button class="secondary" type="submit" name="action" value="skip">{{ 'setup.database.skip'|trans({}, 'NowoSiteBackupBundle') }}</button>
+        {% if database_url_optional or not db_connection_failed %}
+            {# formnovalidate: HTML5 must not block Skip with an empty field #}
+            <button class="secondary" type="submit" name="action" value="skip" formnovalidate>{{ 'setup.database.skip'|trans({}, 'NowoSiteBackupBundle') }}</button>
         {% endif %}
     </div>
 {{ form_end(form) }}

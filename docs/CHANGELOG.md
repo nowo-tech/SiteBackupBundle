@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.13.0] - 2026-08-15
+
+### Added
+- **`progress_storage: cache` / `cache_doctrine`**: PSR-6 pool progress (`progress_cache_pool`, default `cache.app`) for cold-start without `var/` JSON. `cache_doctrine` prefers DBAL on load and soft-fails Doctrine writes until the schema exists; invalidates cache progress when app tables disappear after migrations.
+- **`setup.cold_start.require_application_tables`** (default `true`): empty MySQL schemas (only `nowo_site_backup_*` runtime tables) stay cold-start until host migrations create application tables.
+
+### Fixed
+- **Optional `database_url` Skip**: when the step is optional, Skip stays available and the field is not `required` even if detectors report `database connection failed` (missing/empty schema). Skip button uses `formnovalidate`.
+
+### Documentation
+- [SETUP-WIZARD.md](SETUP-WIZARD.md) / [CONFIGURATION.md](CONFIGURATION.md) / [UPGRADING.md](UPGRADING.md).
+
 ## [1.12.0] - 2026-08-15
 
 ### Added
@@ -25,6 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Documentation
 - [SETUP-WIZARD.md](SETUP-WIZARD.md) / [CONFIGURATION.md](CONFIGURATION.md) / [UPGRADING.md](UPGRADING.md) — cold-start progress storage and per-step journal.
 - Spec `specs/002-setup-step-rows/` and baseline FR-SETUP-002 update.
+
+[1.13.0]: https://github.com/nowo-tech/SiteBackupBundle/releases/tag/v1.13.0
 
 [1.12.0]: https://github.com/nowo-tech/SiteBackupBundle/releases/tag/v1.12.0
 

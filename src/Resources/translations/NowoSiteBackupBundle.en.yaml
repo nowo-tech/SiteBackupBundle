@@ -48,8 +48,8 @@ setup:
   reason:
     heading: 'Setup is required'
     db_connection: 'The database is not reachable with the current DATABASE_URL (missing, wrong, or the DB service is down).'
-    db_connection_hint: 'Configure a working DATABASE_URL in the database step before continuing. Skip is disabled until the connection works.'
-    db_connection_form: 'Database connection failed. Enter a valid DATABASE_URL (written to .env.local). You cannot skip this step until the database responds.'
+    db_connection_hint: 'If .env already has DATABASE_URL, skip this step when it is optional. The next step can create the schema (doctrine:database:create).'
+    db_connection_form: 'Doctrine cannot open the schema yet (often the database name is missing). When this step is optional, Skip keeps the current DATABASE_URL from .env — then create the schema on the next step — or paste a corrected URL.'
     db_schema_empty: 'The database connects but has no tables yet — migrations / import will create the schema.'
     db_schema_hint: 'Continue the wizard to run migrations (or import a full dump). You do not need to change DATABASE_URL if the connection already works.'
     marker_required: 'A setup.required marker is present (cold start or post-restore).'
