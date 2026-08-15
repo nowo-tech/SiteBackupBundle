@@ -34,6 +34,7 @@ use Nowo\SiteBackupBundle\Setup\SetupStepFactory;
 use Nowo\SiteBackupBundle\Setup\SetupTabCheckerLocator;
 use Nowo\SiteBackupBundle\Setup\Storage\ChainSetupProgressStorage;
 use Nowo\SiteBackupBundle\Setup\Storage\DoctrineDbalSetupProgressStorage;
+use Nowo\SiteBackupBundle\Setup\Storage\DoctrineDbalSetupStepJournal;
 use Nowo\SiteBackupBundle\Setup\Storage\FilesystemSetupProgressStorage;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupMarkerManager;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupProgressStorageInterface;
@@ -456,9 +457,21 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
         $container->getDefinition(FilesystemSetupProgressStorage::class)
             ->setArgument('$filePath', $setup['progress_file']);
 
+        $container->getDefinition(DoctrineDbalSetupStepJournal::class)
+            ->setArgument('$connection', $dbalRef)
+            ->setArgument('$tableName', (string) ($setup['progress_steps_table'] ?? DoctrineDbalSetupStepJournal::TABLE));
+
+        $stepRowsEnabled = (bool) ($setup['progress_step_rows'] ?? true);
+        $progressMode    = (string) ($setup['progress_storage'] ?? 'filesystem');
+        if ($progressMode === 'filesystem') {
+            $stepRowsEnabled = false;
+        }
+
         $container->getDefinition(DoctrineDbalSetupProgressStorage::class)
             ->setArgument('$connection', $dbalRef)
-            ->setArgument('$tableName', (string) ($setup['progress_table'] ?? DoctrineDbalSetupProgressStorage::TABLE));
+            ->setArgument('$tableName', (string) ($setup['progress_table'] ?? DoctrineDbalSetupProgressStorage::TABLE))
+            ->setArgument('$stepJournal', new Reference(DoctrineDbalSetupStepJournal::class))
+            ->setArgument('$stepRowsEnabled', $stepRowsEnabled);
 
         $container->getDefinition(ChainSetupProgressStorage::class)
             ->setArgument('$filesystem', new Reference(FilesystemSetupProgressStorage::class))

@@ -24,7 +24,11 @@ use const JSON_THROW_ON_ERROR;
  * Persists setup progress in a singleton DBAL table (survives wiping var/).
  *
  * Soft-depends on Doctrine DBAL via duck-typing — no hard composer require.
- * Creates {@see self::TABLE} on first successful write when the connection works.
+ * Creates {@see self::TABLE} on first successful write when the connection works
+ * (runtime DDL — not Symfony Migrations; early wizard steps may have no DB yet).
+ *
+ * When a {@see DoctrineDbalSetupStepJournal} is wired, each save also upserts
+ * per-step rows (soft-fail) and load merges completed step ids from the journal.
  */
 final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInterface
 {
@@ -35,6 +39,8 @@ final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInte
     public function __construct(
         private readonly mixed $connection = null,
         private readonly string $tableName = self::TABLE,
+        private readonly ?DoctrineDbalSetupStepJournal $stepJournal = null,
+        private readonly bool $stepRowsEnabled = true,
     ) {
     }
 
@@ -48,25 +54,27 @@ final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInte
             $this->ensureSchema();
             $row = $this->fetchRow();
             if ($row === null) {
-                return new SetupProgress();
-            }
+                $progress = new SetupProgress();
+            } else {
+                $payload = $row['payload'] ?? null;
+                if (is_string($payload) && $payload !== '') {
+                    try {
+                        /** @var array<string, mixed> $data */
+                        $data = json_decode($payload, true, 512, JSON_THROW_ON_ERROR);
 
-            $payload = $row['payload'] ?? null;
-            if (is_string($payload) && $payload !== '') {
-                try {
-                    /** @var array<string, mixed> $data */
-                    $data = json_decode($payload, true, 512, JSON_THROW_ON_ERROR);
-
-                    return SetupProgress::fromArray($data);
-                } catch (JsonException) {
-                    return new SetupProgress();
+                        $progress = SetupProgress::fromArray($data);
+                    } catch (JsonException) {
+                        $progress = new SetupProgress();
+                    }
+                } else {
+                    $progress = new SetupProgress();
                 }
             }
         } catch (Throwable) {
             return new SetupProgress();
         }
 
-        return new SetupProgress();
+        return $this->enrichFromStepJournal($progress);
     }
 
     public function save(SetupProgress $progress): void
@@ -136,12 +144,51 @@ final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInte
         } catch (Throwable $e) {
             throw new RuntimeException('Unable to persist setup progress to database: ' . $e->getMessage(), 0, $e);
         }
+
+        $this->syncStepJournal($progress);
     }
 
     public function isUsable(): bool
     {
         return is_object($this->connection)
             && (method_exists($this->connection, 'executeQuery') || method_exists($this->connection, 'executeStatement'));
+    }
+
+    private function syncStepJournal(SetupProgress $progress): void
+    {
+        if (!$this->stepRowsEnabled || !$this->stepJournal instanceof DoctrineDbalSetupStepJournal) {
+            return;
+        }
+
+        try {
+            $idleEmpty = $progress->getPhase() === SetupProgress::PHASE_IDLE
+                && $progress->getCompletedStepIds() === []
+                && $progress->getCurrentStepId() === null;
+
+            if ($idleEmpty) {
+                $profile = $progress->getProfile() !== '' ? $progress->getProfile() : null;
+                $this->stepJournal->clear($profile);
+
+                return;
+            }
+
+            $this->stepJournal->sync($progress);
+        } catch (Throwable) {
+            // Soft-fail: singleton row remains source of truth; DB may still be cold mid-wizard.
+        }
+    }
+
+    private function enrichFromStepJournal(SetupProgress $progress): SetupProgress
+    {
+        if (!$this->stepRowsEnabled || !$this->stepJournal instanceof DoctrineDbalSetupStepJournal) {
+            return $progress;
+        }
+
+        try {
+            return $this->stepJournal->enrich($progress);
+        } catch (Throwable) {
+            return $progress;
+        }
     }
 
     private function ensureSchema(): void

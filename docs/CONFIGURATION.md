@@ -34,7 +34,9 @@ Root key: `nowo_site_backup`.
 | `setup.layout_template` | `null` (bundle `setup/layout.html.twig`) | Host Twig shell; Twig global `nowo_site_backup_setup_layout_template`; blocks `nowo_ui_content` / `nowo_site_backup_content` |
 | `templates.setup_layout` | `@NowoSiteBackupBundle/setup/layout.html.twig` | Same as `setup.layout_template` when set |
 | `setup.progress_storage` | `filesystem` | `filesystem` \| `doctrine` \| `chain` (prefer DB on load) |
-| `setup.progress_table` | `nowo_site_backup_setup_progress` | DBAL table for doctrine/chain |
+| `setup.progress_table` | `nowo_site_backup_setup_progress` | DBAL table for doctrine/chain (runtime DDL — not Symfony Migrations) |
+| `setup.progress_step_rows` | `true` | Upsert per-step journal when doctrine/chain (disabled automatically for filesystem) |
+| `setup.progress_steps_table` | `nowo_site_backup_setup_step` | Per-step journal table (`profile` + `step_id` PK) |
 | `setup.progress_file` | `%kernel.project_dir%/var/site-backup/setup-progress.json` | JSON progress when filesystem/chain |
 | `setup.detectors.incomplete_progress` | `true` | Gate when progress phase is running/waiting/failed |
 | Custom setup-need detectors | — | `#[AsSetupNeedDetector]` + `SetupNeedDetectorInterface` → tag `nowo.site_backup.setup_need_detector`. Distinct from tab `checker:` / `SetupTabCheckerInterface`. |
