@@ -37,6 +37,12 @@ Root key: `nowo_site_backup`.
 | `setup.progress_table` | `nowo_site_backup_setup_progress` | DBAL table for doctrine/chain (runtime DDL — not Symfony Migrations) |
 | `setup.progress_step_rows` | `true` | Upsert per-step journal when doctrine/chain (disabled automatically for filesystem) |
 | `setup.progress_steps_table` | `nowo_site_backup_setup_step` | Per-step journal table (`profile` + `step_id` PK) |
+| `setup.durable_done.enabled` | `false` | Register `SetupDbDoneRedirectSubscriber`; host replaces `DurableSetupDoneStoreInterface` alias |
+| `setup.durable_done.redirect_target` | `/` | Redirect when durable done closes the wizard |
+| `setup.cold_start.enabled` | `false` | Register cold-start schema gate subscriber + checker |
+| `setup.cold_start.stop_propagation` | `true` | Stop `kernel.request` propagation after redirect / on safe paths |
+| `setup.cold_start.safe_path_prefixes` | `/health/`, `/api/`, `/_wdt`, … | Allowed without redirect when schema missing |
+| `setup.cold_start.mysql_*` | `null` / `3306` | Optional PDO fallback when DBAL is unavailable (`mysql_host`, `mysql_port`, `mysql_user`, `mysql_password`, `mysql_database`) |
 | `setup.progress_file` | `%kernel.project_dir%/var/site-backup/setup-progress.json` | JSON progress when filesystem/chain |
 | `setup.detectors.incomplete_progress` | `true` | Gate when progress phase is running/waiting/failed |
 | Custom setup-need detectors | — | `#[AsSetupNeedDetector]` + `SetupNeedDetectorInterface` → tag `nowo.site_backup.setup_need_detector`. Distinct from tab `checker:` / `SetupTabCheckerInterface`. |
@@ -53,6 +59,17 @@ Profiles (`default_profile` / `profiles`) are **not** used for backup state: bac
 
 ```yaml
 nowo_site_backup:
+    setup:
+        durable_done:
+            enabled: true
+            redirect_target: '/'
+        cold_start:
+            enabled: true
+            mysql_host: '%env(MYSQL_HOST)%'
+            mysql_port: 3306
+            mysql_user: '%env(MYSQL_USER)%'
+            mysql_password: '%env(MYSQL_PASSWORD)%'
+            mysql_database: '%env(MYSQL_DATABASE)%'
     process_timeout: 900
     css_framework: bootstrap5   # or: tailwind | foundation | custom | tabler | …
     backup:

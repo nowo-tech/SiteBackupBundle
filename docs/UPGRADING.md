@@ -1,5 +1,32 @@
 # Upgrading
 
+## To 1.12.0
+
+Optional **durable setup done** and **cold-start schema gate** (see [SiteBackupBundle#9](https://github.com/nowo-tech/SiteBackupBundle/issues/9)):
+
+```yaml
+nowo_site_backup:
+    setup:
+        durable_done:
+            enabled: true
+            redirect_target: '/'
+        cold_start:
+            enabled: true
+            stop_propagation: true
+            # safe_path_prefixes: [...]  # defaults include /health/, /_wdt, …
+            mysql_host: '%env(MYSQL_HOST)%'
+            mysql_database: '%env(MYSQL_DATABASE)%'
+```
+
+**Durable done:** replace the `DurableSetupDoneStoreInterface` service alias in the host app with an implementation backed by your database row (e.g. `instance_settings.setup_completed_at`). Default alias remains `NullDurableSetupDoneStore` (BC).
+
+**Cold start:** when enabled, requests redirect to the setup path until MySQL schema is reachable; probe uses DBAL when available, else `setup.cold_start.mysql_*`.
+
+```bash
+composer update nowo-tech/site-backup-bundle
+php bin/console cache:clear
+```
+
 ## To 1.11.0
 
 Optional **per-step setup journal** when using `progress_storage: doctrine` or `chain`:

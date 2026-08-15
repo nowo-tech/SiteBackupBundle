@@ -235,6 +235,45 @@ final class Configuration implements ConfigurationInterface
                         ->scalarNode('done_marker_file')
                             ->defaultValue('%kernel.project_dir%/var/site-backup/setup.done')
                         ->end()
+                        ->arrayNode('durable_done')
+                            ->info('Close the wizard from a host durable store (survives var/ wipe).')
+                            ->addDefaultsIfNotSet()
+                            ->children()
+                                ->booleanNode('enabled')->defaultFalse()->end()
+                                ->scalarNode('redirect_target')
+                                    ->info('Target when durable done closes the wizard (default /).')
+                                    ->defaultValue('/')
+                                    ->cannotBeEmpty()
+                                ->end()
+                            ->end()
+                        ->end()
+                        ->arrayNode('cold_start')
+                            ->info('Gate requests when the MySQL application schema is not reachable yet.')
+                            ->addDefaultsIfNotSet()
+                            ->children()
+                                ->booleanNode('enabled')->defaultFalse()->end()
+                                ->booleanNode('stop_propagation')->defaultTrue()->end()
+                                ->arrayNode('safe_path_prefixes')
+                                    ->info('Paths allowed through without redirect when schema is missing.')
+                                    ->scalarPrototype()->end()
+                                    ->defaultValue([
+                                        '/health/',
+                                        '/api/',
+                                        '/_wdt',
+                                        '/_profiler',
+                                        '/build/',
+                                        '/assets/',
+                                        '/_error',
+                                        '/favicon.ico',
+                                    ])
+                                ->end()
+                                ->scalarNode('mysql_host')->defaultNull()->end()
+                                ->integerNode('mysql_port')->defaultValue(3306)->min(1)->max(65535)->end()
+                                ->scalarNode('mysql_user')->defaultNull()->end()
+                                ->scalarNode('mysql_password')->defaultNull()->end()
+                                ->scalarNode('mysql_database')->defaultNull()->end()
+                            ->end()
+                        ->end()
                         ->scalarNode('php_binary')->defaultValue('php')->end()
                         ->scalarNode('admin_provisioner')
                             ->info('Service id implementing AdminUserProvisionerInterface.')

@@ -9,7 +9,9 @@ use Nowo\SiteBackupBundle\Backup\BackupArchiver;
 use Nowo\SiteBackupBundle\Controller\SetupUnlocalizedLocaleRedirectController;
 use Nowo\SiteBackupBundle\Controller\SetupWizardController;
 use Nowo\SiteBackupBundle\Controller\SiteBackupPanelController;
+use Nowo\SiteBackupBundle\EventSubscriber\ColdStartSchemaGateSubscriber;
 use Nowo\SiteBackupBundle\EventSubscriber\RestoreRequestSubscriber;
+use Nowo\SiteBackupBundle\EventSubscriber\SetupDbDoneRedirectSubscriber;
 use Nowo\SiteBackupBundle\EventSubscriber\SetupRequestSubscriber;
 use Nowo\SiteBackupBundle\Exclusion\SiteBackupExclusionMatcher;
 use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
@@ -22,6 +24,11 @@ use Nowo\SiteBackupBundle\Security\SiteBackupAccessCheckerInterface;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessGateInterface;
 use Nowo\SiteBackupBundle\Service\SiteBackupManager;
 use Nowo\SiteBackupBundle\Setup\AdminUserProvisionerInterface;
+use Nowo\SiteBackupBundle\Setup\ColdStart\MysqlSchemaExistenceChecker;
+use Nowo\SiteBackupBundle\Setup\ColdStart\SchemaExistenceCheckerInterface;
+use Nowo\SiteBackupBundle\Setup\DurableSetupDoneStoreInterface;
+use Nowo\SiteBackupBundle\Setup\NullDurableSetupDoneStore;
+use Nowo\SiteBackupBundle\Setup\SetupDbDoneGuard;
 use Nowo\SiteBackupBundle\Setup\ConsoleProcessRunner;
 use Nowo\SiteBackupBundle\Setup\Detector\DoctrineConnectDetector;
 use Nowo\SiteBackupBundle\Setup\Detector\DoctrineSchemaEmptyDetector;
@@ -609,6 +616,8 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             }
         }
 
+        $this->configureDurableDoneAndColdStart($container, $setup, $localeEnabled);
+
         $container->register(SetupUnlocalizedLocaleRedirectController::class, SetupUnlocalizedLocaleRedirectController::class)
             ->setArgument('$urlGenerator', new Reference('router'))
             ->setPublic(true)
@@ -636,5 +645,74 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$csrfTokenManager', new Reference(CsrfTokenManagerInterface::class, ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
             ->setArgument('$pathPrefixResolver', new Reference(SetupPathPrefixResolver::class))
             ->setPublic(true);
+    }
+
+    /**
+     * @param array<string, mixed> $setup
+     * @param list<string>         $localeEnabled
+     */
+    private function configureDurableDoneAndColdStart(ContainerBuilder $container, array $setup, array $localeEnabled): void
+    {
+        $container->setAlias(DurableSetupDoneStoreInterface::class, NullDurableSetupDoneStore::class)->setPublic(false);
+
+        $durableDone = $setup['durable_done'] ?? [];
+        $coldStart   = $setup['cold_start'] ?? [];
+
+        $container->getDefinition(SetupDbDoneGuard::class)
+            ->setArgument('$durableDoneStore', new Reference(DurableSetupDoneStoreInterface::class))
+            ->setArgument('$needEvaluator', new Reference(SetupNeedEvaluator::class))
+            ->setArgument('$markers', new Reference(SetupMarkerManager::class))
+            ->setArgument('$progressStorage', new Reference(SetupProgressStorageInterface::class));
+
+        if ((bool) ($durableDone['enabled'] ?? false)) {
+            $redirectTarget = is_string($durableDone['redirect_target'] ?? null) && $durableDone['redirect_target'] !== ''
+                ? $durableDone['redirect_target']
+                : '/';
+
+            $container->getDefinition(SetupDbDoneRedirectSubscriber::class)
+                ->setArgument('$setupDbDoneGuard', new Reference(SetupDbDoneGuard::class))
+                ->setArgument('$setupPathPrefix', $setup['path_prefix'])
+                ->setArgument('$enabledLocales', $localeEnabled)
+                ->setArgument('$redirectTarget', $redirectTarget)
+                ->addTag('kernel.event_subscriber');
+        } else {
+            $container->removeDefinition(SetupDbDoneRedirectSubscriber::class);
+        }
+
+        if (!(bool) ($coldStart['enabled'] ?? false)) {
+            $container->removeDefinition(ColdStartSchemaGateSubscriber::class);
+            $container->removeDefinition(MysqlSchemaExistenceChecker::class);
+
+            return;
+        }
+
+        $dbalRef = new Reference('doctrine.dbal.default_connection', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE);
+
+        $mysqlHost = $coldStart['mysql_host'] ?? null;
+        $mysqlPort = $coldStart['mysql_port'] ?? 3306;
+        $mysqlUser = $coldStart['mysql_user'] ?? null;
+        $mysqlPass = $coldStart['mysql_password'] ?? null;
+        $mysqlDb   = $coldStart['mysql_database'] ?? null;
+
+        $container->getDefinition(MysqlSchemaExistenceChecker::class)
+            ->setArgument('$connection', $dbalRef)
+            ->setArgument('$host', is_string($mysqlHost) && $mysqlHost !== '' ? $mysqlHost : null)
+            ->setArgument('$port', is_int($mysqlPort) ? $mysqlPort : 3306)
+            ->setArgument('$user', is_string($mysqlUser) && $mysqlUser !== '' ? $mysqlUser : null)
+            ->setArgument('$password', is_string($mysqlPass) ? $mysqlPass : null)
+            ->setArgument('$database', is_string($mysqlDb) && $mysqlDb !== '' ? $mysqlDb : null);
+
+        $container->setAlias(SchemaExistenceCheckerInterface::class, MysqlSchemaExistenceChecker::class)->setPublic(false);
+
+        $safePrefixes = array_values($coldStart['safe_path_prefixes'] ?? []);
+
+        $container->getDefinition(ColdStartSchemaGateSubscriber::class)
+            ->setArgument('$schemaChecker', new Reference(SchemaExistenceCheckerInterface::class))
+            ->setArgument('$pathPrefixResolver', new Reference(SetupPathPrefixResolver::class))
+            ->setArgument('$setupPathPrefix', $setup['path_prefix'])
+            ->setArgument('$safePathPrefixes', $safePrefixes)
+            ->setArgument('$enabledLocales', $localeEnabled)
+            ->setArgument('$stopPropagation', (bool) ($coldStart['stop_propagation'] ?? true))
+            ->addTag('kernel.event_subscriber');
     }
 }

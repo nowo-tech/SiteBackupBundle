@@ -10,6 +10,8 @@ use Nowo\SiteBackupBundle\Controller\SetupWizardController;
 use Nowo\SiteBackupBundle\Controller\SiteBackupPanelController;
 use Nowo\SiteBackupBundle\DependencyInjection\Configuration;
 use Nowo\SiteBackupBundle\DependencyInjection\SiteBackupExtension;
+use Nowo\SiteBackupBundle\EventSubscriber\ColdStartSchemaGateSubscriber;
+use Nowo\SiteBackupBundle\EventSubscriber\SetupDbDoneRedirectSubscriber;
 use Nowo\SiteBackupBundle\Exclusion\SiteBackupExclusionMatcher;
 use Nowo\SiteBackupBundle\Routing\SetupPathPrefixResolver;
 use Nowo\SiteBackupBundle\Routing\SetupRouteLoader;
@@ -23,12 +25,15 @@ use Nowo\SiteBackupBundle\Setup\Detector\DoctrineSchemaEmptyDetector;
 use Nowo\SiteBackupBundle\Setup\Detector\IncompleteSetupProgressDetector;
 use Nowo\SiteBackupBundle\Setup\Detector\MarkerFileDetector;
 use Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator;
+use Nowo\SiteBackupBundle\Setup\ColdStart\MysqlSchemaExistenceChecker;
+use Nowo\SiteBackupBundle\Setup\DurableSetupDoneStoreInterface;
+use Nowo\SiteBackupBundle\Setup\NullDurableSetupDoneStore;
 use Nowo\SiteBackupBundle\Setup\SetupOrchestrator;
 use Nowo\SiteBackupBundle\Setup\SetupTabCheckerLocator;
-use PHPUnit\Framework\TestCase;
 use Symfony\Component\DependencyInjection\Argument\TaggedIteratorArgument;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Definition;
+use PHPUnit\Framework\TestCase;
 
 final class SiteBackupExtensionTest extends TestCase
 {
@@ -298,5 +303,41 @@ final class SiteBackupExtensionTest extends TestCase
         );
         self::assertFalse($container->hasDefinition('nowo_site_backup.access_checker.default'));
         self::assertFalse($container->hasDefinition('nowo_site_backup.access_checker.allow_all'));
+    }
+
+    public function testDurableDoneAndColdStartFlagsRegisterServices(): void
+    {
+        $container = new ContainerBuilder();
+        $container->setParameter('kernel.project_dir', sys_get_temp_dir());
+
+        (new SiteBackupExtension())->load([[
+            'security' => ['allow_unauthenticated' => true],
+            'setup'    => [
+                'durable_done' => ['enabled' => true, 'redirect_target' => '/home'],
+                'cold_start'   => ['enabled' => true],
+            ],
+        ]], $container);
+
+        self::assertSame(
+            NullDurableSetupDoneStore::class,
+            (string) $container->getAlias(DurableSetupDoneStoreInterface::class),
+        );
+        self::assertTrue($container->hasDefinition(SetupDbDoneRedirectSubscriber::class));
+        self::assertTrue($container->hasDefinition(ColdStartSchemaGateSubscriber::class));
+        self::assertTrue($container->hasDefinition(MysqlSchemaExistenceChecker::class));
+    }
+
+    public function testDurableDoneAndColdStartDisabledByDefault(): void
+    {
+        $container = new ContainerBuilder();
+        $container->setParameter('kernel.project_dir', sys_get_temp_dir());
+
+        (new SiteBackupExtension())->load([[
+            'security' => ['allow_unauthenticated' => true],
+        ]], $container);
+
+        self::assertFalse($container->hasDefinition(SetupDbDoneRedirectSubscriber::class));
+        self::assertFalse($container->hasDefinition(ColdStartSchemaGateSubscriber::class));
+        self::assertFalse($container->hasDefinition(MysqlSchemaExistenceChecker::class));
     }
 }

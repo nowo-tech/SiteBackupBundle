@@ -117,6 +117,10 @@ tabs:
 
 Progress payload includes `started_at`, `current_step_id`, `phase`, `percent`, `completed_at`, plus log/answers.
 
+**Durable setup done (v1.12+):** file marker `setup.done` is ephemeral in container images. Host apps that persist completion in the database implement `DurableSetupDoneStoreInterface` and replace the default `NullDurableSetupDoneStore` alias. Enable `setup.durable_done.enabled: true` to register `SetupDbDoneRedirectSubscriber` (priority 3), which closes the wizard and heals markers/progress from the durable store when detectors no longer require setup.
+
+**Cold-start schema gate (v1.12+):** when `setup.cold_start.enabled: true`, `ColdStartSchemaGateSubscriber` probes MySQL schema reachability (DBAL `SELECT 1` or `setup.cold_start.mysql_*` PDO fallback) and redirects other paths to the setup prefix until the schema exists. Safe paths (`setup.cold_start.safe_path_prefixes`, default includes `/health/`, `/_wdt`, …) bypass the redirect; `stop_propagation` prevents lower-priority listeners from assuming a working schema.
+
 After a successful wizard finish: write `setup.done`, remove `setup.required`, emit `SetupCompletedEvent`.
 
 During setup, the gate **blocks** the rest of the site (503 or soft redirect to `/_setup`) except:
