@@ -60,7 +60,7 @@ final class CacheDoctrineSetupProgressStorageTest extends TestCase
         $doctrine = $this->createMock(SetupProgressStorageInterface::class);
         $doctrine->expects(self::once())->method('save')->willThrowException(new RuntimeException('Unknown database'));
 
-        $cache = new CacheSetupProgressStorage(new ArrayAdapter());
+        $cache   = new CacheSetupProgressStorage(new ArrayAdapter());
         $storage = new CacheDoctrineSetupProgressStorage($cache, $doctrine, null);
 
         $storage->save(new SetupProgress(

@@ -473,7 +473,7 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
 
         $stepRowsEnabled = (bool) ($setup['progress_step_rows'] ?? true);
         $progressMode    = (string) ($setup['progress_storage'] ?? 'filesystem');
-        if (\in_array($progressMode, ['filesystem', 'cache'], true)) {
+        if (in_array($progressMode, ['filesystem', 'cache'], true)) {
             $stepRowsEnabled = false;
         }
 
@@ -487,7 +487,7 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$filesystem', new Reference(FilesystemSetupProgressStorage::class))
             ->setArgument('$doctrine', new Reference(DoctrineDbalSetupProgressStorage::class));
 
-        $usesCache = \in_array($progressMode, ['cache', 'cache_doctrine'], true);
+        $usesCache = in_array($progressMode, ['cache', 'cache_doctrine'], true);
         if ($usesCache) {
             $poolId = is_string($setup['progress_cache_pool'] ?? null) && $setup['progress_cache_pool'] !== ''
                 ? $setup['progress_cache_pool']

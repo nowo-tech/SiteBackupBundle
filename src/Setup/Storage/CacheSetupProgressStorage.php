@@ -8,6 +8,8 @@ use Nowo\SiteBackupBundle\Model\SetupProgress;
 use Psr\Cache\CacheItemPoolInterface;
 use Throwable;
 
+use function is_array;
+
 /**
  * Holds setup wizard progress in a PSR-6 cache pool (typically Redis via cache.app).
  *
@@ -33,11 +35,11 @@ final class CacheSetupProgressStorage implements SetupProgressStorageInterface
             }
 
             $data = $item->get();
-            if (!\is_array($data)) {
+            if (!is_array($data)) {
                 return new SetupProgress();
             }
 
-            /** @var array<string, mixed> $data */
+            /* @var array<string, mixed> $data */
             return SetupProgress::fromArray($data);
         } catch (Throwable) {
             return new SetupProgress();
@@ -47,9 +49,9 @@ final class CacheSetupProgressStorage implements SetupProgressStorageInterface
     public function save(SetupProgress $progress): void
     {
         try {
-            $idleEmpty = SetupProgress::PHASE_IDLE === $progress->getPhase()
-                && [] === $progress->getCompletedStepIds()
-                && null === $progress->getCurrentStepId();
+            $idleEmpty = $progress->getPhase() === SetupProgress::PHASE_IDLE
+                && $progress->getCompletedStepIds() === []
+                && $progress->getCurrentStepId() === null;
 
             if ($idleEmpty) {
                 $this->cache->deleteItem($this->cacheKey);
