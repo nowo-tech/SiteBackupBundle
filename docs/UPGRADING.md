@@ -1,6 +1,6 @@
 # Upgrading
 
-## To 1.11.0 (Unreleased)
+## To 1.11.0
 
 Optional **per-step setup journal** when using `progress_storage: doctrine` or `chain`:
 

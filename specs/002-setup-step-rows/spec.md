@@ -2,7 +2,7 @@
 
 **Feature Branch**: `feat/setup-step-rows`  
 **Created**: 2026-08-15  
-**Status**: Implemented on branch `feat/setup-step-rows` (pending release)  
+**Status**: Released in **v1.11.0** (branch `feat/setup-step-rows` merged)  
 **Parent**: `001-baseline` FR-SETUP-002 / US-5  
 
 ## Problem
