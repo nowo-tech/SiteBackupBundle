@@ -114,7 +114,7 @@ final readonly class MysqlSchemaExistenceChecker implements SchemaExistenceCheck
                 [$this->database, self::SETUP_TABLE_PREFIX],
             );
 
-            return false !== $result->fetchOne();
+            return $result->fetchOne() !== false;
         } catch (Throwable) {
             return false;
         }
@@ -132,7 +132,7 @@ final readonly class MysqlSchemaExistenceChecker implements SchemaExistenceCheck
             );
             $statement->execute([$this->database, self::SETUP_TABLE_PREFIX]);
 
-            return false !== $statement->fetchColumn();
+            return $statement->fetchColumn() !== false;
         } catch (Throwable) {
             return false;
         }

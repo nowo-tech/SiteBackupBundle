@@ -75,9 +75,9 @@ final class CacheDoctrineSetupProgressStorage implements SetupProgressStorageInt
 
     private function hasMeaningfulProgress(SetupProgress $progress): bool
     {
-        return SetupProgress::PHASE_IDLE !== $progress->getPhase()
+        return $progress->getPhase() !== SetupProgress::PHASE_IDLE
             || $progress->getStartedAt() instanceof DateTimeImmutable
-            || [] !== $progress->getCompletedStepIds();
+            || $progress->getCompletedStepIds() !== [];
     }
 
     /**
@@ -94,12 +94,12 @@ final class CacheDoctrineSetupProgressStorage implements SetupProgressStorageInt
         }
 
         $ids = $progress->getCompletedStepIds();
-        if (null !== $progress->getCurrentStepId()) {
+        if ($progress->getCurrentStepId() !== null) {
             $ids[] = $progress->getCurrentStepId();
         }
 
         foreach ($ids as $id) {
-            if (1 === preg_match('/migration|messenger|seed|admin_user|sample_data|sql_file|full_database/i', $id)) {
+            if (preg_match('/migration|messenger|seed|admin_user|sample_data|sql_file|full_database/i', $id) === 1) {
                 return true;
             }
         }
