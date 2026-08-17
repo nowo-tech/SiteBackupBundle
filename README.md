@@ -15,7 +15,7 @@ This bundle is **FrankenPHP worker mode friendly**.
 - **Integrity** — Per-file SHA-256 in `MANIFEST.json` plus archive SHA-256; `verify` before restore.
 - **Safe restore** — Validate → extract to staging → apply with protected paths → progress JSON; `var/site-backup/` never overwritten mid-restore.
 - **Loading page** — While restore is active, `kernel.request` returns **HTTP 503** with a progress UI (polls `/_site_backup/progress.json`); panel stays reachable.
-- **Setup wizard** — Cold start / post-restore: bootstrap mode (guided vs full SQL), DB, migrations/schema, YAML **tabs** + checkers, `advance_mode`, idempotent loaders, super-admin, optional sample data; durable progress (`filesystem` / `doctrine` / `chain`) — see [docs/SETUP-WIZARD.md](docs/SETUP-WIZARD.md).
+- **Setup wizard** — Cold start / post-restore: bootstrap mode (guided vs full SQL), DB, migrations/schema, YAML **tabs** + checkers, `advance_mode`, idempotent loaders, super-admin, optional sample data; durable progress (`filesystem` / `doctrine` / `cache` / `cache_doctrine` / `chain`); MySQL **cold-start schema gate** (`setup.cold_start.require_application_tables`) — see [docs/SETUP-WIZARD.md](docs/SETUP-WIZARD.md).
 - **Admin panel** — Create / verify / restore / delete under `/_site_backup` (password gate + CSRF).
 - **CLI** — `create`, `list`, `verify`, `restore`, `setup`, `setup-status`, `setup-reset`, `hash-password`.
 
