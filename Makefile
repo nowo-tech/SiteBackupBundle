@@ -145,7 +145,7 @@ assets:
 
 check-no-cursor-coauthor:
 	@chmod +x .scripts/check-no-cursor-coauthor.sh
-	@./.scripts/check-no-cursor-coauthor.sh HEAD
+	@./.scripts/check-no-cursor-coauthor.sh
 
 strip-cursor-coauthor-from-history:
 	@chmod +x .scripts/strip-cursor-coauthor-from-history.sh
