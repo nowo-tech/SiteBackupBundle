@@ -6,5 +6,6 @@ ROOT="$(git rev-parse --show-toplevel)"
 cd "$ROOT"
 
 if [ -x .scripts/check-no-cursor-coauthor.sh ]; then
-  ./.scripts/check-no-cursor-coauthor.sh HEAD
+  # Auto range (origin/main..HEAD): do not fail on grandfathered history already on main.
+  ./.scripts/check-no-cursor-coauthor.sh
 fi
