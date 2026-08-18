@@ -1,5 +1,14 @@
 # Upgrading
 
+## To 1.13.1
+
+No application upgrade steps. **Demos only:** Hot Reload Bundle `^1.4` (FrankenPHP Mercure/`hot_reload`, `dev`/`test`).
+
+```bash
+composer update nowo-tech/site-backup-bundle
+php bin/console cache:clear
+```
+
 ## To 1.13.0
 
 **Cold-start empty schema:** with `setup.cold_start.require_application_tables: true` (default), an empty MySQL database (after `database_create`, before migrations) stays cold-start. Set `false` only if you intentionally treat `SELECT 1` as enough.
