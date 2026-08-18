@@ -25,6 +25,8 @@
 composer require nowo-tech/site-backup-bundle
 ```
 
+The Flex recipe lives under `.symfony/recipe/` (copy those files if Flex does not apply them).
+
 ## Routes
 
 ```yaml
