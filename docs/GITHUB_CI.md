@@ -9,6 +9,8 @@
 
 CI and `make release-check` fail if commit history contains Cursor co-author trailers.
 
+The `git-hygiene` job clones with `fetch-depth: 0` so the checker sees full history.
+
 ```bash
 make check-no-cursor-coauthor
 make strip-cursor-coauthor-from-history   # rewrite local history if needed
