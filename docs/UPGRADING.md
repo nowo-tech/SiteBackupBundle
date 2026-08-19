@@ -1,5 +1,13 @@
 # Upgrading
 
+## To 1.13.2
+
+Patch release with test-only changes. **No application upgrade steps.**
+
+```bash
+composer update nowo-tech/site-backup-bundle
+```
+
 ## To 1.13.1
 
 No application upgrade steps. **Demos only:** Hot Reload Bundle `^1.4` (FrankenPHP Mercure/`hot_reload`, `dev`/`test`).

@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.13.2] - 2026-08-19
+
+### Changed
+
+- **Tests:** cover cold-start schema checker and setup redirect subscriber paths (REQ-TEST-003).
+
+[1.13.2]: https://github.com/nowo-tech/SiteBackupBundle/releases/tag/v1.13.2
+
 ## [1.13.1] - 2026-08-18
 
 ### Changed
