@@ -1,0 +1,5 @@
+# Merged into security.access_control by Symfony (REQ-SEC-004).
+security:
+    access_control:
+        - { path: ^/_site_backup, roles: ROLE_ADMIN }
+        - { path: ^/_setup, roles: ROLE_ADMIN }
