@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Tests:** coverage-completion cases for schema checker, setup journal, DI, and panel forms (REQ-TEST-003).
+- **Tests:** extract `FakeDbalConnection` / `FakeDbalResult` / `FakeDurableSetupDoneStore` so coverage tests can autoload and subclass them.
+
 ## [1.13.4] - 2026-08-20
 
 ### Security
