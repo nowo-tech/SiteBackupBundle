@@ -155,8 +155,8 @@ final class CoverageCompletionTest extends TestCase
     /**
      * Duck-typed DBAL connection used by {@see MysqlSchemaExistenceChecker} without requiring doctrine/dbal.
      *
-     * @param mixed $selectResult fetchOne value or {@see \Throwable}
-     * @param mixed $schemaResult fetchOne value, {@see \Throwable}, or `'no-fetch'`
+     * @param mixed $selectResult fetchOne value or {@see Throwable}
+     * @param mixed $schemaResult fetchOne value, {@see Throwable}, or `'no-fetch'`
      */
     private function schemaProbeConnection(mixed $selectResult = 1, mixed $schemaResult = 1): object
     {
