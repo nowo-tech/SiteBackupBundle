@@ -1,5 +1,13 @@
 # Upgrading
 
+## To 1.13.5
+
+Patch release with test-only changes. **No application upgrade steps.**
+
+```bash
+composer update nowo-tech/site-backup-bundle
+```
+
 ## To 1.13.4
 
 From **1.13.3** — Review Flex recipe `security_nowo_site_backup.yaml` and prod `setup.enabled: false` after install/update.
