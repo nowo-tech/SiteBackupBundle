@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.13.4] - 2026-08-20
+
+### Security
+
+- **Flex recipe:** ship `security_nowo_site_backup.yaml` (`access_control` for `/_site_backup` and `/_setup`) and prod hardening (`setup.enabled: false`, `allow_unauthenticated: false`). Prefer **`^1.13.4`** so Flex installs the files (landed on `main` via #15).
+
 ## [1.13.3] - 2026-08-20
 
 ### Security
