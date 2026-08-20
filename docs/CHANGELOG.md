@@ -7,6 +7,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.13.6] - 2026-08-20
+
+### Fixed
+
+- **CI:** schema-checker coverage tests no longer mock `Doctrine\DBAL\Connection` (not a required package), so PHPUnit succeeds without `doctrine/dbal` in the QA image (REQ-CI-003).
+- **Tests:** duck-typed DBAL/PDO probes, wizard form branches (`bootstrap` / `sample` / `database_url`), and FakeDbal `fetchOne` so Clover statements stay ≥ 99% (REQ-TEST-003).
+
+[1.13.6]: https://github.com/nowo-tech/SiteBackupBundle/releases/tag/v1.13.6
+
 ## [1.13.5] - 2026-08-20
 
 ### Changed
@@ -340,7 +349,7 @@ First stable release of **Site Backup Bundle**.
 - Symfony `^7.0 || ^8.0` (CI / mandatory minors: **7.4**, **8.0**, **8.1**)
 - System `tar` required for archive create/extract
 
-[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.13.5...HEAD
+[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.13.6...HEAD
 [1.9.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.8.1...v1.9.0
 [1.8.1]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.7.0...v1.8.0

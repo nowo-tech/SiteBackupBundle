@@ -5,11 +5,13 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\Setup\ColdStart;
 
 use Doctrine\DBAL\Connection;
-use Doctrine\DBAL\Exception;
 use PDO;
 use Throwable;
 
+use function is_callable;
+use function is_object;
 use function is_string;
+use function method_exists;
 use function sprintf;
 use function str_contains;
 
@@ -27,29 +29,38 @@ final readonly class MysqlSchemaExistenceChecker implements SchemaExistenceCheck
     private const SETUP_TABLE_PREFIX = 'nowo_site_backup%';
 
     public function __construct(
-        private ?Connection $connection = null,
+        private mixed $connection = null,
         private ?string $host = null,
         private ?int $port = null,
         private ?string $user = null,
         private ?string $password = null,
         private ?string $database = null,
         private bool $requireApplicationTables = true,
+        private ?PDO $pdo = null,
     ) {
     }
 
     public function schemaExists(): bool
     {
-        if ($this->connection instanceof Connection) {
+        if (is_object($this->connection) && method_exists($this->connection, 'executeQuery')) {
             return $this->probeConnection($this->connection);
         }
 
         return $this->probePdo();
     }
 
-    private function probeConnection(Connection $connection): bool
+    /**
+     * Duck-typed DBAL connection (real {@see Connection} or test fake).
+     */
+    private function probeConnection(object $connection): bool
     {
+        $executeQuery = [$connection, 'executeQuery'];
+        if (!is_callable($executeQuery)) {
+            return false;
+        }
+
         try {
-            $connection->executeQuery('SELECT 1');
+            $executeQuery('SELECT 1');
         } catch (Throwable $e) {
             if ($this->isUnknownDatabase($e)) {
                 return false;
@@ -67,20 +78,28 @@ final readonly class MysqlSchemaExistenceChecker implements SchemaExistenceCheck
 
     private function probePdo(): bool
     {
-        if (!is_string($this->host) || $this->host === '' || !is_string($this->database) || $this->database === '') {
-            return false;
+        $pdo = $this->pdo;
+        if (!$pdo instanceof PDO) {
+            if (!is_string($this->host) || $this->host === '' || !is_string($this->database) || $this->database === '') {
+                return false;
+            }
+
+            $port = $this->port ?? 3306;
+            $dsn  = sprintf('mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4', $this->host, $port, $this->database);
+
+            try {
+                $pdo = new PDO(
+                    $dsn,
+                    is_string($this->user) ? $this->user : '',
+                    is_string($this->password) ? $this->password : '',
+                    [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
+                );
+            } catch (Throwable) {
+                return false;
+            }
         }
 
-        $port = $this->port ?? 3306;
-        $dsn  = sprintf('mysql:host=%s;port=%d;dbname=%s;charset=utf8mb4', $this->host, $port, $this->database);
-
         try {
-            $pdo = new PDO(
-                $dsn,
-                is_string($this->user) ? $this->user : '',
-                is_string($this->password) ? $this->password : '',
-                [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
-            );
             $pdo->query('SELECT 1');
         } catch (Throwable $e) {
             if ($this->isUnknownDatabase($e)) {
@@ -97,7 +116,7 @@ final readonly class MysqlSchemaExistenceChecker implements SchemaExistenceCheck
         return $this->hasNonSetupTablesViaPdo($pdo);
     }
 
-    private function hasNonSetupTablesViaConnection(Connection $connection): bool
+    private function hasNonSetupTablesViaConnection(object $connection): bool
     {
         if (!is_string($this->database) || $this->database === '') {
             // Without a configured database name, treat SELECT 1 as enough.
@@ -105,7 +124,12 @@ final readonly class MysqlSchemaExistenceChecker implements SchemaExistenceCheck
         }
 
         try {
-            $result = $connection->executeQuery(
+            $executeQuery = [$connection, 'executeQuery'];
+            if (!is_callable($executeQuery)) {
+                return false;
+            }
+
+            $result = $executeQuery(
                 'SELECT 1
                  FROM information_schema.TABLES
                  WHERE TABLE_SCHEMA = ?
@@ -114,7 +138,12 @@ final readonly class MysqlSchemaExistenceChecker implements SchemaExistenceCheck
                 [$this->database, self::SETUP_TABLE_PREFIX],
             );
 
-            return $result->fetchOne() !== false;
+            $fetchOne = is_object($result) ? [$result, 'fetchOne'] : null;
+            if (!is_callable($fetchOne)) {
+                return false;
+            }
+
+            return $fetchOne() !== false;
         } catch (Throwable) {
             return false;
         }
@@ -140,13 +169,21 @@ final readonly class MysqlSchemaExistenceChecker implements SchemaExistenceCheck
 
     private function isUnknownDatabase(Throwable $e): bool
     {
-        if ($e instanceof Exception && $e->getPrevious() instanceof Throwable) {
-            $e = $e->getPrevious();
+        $current = $e;
+        while ($current instanceof Throwable) {
+            $message = $current->getMessage();
+            if (str_contains($message, 'Unknown database') || str_contains($message, '1049')) {
+                return true;
+            }
+
+            $previous = $current->getPrevious();
+            if (!$previous instanceof Throwable) {
+                break;
+            }
+
+            $current = $previous;
         }
 
-        $message = $e->getMessage();
-
-        return str_contains($message, 'Unknown database')
-            || str_contains($message, '1049');
+        return false;
     }
 }

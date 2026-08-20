@@ -35,4 +35,16 @@ final class FakeDbalResult
 
         return $this->row !== null ? [$this->row] : [];
     }
+
+    public function fetchOne(): mixed
+    {
+        if ($this->row === null) {
+            return false;
+        }
+
+        $row   = $this->row;
+        $value = reset($row);
+
+        return $value === false ? true : $value;
+    }
 }

@@ -1,5 +1,13 @@
 # Upgrading
 
+## To 1.13.6
+
+Patch release: CI/tests for optional DBAL schema probe. **No application upgrade steps.**
+
+```bash
+composer update nowo-tech/site-backup-bundle
+```
+
 ## To 1.13.5
 
 Patch release with test-only changes. **No application upgrade steps.**

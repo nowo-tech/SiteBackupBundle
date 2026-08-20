@@ -5,8 +5,6 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\Tests\Unit;
 
 use DateTimeImmutable;
-use Doctrine\DBAL\Connection;
-use Doctrine\DBAL\Result;
 use Nowo\SiteBackupBundle\Backup\BackupArchiver;
 use Nowo\SiteBackupBundle\DependencyInjection\Configuration;
 use Nowo\SiteBackupBundle\DependencyInjection\SiteBackupExtension;
@@ -55,10 +53,12 @@ use Symfony\Component\HttpFoundation\RequestStack;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
 use Symfony\Component\HttpKernel\KernelEvents;
+use Throwable;
 
 use function array_key_exists;
 use function function_exists;
 use function is_array;
+use function str_contains;
 
 use const JSON_THROW_ON_ERROR;
 
@@ -78,13 +78,7 @@ final class CoverageCompletionTest extends TestCase
 
     public function testMysqlSchemaCheckerViaConnectionPaths(): void
     {
-        $connection = $this->getMockBuilder(Connection::class)
-            ->disableOriginalConstructor()
-            ->onlyMethods(['executeQuery'])
-            ->getMock();
-        $result = $this->createMock(Result::class);
-        $result->method('fetchOne')->willReturn(1);
-        $connection->method('executeQuery')->willReturn($result);
+        $connection = $this->schemaProbeConnection();
 
         $checker = new MysqlSchemaExistenceChecker(connection: $connection, database: 'app');
         self::assertTrue($checker->schemaExists());
@@ -96,57 +90,109 @@ final class CoverageCompletionTest extends TestCase
         );
         self::assertTrue($checkerNoTables->schemaExists());
 
-        $unknownDb = $this->getMockBuilder(Connection::class)
-            ->disableOriginalConstructor()
-            ->onlyMethods(['executeQuery'])
-            ->getMock();
-        $unknownDb->method('executeQuery')->willThrowException(new RuntimeException('Unknown database \'missing\''));
+        $unknownDb = $this->schemaProbeConnection(selectResult: new RuntimeException("Unknown database 'missing'"));
         self::assertFalse((new MysqlSchemaExistenceChecker(connection: $unknownDb, database: 'missing'))->schemaExists());
 
-        $otherError = $this->getMockBuilder(Connection::class)
-            ->disableOriginalConstructor()
-            ->onlyMethods(['executeQuery'])
-            ->getMock();
-        $otherError->method('executeQuery')->willThrowException(new RuntimeException('connection refused'));
+        $otherError = $this->schemaProbeConnection(selectResult: new RuntimeException('connection refused'));
         self::assertFalse((new MysqlSchemaExistenceChecker(connection: $otherError, database: 'app'))->schemaExists());
 
-        $wrappedUnknown = $this->getMockBuilder(Connection::class)
-            ->disableOriginalConstructor()
-            ->onlyMethods(['executeQuery'])
-            ->getMock();
-        $wrappedUnknown->method('executeQuery')->willThrowException(new RuntimeException('SQLSTATE 1049 Unknown database'));
+        $wrappedUnknown = $this->schemaProbeConnection(selectResult: new RuntimeException('SQLSTATE 1049 Unknown database'));
         self::assertFalse((new MysqlSchemaExistenceChecker(connection: $wrappedUnknown, database: 'app'))->schemaExists());
 
-        $selectOnly = $this->getMockBuilder(Connection::class)
-            ->disableOriginalConstructor()
-            ->onlyMethods(['executeQuery'])
-            ->getMock();
-        $selectOnly->method('executeQuery')->willReturn($result);
+        $selectOnly = $this->schemaProbeConnection();
         self::assertTrue((new MysqlSchemaExistenceChecker(connection: $selectOnly))->schemaExists());
 
-        $schemaQueryFails = $this->getMockBuilder(Connection::class)
-            ->disableOriginalConstructor()
-            ->onlyMethods(['executeQuery'])
-            ->getMock();
-        $schemaQueryFails->method('executeQuery')->willReturnCallback(static function (string $sql) use ($result): Result {
-            if (str_contains($sql, 'information_schema')) {
-                throw new RuntimeException('denied');
-            }
-
-            return $result;
-        });
+        $schemaQueryFails = $this->schemaProbeConnection(schemaResult: new RuntimeException('denied'));
         self::assertFalse((new MysqlSchemaExistenceChecker(connection: $schemaQueryFails, database: 'app'))->schemaExists());
 
-        $emptySchema = $this->getMockBuilder(Connection::class)
-            ->disableOriginalConstructor()
-            ->onlyMethods(['executeQuery'])
-            ->getMock();
-        $emptyResult = $this->createMock(Result::class);
-        $emptyResult->method('fetchOne')->willReturn(false);
-        $emptySchema->method('executeQuery')->willReturnCallback(static function (string $sql) use ($result, $emptyResult): Result {
-            return str_contains($sql, 'information_schema') ? $emptyResult : $result;
-        });
+        $emptySchema = $this->schemaProbeConnection(schemaResult: false);
         self::assertFalse((new MysqlSchemaExistenceChecker(connection: $emptySchema, database: 'app'))->schemaExists());
+
+        $noFetchOne = $this->schemaProbeConnection(schemaResult: 'no-fetch');
+        self::assertFalse((new MysqlSchemaExistenceChecker(connection: $noFetchOne, database: 'app'))->schemaExists());
+
+        $pdoOk = $this->createMock(PDO::class);
+        $pdoOk->method('query')->willReturn($this->createMock(PDOStatement::class));
+        $pdoOk->method('prepare')->willReturn($this->createMock(PDOStatement::class));
+        $okStmt = $this->createMock(PDOStatement::class);
+        $okStmt->method('execute')->willReturn(true);
+        $okStmt->method('fetchColumn')->willReturn('1');
+        $pdoWithTables = $this->createMock(PDO::class);
+        $pdoWithTables->method('query')->willReturn($this->createMock(PDOStatement::class));
+        $pdoWithTables->method('prepare')->willReturn($okStmt);
+        self::assertTrue((new MysqlSchemaExistenceChecker(database: 'app', pdo: $pdoWithTables))->schemaExists());
+        self::assertTrue((new MysqlSchemaExistenceChecker(
+            database: 'app',
+            requireApplicationTables: false,
+            pdo: $pdoOk,
+        ))->schemaExists());
+
+        $unknownPdo = $this->createMock(PDO::class);
+        $unknownPdo->method('query')->willThrowException(new RuntimeException('SQLSTATE[HY000] [1049] Unknown database'));
+        self::assertFalse((new MysqlSchemaExistenceChecker(database: 'missing', pdo: $unknownPdo))->schemaExists());
+
+        $otherPdo = $this->createMock(PDO::class);
+        $otherPdo->method('query')->willThrowException(new RuntimeException('connection refused'));
+        self::assertFalse((new MysqlSchemaExistenceChecker(database: 'app', pdo: $otherPdo))->schemaExists());
+
+        $privateQuery = new class {
+            /**
+             * @param list<mixed> $params
+             */
+            private function executeQuery(string $sql, array $params = []): mixed
+            {
+                return null;
+            }
+        };
+        self::assertFalse((new MysqlSchemaExistenceChecker(connection: $privateQuery, database: 'app'))->schemaExists());
+
+        $wrapped = new RuntimeException('dbal wrap', 0, new RuntimeException("Unknown database 'ghost'"));
+        $unknown = new ReflectionMethod(MysqlSchemaExistenceChecker::class, 'isUnknownDatabase');
+        self::assertTrue($unknown->invoke(new MysqlSchemaExistenceChecker(), $wrapped));
+        self::assertFalse($unknown->invoke(new MysqlSchemaExistenceChecker(), new RuntimeException('connection refused')));
+    }
+
+    /**
+     * Duck-typed DBAL connection used by {@see MysqlSchemaExistenceChecker} without requiring doctrine/dbal.
+     *
+     * @param mixed $selectResult fetchOne value or {@see \Throwable}
+     * @param mixed $schemaResult fetchOne value, {@see \Throwable}, or `'no-fetch'`
+     */
+    private function schemaProbeConnection(mixed $selectResult = 1, mixed $schemaResult = 1): object
+    {
+        return new class($selectResult, $schemaResult) {
+            public function __construct(
+                private mixed $selectResult,
+                private mixed $schemaResult,
+            ) {
+            }
+
+            /**
+             * @param list<mixed> $params
+             */
+            public function executeQuery(string $sql, array $params = []): mixed
+            {
+                $payload = str_contains($sql, 'information_schema') ? $this->schemaResult : $this->selectResult;
+                if ($payload instanceof Throwable) {
+                    throw $payload;
+                }
+
+                if ($payload === 'no-fetch') {
+                    return new stdClass();
+                }
+
+                return new class($payload) {
+                    public function __construct(private mixed $value)
+                    {
+                    }
+
+                    public function fetchOne(): mixed
+                    {
+                        return $this->value;
+                    }
+                };
+            }
+        };
     }
 
     public function testMysqlSchemaCheckerPdoTableProbeViaReflection(): void
@@ -852,6 +898,47 @@ final class CoverageCompletionTest extends TestCase
         $stmtStorage = new DoctrineDbalSetupProgressStorage($stmtOnly);
         self::assertSame(SetupProgress::PHASE_IDLE, $stmtStorage->load()->getPhase());
 
+        $noFetchAssoc = new class {
+            /**
+             * @param list<mixed> $params
+             */
+            public function executeQuery(string $sql, array $params = []): object
+            {
+                return new stdClass();
+            }
+
+            /**
+             * @param list<mixed> $params
+             */
+            public function executeStatement(string $sql, array $params = []): int
+            {
+                return 0;
+            }
+        };
+        self::assertSame(SetupProgress::PHASE_IDLE, (new DoctrineDbalSetupProgressStorage($noFetchAssoc))->load()->getPhase());
+
+        $execute = new ReflectionMethod(DoctrineDbalSetupProgressStorage::class, 'executeStatement');
+        try {
+            $execute->invoke(new DoctrineDbalSetupProgressStorage(), 'SELECT 1', []);
+            self::fail('Expected missing connection');
+        } catch (RuntimeException $e) {
+            self::assertStringContainsString('No DBAL connection', $e->getMessage());
+        }
+
+        try {
+            $execute->invoke(new DoctrineDbalSetupProgressStorage(new stdClass()), 'SELECT 1', []);
+            self::fail('Expected unusable connection');
+        } catch (RuntimeException $e) {
+            self::assertStringContainsString('cannot execute statements', $e->getMessage());
+        }
+
+        try {
+            (new DoctrineDbalSetupProgressStorage(new FakeDbalConnection()))->save(new SetupProgress(message: "\xC3\x28"));
+            self::fail('Expected encode failure');
+        } catch (RuntimeException $e) {
+            self::assertStringContainsString('Unable to encode setup progress', $e->getMessage());
+        }
+
         $journalOnly = new DoctrineDbalSetupStepJournal($conn);
         $journalOnly->sync(new SetupProgress(phase: SetupProgress::PHASE_WAITING, completedStepIds: ['done'], currentStepId: ''));
         $journalOnly->clear('profile-x');
@@ -903,8 +990,12 @@ final class CoverageCompletionTest extends TestCase
 
         $checker = new MysqlSchemaExistenceChecker();
         $unknown = new ReflectionMethod(MysqlSchemaExistenceChecker::class, 'isUnknownDatabase');
-        $unknown->setAccessible(true);
         self::assertTrue($unknown->invoke($checker, new RuntimeException('Error 1049')));
+
+        $attrClass = new ReflectionClass(ColdStartRequestAttributes::class);
+        $attrCtor  = $attrClass->getConstructor();
+        self::assertNotNull($attrCtor);
+        $attrCtor->invoke($attrClass->newInstanceWithoutConstructor());
 
         $gate = new ColdStartSchemaGateSubscriber(
             schemaChecker: new class implements SchemaExistenceCheckerInterface {
