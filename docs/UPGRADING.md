@@ -1,5 +1,13 @@
 # Upgrading
 
+## To 1.13.3
+
+No application upgrade steps.
+
+```bash
+composer update nowo-tech/site-backup-bundle
+```
+
 ## To 1.13.2
 
 Patch release with test-only changes. **No application upgrade steps.**

@@ -100,6 +100,9 @@ jobs:
           composer require symfony/config:^${{ matrix.symfony }} symfony/dependency-injection:^${{ matrix.symfony }} symfony/http-kernel:^${{ matrix.symfony }} symfony/http-foundation:^${{ matrix.symfony }} symfony/security-core:^${{ matrix.symfony }} --no-interaction --no-update
           composer update "symfony/*" --with-all-dependencies --no-interaction --prefer-dist --no-progress
 
+      - name: Composer audit (Critical/High)
+        run: composer audit --locked
+
       - name: Run tests
         env:
           SYMFONY_DEPRECATIONS_HELPER: 'max[direct]=0'
