@@ -113,19 +113,3 @@ final class SetupDbDoneGuardTest extends TestCase
         );
     }
 }
-
-final readonly class FakeDurableSetupDoneStore implements DurableSetupDoneStoreInterface
-{
-    public function __construct(private bool $done)
-    {
-    }
-
-    public function isDone(): bool
-    {
-        return $this->done;
-    }
-
-    public function markDone(): void
-    {
-    }
-}
