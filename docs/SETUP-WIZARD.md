@@ -58,6 +58,8 @@ Priority (first match wins):
 2. **Setup mode** — any `SetupNeedDetectorInterface` says “needed” → wizard (until `setup.done` clears the gate).
 3. **Ready** — normal kernel.
 
+**Fast path (v1.13.7+):** when `setup.short_circuit_when_done: true` (default), `SetupNeedEvaluator` returns “not required” immediately if the `setup.done` file marker exists **or** `DurableSetupDoneStoreInterface::isDone()` is true — without calling detectors. That avoids repeated Doctrine / host catalog probes on every request after setup. Set `short_circuit_when_done: false` only when a host detector must re-open the gate after done (unusual).
+
 Detectors (wired in `SetupNeedEvaluator` via tag `nowo.site_backup.setup_need_detector`; built-ins toggled under `setup.detectors`):
 
 | Detector | When it triggers |
@@ -119,7 +121,7 @@ tabs:
 
 Progress payload includes `started_at`, `current_step_id`, `phase`, `percent`, `completed_at`, plus log/answers.
 
-**Durable setup done (v1.12+):** file marker `setup.done` is ephemeral in container images. Host apps that persist completion in the database implement `DurableSetupDoneStoreInterface` and replace the default `NullDurableSetupDoneStore` alias. Enable `setup.durable_done.enabled: true` to register `SetupDbDoneRedirectSubscriber` (priority 3), which closes the wizard and heals markers/progress from the durable store when detectors no longer require setup.
+**Durable setup done (v1.12+):** file marker `setup.done` is ephemeral in container images. Host apps that persist completion in the database implement `DurableSetupDoneStoreInterface` and replace the default `NullDurableSetupDoneStore` alias. Enable `setup.durable_done.enabled: true` to register `SetupDbDoneRedirectSubscriber` (priority 3), which closes the wizard and heals markers/progress from the durable store when detectors no longer require setup. With `short_circuit_when_done` (default true), a durable `isDone()` also skips detectors on the site gate (same fast path as the file marker).
 
 **Cold-start schema gate (v1.12+ / v1.13+):** when `setup.cold_start.enabled: true`, `ColdStartSchemaGateSubscriber` probes MySQL schema reachability (DBAL `SELECT 1` or `setup.cold_start.mysql_*` PDO fallback) and redirects other paths to the setup prefix until the schema exists. With `require_application_tables: true` (default since 1.13), an empty named schema is still treated as cold. Safe paths (`setup.cold_start.safe_path_prefixes`, default includes `/health/`, `/_wdt`, …) bypass the redirect; `stop_propagation` prevents lower-priority listeners from assuming a working schema.
 

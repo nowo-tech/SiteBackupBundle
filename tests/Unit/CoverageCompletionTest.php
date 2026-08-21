@@ -136,10 +136,7 @@ final class CoverageCompletionTest extends TestCase
         self::assertFalse((new MysqlSchemaExistenceChecker(database: 'app', pdo: $otherPdo))->schemaExists());
 
         $privateQuery = new class {
-            /**
-             * @param list<mixed> $params
-             */
-            private function executeQuery(string $sql, array $params = []): mixed
+            private function executeQuery(): mixed
             {
                 return null;
             }
@@ -236,8 +233,7 @@ final class CoverageCompletionTest extends TestCase
             }
         };
 
-        $requestStack = new RequestStack();
-        $requestStack->push(Request::create('/_setup'));
+        $requestStack = new RequestStack([Request::create('/_setup')]);
         $resolver = new SetupPathPrefixResolver($requestStack, '/_setup', 'never', 'en', ['en', 'es']);
 
         $subscriber = new ColdStartSchemaGateSubscriber(
@@ -312,10 +308,10 @@ final class CoverageCompletionTest extends TestCase
             phase: SetupProgress::PHASE_WAITING,
             profile: '',
             currentStepId: 'running_step',
+            error: 'boom',
             completedStepIds: ['', 'valid', 123],
             updatedAt: new DateTimeImmutable('2026-08-15T10:00:00+00:00'),
             startedAt: new DateTimeImmutable('2026-08-15T09:00:00+00:00'),
-            error: 'boom',
         ));
         self::assertSame(['valid'], $journal->listCompletedStepIds('default'));
 
@@ -358,8 +354,8 @@ final class CoverageCompletionTest extends TestCase
             phase: SetupProgress::PHASE_RUNNING,
             profile: 'fresh_install',
             currentStepId: 'requirements',
-            completedStepIds: ['bootstrap'],
             message: 'updated',
+            completedStepIds: ['bootstrap'],
         ));
 
         $thin = new SetupProgress(phase: SetupProgress::PHASE_WAITING, profile: 'fresh_install', currentStepId: 'x', completedStepIds: ['requirements', 'migrations']);
@@ -453,7 +449,7 @@ final class CoverageCompletionTest extends TestCase
         $this->expectExceptionMessage('No DBAL connection.');
         $method = new ReflectionMethod(DoctrineDbalSetupStepJournal::class, 'executeStatement');
         $method->setAccessible(true);
-        $method->invoke(new DoctrineDbalSetupStepJournal(null), 'SELECT 1', []);
+        $method->invoke(new DoctrineDbalSetupStepJournal(), 'SELECT 1', []);
     }
 
     public function testStepJournalExecuteQueryOnlyAndMissingMethods(): void
@@ -715,16 +711,16 @@ final class CoverageCompletionTest extends TestCase
             startedAt: new DateTimeImmutable(),
         ));
 
-        $storage = new CacheDoctrineSetupProgressStorage($cache, $db, null);
+        $storage = new CacheDoctrineSetupProgressStorage($cache, $db);
         self::assertSame('from_db', $storage->load()->getCurrentStepId());
 
         $throwingDb = $this->createMock(SetupProgressStorageInterface::class);
         $throwingDb->method('load')->willThrowException(new RuntimeException('db down'));
-        $storage2 = new CacheDoctrineSetupProgressStorage($cache, $throwingDb, null);
+        $storage2 = new CacheDoctrineSetupProgressStorage($cache, $throwingDb);
         self::assertSame('from_db', $storage2->load()->getCurrentStepId());
 
         $unusableDb = new DoctrineDbalSetupProgressStorage();
-        $storage3   = new CacheDoctrineSetupProgressStorage($cache, $unusableDb, null);
+        $storage3   = new CacheDoctrineSetupProgressStorage($cache, $unusableDb);
         self::assertSame('from_db', $storage3->load()->getCurrentStepId());
     }
 
@@ -902,7 +898,7 @@ final class CoverageCompletionTest extends TestCase
             /**
              * @param list<mixed> $params
              */
-            public function executeQuery(string $sql, array $params = []): object
+            public function executeQuery(string $sql, array $params = []): \stdClass
             {
                 return new stdClass();
             }
@@ -940,9 +936,9 @@ final class CoverageCompletionTest extends TestCase
         }
 
         $journalOnly = new DoctrineDbalSetupStepJournal($conn);
-        $journalOnly->sync(new SetupProgress(phase: SetupProgress::PHASE_WAITING, completedStepIds: ['done'], currentStepId: ''));
+        $journalOnly->sync(new SetupProgress(phase: SetupProgress::PHASE_WAITING, currentStepId: '', completedStepIds: ['done']));
         $journalOnly->clear('profile-x');
-        $journalOnly->clear(null);
+        $journalOnly->clear();
 
         $noopJournal = new DoctrineDbalSetupStepJournal();
         $noopJournal->clear();
@@ -963,7 +959,7 @@ final class CoverageCompletionTest extends TestCase
                 return 0;
             }
 
-            public function executeQuery(string $sql, array $params = []): object
+            public function executeQuery(string $sql, array $params = []): \stdClass
             {
                 return new stdClass();
             }
@@ -1122,8 +1118,8 @@ final class CoverageCompletionTest extends TestCase
         $cache->save(new SetupProgress(
             phase: SetupProgress::PHASE_WAITING,
             currentStepId: 'stale',
-            startedAt: new DateTimeImmutable(),
             completedStepIds: ['migrations'],
+            startedAt: new DateTimeImmutable(),
         ));
         $staleStorage = new CacheDoctrineSetupProgressStorage(
             $cache,
@@ -1138,7 +1134,7 @@ final class CoverageCompletionTest extends TestCase
         self::assertSame(SetupProgress::PHASE_IDLE, $staleStorage->load()->getPhase());
 
         $cacheOnly = new CacheSetupProgressStorage(new ArrayAdapter());
-        (new CacheDoctrineSetupProgressStorage($cacheOnly, new DoctrineDbalSetupProgressStorage(), null))
+        (new CacheDoctrineSetupProgressStorage($cacheOnly, new DoctrineDbalSetupProgressStorage()))
             ->save(new SetupProgress(phase: SetupProgress::PHASE_RUNNING, currentStepId: 'cache_only'));
 
         $unreadableDir = $this->harnessProjectDir . '/unreadable-dir';

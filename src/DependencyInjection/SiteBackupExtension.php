@@ -553,11 +553,18 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$enabled', (bool) ($setup['detectors']['incomplete_progress'] ?? true))
             ->addTag('nowo.site_backup.setup_need_detector', ['priority' => 70]);
 
+        // Default durable store before evaluator wiring (host apps may replace the alias later).
+        $container->setAlias(DurableSetupDoneStoreInterface::class, NullDurableSetupDoneStore::class)->setPublic(false);
+
         // Built-ins (above) + host apps via SetupNeedDetectorInterface / #[AsSetupNeedDetector].
         // Distinct from profile tab checkers (SetupTabCheckerInterface / checker: YAML).
+        // short_circuit_when_done: skip detectors when setup.done or durable store says complete.
         $container->getDefinition(SetupNeedEvaluator::class)
             ->setArgument('$detectors', new TaggedIteratorArgument('nowo.site_backup.setup_need_detector'))
-            ->setArgument('$setupEnabled', (bool) $setup['enabled']);
+            ->setArgument('$setupEnabled', (bool) $setup['enabled'])
+            ->setArgument('$shortCircuitWhenDone', (bool) ($setup['short_circuit_when_done'] ?? true))
+            ->setArgument('$markers', new Reference(SetupMarkerManager::class))
+            ->setArgument('$durableDoneStore', new Reference(DurableSetupDoneStoreInterface::class));
 
         $container->getDefinition(SetupStepFactory::class)
             ->setArgument('$runner', new Reference(ConsoleProcessRunner::class))
@@ -681,7 +688,10 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
      */
     private function configureDurableDoneAndColdStart(ContainerBuilder $container, array $setup, array $localeEnabled): void
     {
-        $container->setAlias(DurableSetupDoneStoreInterface::class, NullDurableSetupDoneStore::class)->setPublic(false);
+        // Alias may already point at NullDurableSetupDoneStore from setup wiring; keep default unless host replaced it.
+        if (!$container->hasAlias(DurableSetupDoneStoreInterface::class) && !$container->hasDefinition(DurableSetupDoneStoreInterface::class)) {
+            $container->setAlias(DurableSetupDoneStoreInterface::class, NullDurableSetupDoneStore::class)->setPublic(false);
+        }
 
         $durableDone = $setup['durable_done'] ?? [];
         $coldStart   = $setup['cold_start'] ?? [];

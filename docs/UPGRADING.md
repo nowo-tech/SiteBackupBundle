@@ -1,5 +1,20 @@
 # Upgrading
 
+## To 1.13.7
+
+**Site gate performance:** `setup.short_circuit_when_done` defaults to `true`. After `setup.done` (or a durable store `isDone()`), detectors are not consulted. If a custom `#[AsSetupNeedDetector]` must still run after done, set:
+
+```yaml
+nowo_site_backup:
+    setup:
+        short_circuit_when_done: false
+```
+
+```bash
+composer update nowo-tech/site-backup-bundle
+php bin/console cache:clear
+```
+
 ## To 1.13.6
 
 Patch release: CI/tests for optional DBAL schema probe. **No application upgrade steps.**

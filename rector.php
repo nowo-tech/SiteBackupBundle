@@ -22,4 +22,7 @@ return RectorConfig::configure()
         __DIR__ . '/vendor',
         // Keep classic AbstractExtension registration for broad Twig/Symfony compatibility.
         __DIR__ . '/src/Twig/SiteBackupExtension.php',
+        // Constructor RequestStack([...]) with a mutated Request must assign $request first;
+        // PushRequestToRequestStackConstructorRector reorders and breaks those tests.
+        \Rector\Symfony\Symfony72\Rector\StmtsAwareInterface\PushRequestToRequestStackConstructorRector::class,
     ]);

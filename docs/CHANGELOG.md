@@ -7,6 +7,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.13.7] - 2026-08-21
+
+### Added
+
+- **`setup.short_circuit_when_done`** (default `true`): `SetupNeedEvaluator` skips all need detectors when the `setup.done` marker exists or `DurableSetupDoneStoreInterface::isDone()` is true. Avoids repeated Doctrine / host catalog probes on every request after setup. Set `false` only if a host detector must re-open the gate after done.
+
+[1.13.7]: https://github.com/nowo-tech/SiteBackupBundle/releases/tag/v1.13.7
+
 ## [1.13.6] - 2026-08-20
 
 ### Fixed

@@ -25,8 +25,7 @@ final class ColdStartSchemaGateSubscriberTest extends TestCase
             }
         };
 
-        $requestStack = new RequestStack();
-        $requestStack->push(Request::create('/dashboard'));
+        $requestStack = new RequestStack([Request::create('/dashboard')]);
         $resolver = new SetupPathPrefixResolver($requestStack, '/_setup', 'never', 'en', ['en']);
 
         $subscriber = new ColdStartSchemaGateSubscriber(

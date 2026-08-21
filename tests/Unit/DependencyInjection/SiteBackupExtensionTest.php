@@ -34,6 +34,7 @@ use PHPUnit\Framework\TestCase;
 use Symfony\Component\DependencyInjection\Argument\TaggedIteratorArgument;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Definition;
+use Symfony\Component\DependencyInjection\Reference;
 
 final class SiteBackupExtensionTest extends TestCase
 {
@@ -226,6 +227,25 @@ final class SiteBackupExtensionTest extends TestCase
             $def = $container->getDefinition($class);
             self::assertTrue($def->hasTag('nowo.site_backup.setup_need_detector'), $class);
         }
+
+        self::assertTrue($evaluator->getArgument('$shortCircuitWhenDone'));
+        self::assertInstanceOf(Reference::class, $evaluator->getArgument('$markers'));
+        self::assertInstanceOf(Reference::class, $evaluator->getArgument('$durableDoneStore'));
+    }
+
+    public function testSetupNeedEvaluatorCanDisableShortCircuitWhenDone(): void
+    {
+        $container = new ContainerBuilder();
+        $container->setParameter('kernel.project_dir', sys_get_temp_dir());
+
+        (new SiteBackupExtension())->load([[
+            'enabled'  => true,
+            'security' => ['allow_unauthenticated' => true],
+            'setup'    => ['short_circuit_when_done' => false],
+        ]], $container);
+
+        $evaluator = $container->getDefinition(SetupNeedEvaluator::class);
+        self::assertFalse($evaluator->getArgument('$shortCircuitWhenDone'));
     }
 
     public function testLoadThrowsWhenPanelEnabledWithoutSecurityBundle(): void

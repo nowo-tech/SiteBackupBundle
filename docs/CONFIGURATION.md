@@ -37,6 +37,8 @@ Root key: `nowo_site_backup`.
 | `setup.progress_table` | `nowo_site_backup_setup_progress` | DBAL table for doctrine/chain (runtime DDL — not Symfony Migrations) |
 | `setup.progress_step_rows` | `true` | Upsert per-step journal when doctrine/chain (disabled automatically for filesystem) |
 | `setup.progress_steps_table` | `nowo_site_backup_setup_step` | Per-step journal table (`profile` + `step_id` PK) |
+| `setup.require_done_marker` | `false` | Missing `setup.done` forces the wizard |
+| `setup.short_circuit_when_done` | `true` | Skip all need detectors when `setup.done` exists or durable store `isDone()` (perf; set `false` to re-evaluate host detectors after done) |
 | `setup.durable_done.enabled` | `false` | Register `SetupDbDoneRedirectSubscriber`; host replaces `DurableSetupDoneStoreInterface` alias |
 | `setup.durable_done.redirect_target` | `/` | Redirect when durable done closes the wizard |
 | `setup.cold_start.enabled` | `false` | Register cold-start schema gate subscriber + checker |

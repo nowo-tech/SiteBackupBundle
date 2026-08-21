@@ -13,8 +13,7 @@ final class SetupPathPrefixResolverTest extends TestCase
 {
     public function testNeverModeReturnsBarePrefix(): void
     {
-        $stack = new RequestStack();
-        $stack->push(Request::create('/_setup'));
+        $stack = new RequestStack([Request::create('/_setup')]);
         $resolver = new SetupPathPrefixResolver($stack, '/_setup', 'never', 'en', ['en', 'es']);
 
         self::assertSame('/_setup', $resolver->resolve());
@@ -22,8 +21,7 @@ final class SetupPathPrefixResolverTest extends TestCase
 
     public function testAlwaysModeWithLocalizedPath(): void
     {
-        $stack = new RequestStack();
-        $stack->push(Request::create('/es/_setup'));
+        $stack = new RequestStack([Request::create('/es/_setup')]);
         $resolver = new SetupPathPrefixResolver($stack, '/_setup', 'always', 'en', ['en', 'es']);
 
         self::assertSame('/es/_setup', $resolver->resolve());
@@ -31,10 +29,9 @@ final class SetupPathPrefixResolverTest extends TestCase
 
     public function testAlwaysModeWithoutMatchingPathUsesRequestLocale(): void
     {
-        $stack   = new RequestStack();
         $request = Request::create('/other');
         $request->setLocale('es');
-        $stack->push($request);
+        $stack    = new RequestStack([$request]);
         $resolver = new SetupPathPrefixResolver($stack, '/_setup', 'always', 'en', ['en', 'es']);
 
         self::assertSame('/es/_setup', $resolver->resolve());
@@ -42,8 +39,7 @@ final class SetupPathPrefixResolverTest extends TestCase
 
     public function testAlwaysModeDefaultsToDefaultLocale(): void
     {
-        $stack = new RequestStack();
-        $stack->push(Request::create('/other'));
+        $stack = new RequestStack([Request::create('/other')]);
         $resolver = new SetupPathPrefixResolver($stack, '/_setup', 'always', 'en', ['en', 'es']);
 
         self::assertSame('/en/_setup', $resolver->resolve());
@@ -51,8 +47,7 @@ final class SetupPathPrefixResolverTest extends TestCase
 
     public function testBothModeDetectsLocalizedPath(): void
     {
-        $stack = new RequestStack();
-        $stack->push(Request::create('/es/_setup'));
+        $stack = new RequestStack([Request::create('/es/_setup')]);
         $resolver = new SetupPathPrefixResolver($stack, '/_setup', 'both', 'en', ['en', 'es']);
 
         self::assertSame('/es/_setup', $resolver->resolve());
@@ -60,8 +55,7 @@ final class SetupPathPrefixResolverTest extends TestCase
 
     public function testBothModeDetectsBarePath(): void
     {
-        $stack = new RequestStack();
-        $stack->push(Request::create('/_setup'));
+        $stack = new RequestStack([Request::create('/_setup')]);
         $resolver = new SetupPathPrefixResolver($stack, '/_setup', 'both', 'en', ['en', 'es']);
 
         self::assertSame('/_setup', $resolver->resolve());
@@ -69,8 +63,7 @@ final class SetupPathPrefixResolverTest extends TestCase
 
     public function testBothModeNonSetupPathDefaultLocaleReturnsBare(): void
     {
-        $stack = new RequestStack();
-        $stack->push(Request::create('/blog'));
+        $stack = new RequestStack([Request::create('/blog')]);
         $resolver = new SetupPathPrefixResolver($stack, '/_setup', 'both', 'en', ['en', 'es']);
 
         self::assertSame('/_setup', $resolver->resolve());
@@ -78,10 +71,9 @@ final class SetupPathPrefixResolverTest extends TestCase
 
     public function testBothModeNonSetupPathNonDefaultLocaleReturnsLocalized(): void
     {
-        $stack   = new RequestStack();
         $request = Request::create('/blog');
         $request->setLocale('es');
-        $stack->push($request);
+        $stack    = new RequestStack([$request]);
         $resolver = new SetupPathPrefixResolver($stack, '/_setup', 'both', 'en', ['en', 'es']);
 
         self::assertSame('/es/_setup', $resolver->resolve());
@@ -97,10 +89,9 @@ final class SetupPathPrefixResolverTest extends TestCase
 
     public function testAlwaysModeWithUnknownLocaleDefaultsToDefault(): void
     {
-        $stack   = new RequestStack();
         $request = Request::create('/other');
         $request->setLocale('fr');
-        $stack->push($request);
+        $stack    = new RequestStack([$request]);
         $resolver = new SetupPathPrefixResolver($stack, '/_setup', 'always', 'en', ['en', 'es']);
 
         self::assertSame('/en/_setup', $resolver->resolve());
@@ -108,10 +99,9 @@ final class SetupPathPrefixResolverTest extends TestCase
 
     public function testBothModeWithUnknownLocaleReturnsBare(): void
     {
-        $stack   = new RequestStack();
         $request = Request::create('/other');
         $request->setLocale('fr');
-        $stack->push($request);
+        $stack    = new RequestStack([$request]);
         $resolver = new SetupPathPrefixResolver($stack, '/_setup', 'both', 'en', ['en', 'es']);
 
         self::assertSame('/_setup', $resolver->resolve());

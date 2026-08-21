@@ -35,15 +35,15 @@ final class SetupStatusCommand extends Command
 
         $io->definitionList(
             ['setup required' => $this->evaluator->isSetupRequired() ? 'yes' : 'no'],
-            ['reasons' => implode(', ', $this->evaluator->getReasons()) ?: '—'],
-            ['setup.done' => $this->markers->isDone() ? 'yes' : 'no'],
+            ['reasons'        => implode(', ', $this->evaluator->getReasons()) ?: '—'],
+            ['setup.done'     => $this->markers->isDone() ? 'yes' : 'no'],
             ['setup.required' => $this->markers->isRequiredMarked() ? 'yes' : 'no'],
-            ['phase' => $progress->getPhase()],
-            ['profile' => $progress->getProfile()],
-            ['percent' => (string) $progress->getPercent()],
-            ['step' => $progress->getCurrentStepId() ?? '—'],
-            ['started_at' => $progress->getStartedAt()?->format(DATE_ATOM) ?? '—'],
-            ['completed_at' => $progress->getCompletedAt()?->format(DATE_ATOM) ?? '—'],
+            ['phase'          => $progress->getPhase()],
+            ['profile'        => $progress->getProfile()],
+            ['percent'        => (string) $progress->getPercent()],
+            ['step'           => $progress->getCurrentStepId() ?? '—'],
+            ['started_at'     => $progress->getStartedAt()?->format(DATE_ATOM) ?? '—'],
+            ['completed_at'   => $progress->getCompletedAt()?->format(DATE_ATOM) ?? '—'],
         );
 
         return $this->evaluator->isSetupRequired() ? 2 : Command::SUCCESS;

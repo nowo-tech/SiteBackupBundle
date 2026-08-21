@@ -10,10 +10,12 @@ use Nowo\SiteBackupBundle\Setup\Detector\DoctrineSchemaEmptyDetector;
 use Nowo\SiteBackupBundle\Setup\Detector\IncompleteSetupProgressDetector;
 use Nowo\SiteBackupBundle\Setup\Detector\MarkerFileDetector;
 use Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator;
+use Nowo\SiteBackupBundle\Setup\DurableSetupDoneStoreInterface;
 use Nowo\SiteBackupBundle\Setup\SetupNeedDetectorInterface;
 use Nowo\SiteBackupBundle\Setup\Storage\FilesystemSetupProgressStorage;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupMarkerManager;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupProgressStorageInterface;
+use Nowo\SiteBackupBundle\Tests\Unit\Setup\FakeDurableSetupDoneStore;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use stdClass;
@@ -87,6 +89,137 @@ final class DetectorsTest extends TestCase
         $disabled = new SetupNeedEvaluator([], setupEnabled: false);
         self::assertFalse($disabled->isSetupRequired());
         self::assertSame([], $disabled->getReasons());
+    }
+
+    public function testSetupNeedEvaluatorShortCircuitsWhenMarkerDone(): void
+    {
+        $markers = new SetupMarkerManager($this->dir . '/sc-req', $this->dir . '/sc-done');
+        $markers->markDone();
+
+        $calls     = 0;
+        $expensive = new class($calls) implements SetupNeedDetectorInterface {
+            public function __construct(private int &$calls)
+            {
+            }
+
+            public function isSetupRequired(): bool
+            {
+                ++$this->calls;
+
+                return true;
+            }
+
+            public function getReason(): string
+            {
+                return 'expensive';
+            }
+        };
+
+        $evaluator = new SetupNeedEvaluator(
+            [$expensive],
+            setupEnabled: true,
+            shortCircuitWhenDone: true,
+            markers: $markers,
+        );
+
+        self::assertFalse($evaluator->isSetupRequired());
+        self::assertSame([], $evaluator->getReasons());
+        self::assertSame(0, $calls);
+    }
+
+    public function testSetupNeedEvaluatorShortCircuitsWhenDurableDone(): void
+    {
+        $calls     = 0;
+        $expensive = new class($calls) implements SetupNeedDetectorInterface {
+            public function __construct(private int &$calls)
+            {
+            }
+
+            public function isSetupRequired(): bool
+            {
+                ++$this->calls;
+
+                return true;
+            }
+
+            public function getReason(): string
+            {
+                return 'expensive';
+            }
+        };
+
+        $evaluator = new SetupNeedEvaluator(
+            [$expensive],
+            setupEnabled: true,
+            shortCircuitWhenDone: true,
+            durableDoneStore: new FakeDurableSetupDoneStore(true),
+        );
+
+        self::assertFalse($evaluator->isSetupRequired());
+        self::assertSame(0, $calls);
+    }
+
+    public function testSetupNeedEvaluatorOptOutRunsDetectorsEvenWhenDone(): void
+    {
+        $markers = new SetupMarkerManager($this->dir . '/sc2-req', $this->dir . '/sc2-done');
+        $markers->markDone();
+
+        $yes = new class implements SetupNeedDetectorInterface {
+            public function isSetupRequired(): bool
+            {
+                return true;
+            }
+
+            public function getReason(): string
+            {
+                return 'still-needed';
+            }
+        };
+
+        $evaluator = new SetupNeedEvaluator(
+            [$yes],
+            setupEnabled: true,
+            shortCircuitWhenDone: false,
+            markers: $markers,
+        );
+
+        self::assertTrue($evaluator->isSetupRequired());
+        self::assertSame(['still-needed'], $evaluator->getReasons());
+    }
+
+    public function testSetupNeedEvaluatorDurableThrowDoesNotShortCircuit(): void
+    {
+        $broken = new class implements DurableSetupDoneStoreInterface {
+            public function isDone(): bool
+            {
+                throw new RuntimeException('db down');
+            }
+
+            public function markDone(): void
+            {
+            }
+        };
+
+        $yes = new class implements SetupNeedDetectorInterface {
+            public function isSetupRequired(): bool
+            {
+                return true;
+            }
+
+            public function getReason(): string
+            {
+                return 'yes';
+            }
+        };
+
+        $evaluator = new SetupNeedEvaluator(
+            [$yes],
+            setupEnabled: true,
+            shortCircuitWhenDone: true,
+            durableDoneStore: $broken,
+        );
+
+        self::assertTrue($evaluator->isSetupRequired());
     }
 
     public function testDoctrineConnectDetector(): void
