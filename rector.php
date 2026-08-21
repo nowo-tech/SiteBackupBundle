@@ -3,6 +3,7 @@
 declare(strict_types=1);
 
 use Rector\Config\RectorConfig;
+use Rector\Symfony\Symfony72\Rector\StmtsAwareInterface\PushRequestToRequestStackConstructorRector;
 use Rector\ValueObject\PhpVersion;
 
 return RectorConfig::configure()
@@ -24,5 +25,5 @@ return RectorConfig::configure()
         __DIR__ . '/src/Twig/SiteBackupExtension.php',
         // Constructor RequestStack([...]) with a mutated Request must assign $request first;
         // PushRequestToRequestStackConstructorRector reorders and breaks those tests.
-        \Rector\Symfony\Symfony72\Rector\StmtsAwareInterface\PushRequestToRequestStackConstructorRector::class,
+        PushRequestToRequestStackConstructorRector::class,
     ]);

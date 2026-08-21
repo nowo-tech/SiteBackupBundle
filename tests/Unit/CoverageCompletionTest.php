@@ -234,7 +234,7 @@ final class CoverageCompletionTest extends TestCase
         };
 
         $requestStack = new RequestStack([Request::create('/_setup')]);
-        $resolver = new SetupPathPrefixResolver($requestStack, '/_setup', 'never', 'en', ['en', 'es']);
+        $resolver     = new SetupPathPrefixResolver($requestStack, '/_setup', 'never', 'en', ['en', 'es']);
 
         $subscriber = new ColdStartSchemaGateSubscriber(
             schemaChecker: $checker,
@@ -898,7 +898,7 @@ final class CoverageCompletionTest extends TestCase
             /**
              * @param list<mixed> $params
              */
-            public function executeQuery(string $sql, array $params = []): \stdClass
+            public function executeQuery(string $sql, array $params = []): stdClass
             {
                 return new stdClass();
             }
@@ -959,7 +959,7 @@ final class CoverageCompletionTest extends TestCase
                 return 0;
             }
 
-            public function executeQuery(string $sql, array $params = []): \stdClass
+            public function executeQuery(string $sql, array $params = []): stdClass
             {
                 return new stdClass();
             }
