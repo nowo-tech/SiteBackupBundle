@@ -35,17 +35,20 @@
             "migrations/.gitignore"
         ]
     },
+    "nowo-tech/hot-reload-bundle": {
+        "version": "v1.3.2"
+    },
     "nowo-tech/maintenance-mode-bundle": {
         "version": "dev-main"
     },
     "nowo-tech/site-backup-bundle": {
         "version": "dev-main"
     },
-    "nowo-tech/hot-reload-bundle": {
-        "version": "v1.3.2"
-    },
     "nowo-tech/twig-inspector-bundle": {
         "version": "v1.0.40"
+    },
+    "nowo-tech/ui-kit-bundle": {
+        "version": "v1.8.0"
     },
     "phpunit/phpunit": {
         "version": "11.5",
@@ -99,6 +102,18 @@
             ".env.dev"
         ]
     },
+    "symfony/form": {
+        "version": "8.1",
+        "recipe": {
+            "repo": "github.com/symfony/recipes",
+            "branch": "main",
+            "version": "7.2",
+            "ref": "7d86a6723f4a623f59e2bf966b6aad2fc461d36b"
+        },
+        "files": [
+            "config/packages/csrf.yaml"
+        ]
+    },
     "symfony/framework-bundle": {
         "version": "8.1",
         "recipe": {
@@ -117,6 +132,18 @@
             "src/Controller/.gitignore",
             "src/Kernel.php",
             ".editorconfig"
+        ]
+    },
+    "symfony/property-info": {
+        "version": "8.1",
+        "recipe": {
+            "repo": "github.com/symfony/recipes",
+            "branch": "main",
+            "version": "7.3",
+            "ref": "dae70df71978ae9226ae915ffd5fad817f5ca1f7"
+        },
+        "files": [
+            "config/packages/property_info.yaml"
         ]
     },
     "symfony/routing": {
@@ -170,5 +197,8 @@
             "config/packages/web_profiler.yaml",
             "config/routes/web_profiler.yaml"
         ]
+    },
+    "twig/extra-bundle": {
+        "version": "v3.24.0"
     }
 }
