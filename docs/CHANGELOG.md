@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+
+## [1.13.8] - 2026-08-24
+
+### Changed
+
+- **Docs:** PHP-FIG PSR evaluation (REQ-CS-007).
+- **Style:** PHP CS Fixer alignment.
+
+### Notes
+
+- **No API or configuration changes** for integrators unless noted above.
+
+[1.13.8]: https://github.com/nowo-tech/SiteBackupBundle/releases/tag/v1.13.8
+
 ## [1.13.7] - 2026-08-21
 
 ### Added

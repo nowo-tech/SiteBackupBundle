@@ -1,5 +1,27 @@
 # Upgrading
 
+## Table of contents
+
+- [From 1.13.7 to 1.13.8](#from-1137-to-1138)
+
+## From 1.13.7 to 1.13.8
+
+No breaking changes. **No application upgrade steps.**
+
+```bash
+composer update nowo-tech/site-backup-bundle
+```
+
+## From 1.13.7 to 1.13.8
+
+No breaking changes. **No application upgrade steps.**
+
+```bash
+composer update nowo-tech/site-backup-bundle
+```
+
+# Upgrading
+
 ## To 1.13.7
 
 **Site gate performance:** `setup.short_circuit_when_done` defaults to `true`. After `setup.done` (or a durable store `isDone()`), detectors are not consulted. If a custom `#[AsSetupNeedDetector]` must still run after done, set:
