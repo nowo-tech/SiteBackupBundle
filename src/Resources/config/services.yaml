@@ -47,6 +47,11 @@ services:
             $requiredFile: '%kernel.project_dir%/var/site-backup/setup.required'
             $doneFile: '%kernel.project_dir%/var/site-backup/setup.done'
 
+    Nowo\SiteBackupBundle\Worker\WorkerRestartSignal:
+        arguments:
+            $markerFile: '%kernel.project_dir%/var/site-backup/worker-restart.required'
+            $eventDispatcher: '@?event_dispatcher'
+
     Nowo\SiteBackupBundle\Exclusion\SiteBackupExclusionMatcher: ~
 
     Nowo\SiteBackupBundle\Security\PasswordSiteBackupAccessGate: ~

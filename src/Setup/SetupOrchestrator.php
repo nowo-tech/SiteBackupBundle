@@ -11,8 +11,13 @@ use Nowo\SiteBackupBundle\Event\SetupStartedEvent;
 use Nowo\SiteBackupBundle\Event\SetupStepCompletedEvent;
 use Nowo\SiteBackupBundle\Event\SetupStepFailedEvent;
 use Nowo\SiteBackupBundle\Model\SetupProgress;
+use Nowo\SiteBackupBundle\Setup\Step\CacheClearStep;
+use Nowo\SiteBackupBundle\Setup\Step\ConditionalAnswerStep;
+use Nowo\SiteBackupBundle\Setup\Step\DatabaseUrlStep;
+use Nowo\SiteBackupBundle\Setup\Step\TabStep;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupMarkerManager;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupProgressStorageInterface;
+use Nowo\SiteBackupBundle\Worker\WorkerRestartSignal;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use RuntimeException;
 
@@ -39,6 +44,7 @@ final class SetupOrchestrator
         private readonly string $defaultProfile = 'fresh_install',
         private readonly ?EventDispatcherInterface $eventDispatcher = null,
         private readonly string $defaultAdvanceMode = self::ADVANCE_AUTOMATIC,
+        private readonly ?WorkerRestartSignal $workerRestartSignal = null,
     ) {
     }
 
@@ -184,6 +190,9 @@ final class SetupOrchestrator
             }
 
             $ctx->markCompleted($step->getId());
+            if ($this->stepRequiresWorkerRestart($step, $ctx)) {
+                $this->workerRestartSignal?->request('setup:' . $step->getId());
+            }
             $log      = $this->appendLog($progress->getLog(), $result->getLog(), $result->getMessage());
             $progress = $progress->with(
                 percent: $this->percent($index + 1, $total),
@@ -248,6 +257,22 @@ final class SetupOrchestrator
         }
 
         return $this->profiles[$profile]['steps'];
+    }
+
+    /**
+     * `.env.local` and a rebuilt cache are only picked up by workers booted afterwards.
+     */
+    private function stepRequiresWorkerRestart(SetupStepInterface $step, SetupContext $ctx): bool
+    {
+        while ($step instanceof TabStep || $step instanceof ConditionalAnswerStep) {
+            $step = $step->getInner();
+        }
+
+        if ($step instanceof CacheClearStep) {
+            return true;
+        }
+
+        return $step instanceof DatabaseUrlStep && $ctx->getAnswer('database_url_set') === true;
     }
 
     private function percent(int $index, int $total): float

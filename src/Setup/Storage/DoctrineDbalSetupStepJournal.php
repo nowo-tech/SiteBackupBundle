@@ -7,9 +7,9 @@ namespace Nowo\SiteBackupBundle\Setup\Storage;
 use DateTimeImmutable;
 use Nowo\SiteBackupBundle\Model\SetupProgress;
 use RuntimeException;
+use Symfony\Contracts\Service\ResetInterface;
 use Throwable;
 
-use function array_values;
 use function in_array;
 use function is_array;
 use function is_object;
@@ -22,8 +22,11 @@ use function sprintf;
  *
  * Tables are created with runtime DDL ({@see ensureSchema}) — never Symfony Migrations —
  * because early wizard steps run before the host DB / migrations exist.
+ *
+ * The "schema ensured" memo is re-validated when a query fails (table dropped while a
+ * long-lived worker keeps this service), and cleared by {@see reset()}.
  */
-final class DoctrineDbalSetupStepJournal
+final class DoctrineDbalSetupStepJournal implements ResetInterface
 {
     public const TABLE = 'nowo_site_backup_setup_step';
 
@@ -46,6 +49,11 @@ final class DoctrineDbalSetupStepJournal
             && (method_exists($this->connection, 'executeQuery') || method_exists($this->connection, 'executeStatement'));
     }
 
+    public function reset(): void
+    {
+        $this->schemaEnsured = false;
+    }
+
     /**
      * Upsert rows from the aggregate {@see SetupProgress} snapshot.
      */
@@ -55,8 +63,13 @@ final class DoctrineDbalSetupStepJournal
             return;
         }
 
-        $this->ensureSchema();
+        $this->withSchema(function () use ($progress): void {
+            $this->upsertFromProgress($progress);
+        });
+    }
 
+    private function upsertFromProgress(SetupProgress $progress): void
+    {
         $profile = $progress->getProfile() !== '' ? $progress->getProfile() : 'default';
         $now     = ($progress->getUpdatedAt() ?? new DateTimeImmutable())->format('Y-m-d H:i:s');
         $order   = 0;
@@ -152,8 +165,7 @@ final class DoctrineDbalSetupStepJournal
         }
 
         try {
-            $this->ensureSchema();
-            $rows = $this->fetchAll($profile);
+            $rows = $this->withSchema(fn (): array => $this->fetchAll($profile));
         } catch (Throwable) {
             return [];
         }
@@ -169,7 +181,7 @@ final class DoctrineDbalSetupStepJournal
             }
         }
 
-        return array_values($ids);
+        return $ids;
     }
 
     /**
@@ -184,8 +196,7 @@ final class DoctrineDbalSetupStepJournal
         }
 
         try {
-            $this->ensureSchema();
-            $rows = $this->fetchAll($profile);
+            $rows = $this->withSchema(fn (): array => $this->fetchAll($profile));
         } catch (Throwable) {
             return null;
         }
@@ -220,18 +231,46 @@ final class DoctrineDbalSetupStepJournal
             return;
         }
 
+        $this->withSchema(function () use ($profile): void {
+            if (is_string($profile) && $profile !== '') {
+                $this->executeStatement(
+                    sprintf('DELETE FROM %s WHERE profile = ?', $this->quoteTable()),
+                    [$profile],
+                );
+
+                return;
+            }
+
+            $this->executeStatement(sprintf('DELETE FROM %s', $this->quoteTable()), []);
+        });
+    }
+
+    /**
+     * Retries once after re-running the DDL when the memo predates this call.
+     *
+     * @template T
+     *
+     * @param callable(): T $operation
+     *
+     * @return T
+     */
+    private function withSchema(callable $operation): mixed
+    {
+        $schemaWasCached = $this->schemaEnsured;
         $this->ensureSchema();
 
-        if (is_string($profile) && $profile !== '') {
-            $this->executeStatement(
-                sprintf('DELETE FROM %s WHERE profile = ?', $this->quoteTable()),
-                [$profile],
-            );
+        try {
+            return $operation();
+        } catch (Throwable $e) {
+            if (!$schemaWasCached) {
+                throw $e;
+            }
 
-            return;
+            $this->schemaEnsured = false;
+            $this->ensureSchema();
+
+            return $operation();
         }
-
-        $this->executeStatement(sprintf('DELETE FROM %s', $this->quoteTable()), []);
     }
 
     private function ensureSchema(): void

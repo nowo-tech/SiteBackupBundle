@@ -207,6 +207,8 @@ final class SetupWizardController
 
     /**
      * @param list<string> $reasons
+     *
+     * @phpstan-return FormInterface<mixed>|null
      */
     private function createSetupForm(SetupProgress $progress, ?object $currentStep, array $reasons): ?FormInterface
     {

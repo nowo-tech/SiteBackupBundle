@@ -10,6 +10,7 @@ use Nowo\SiteBackupBundle\Model\BackupArtifact;
 use Nowo\SiteBackupBundle\Model\RestoreProgress;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupMarkerManager;
 use Nowo\SiteBackupBundle\Storage\RestoreProgressStorageInterface;
+use Nowo\SiteBackupBundle\Worker\WorkerRestartSignal;
 use RuntimeException;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Finder\Finder;
@@ -37,6 +38,9 @@ use function sys_get_temp_dir;
  * The loading page UI reads progress from {@see RestoreProgressStorageInterface}
  * (kept outside overwritten paths when configured). Bundle Twig templates serve the
  * UI so a mid-restore filesystem swap does not blank the visitor experience.
+ *
+ * Once files were applied, {@see WorkerRestartSignal} is raised: long-lived workers keep
+ * serving the code / config they booted with until they are restarted.
  */
 final class RestoreOrchestrator
 {
@@ -52,6 +56,7 @@ final class RestoreOrchestrator
         private readonly bool $triggerSetupAfterRestore = true,
         private readonly string $postRestoreSetupProfile = 'post_restore',
         private readonly Filesystem $filesystem = new Filesystem(),
+        private readonly ?WorkerRestartSignal $workerRestartSignal = null,
     ) {
     }
 
@@ -94,7 +99,8 @@ final class RestoreOrchestrator
             updatedAt: $now,
         ));
 
-        $staging = sys_get_temp_dir() . '/nowo-site-backup-restore-' . $artifact->getId();
+        $staging      = sys_get_temp_dir() . '/nowo-site-backup-restore-' . $artifact->getId();
+        $filesTouched = false;
 
         try {
             $this->advance(RestoreProgress::PHASE_VALIDATING, 10.0, 'Verifying archive integrity…');
@@ -112,8 +118,12 @@ final class RestoreOrchestrator
             $this->appendLog('Extracted to staging.');
 
             $this->advance(RestoreProgress::PHASE_APPLYING, 55.0, 'Applying files safely…');
+            $filesTouched = true;
             $this->applyFromStaging($staging);
             $this->appendLog('Files applied.');
+            if ($this->workerRestartSignal instanceof WorkerRestartSignal) {
+                $this->appendLog('Restart PHP workers (FrankenPHP worker mode) so they load the restored code and config.');
+            }
 
             $this->advance(RestoreProgress::PHASE_FINALIZING, 90.0, 'Finalizing…');
             // Database dump (if present) is left for the app/ops to import via configured post-steps.
@@ -163,6 +173,9 @@ final class RestoreOrchestrator
         } finally {
             if (is_dir($staging)) {
                 $this->filesystem->remove($staging);
+            }
+            if ($filesTouched) {
+                $this->workerRestartSignal?->request('restore:' . $artifact->getId());
             }
         }
     }

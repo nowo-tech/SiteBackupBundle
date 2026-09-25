@@ -10,6 +10,7 @@ use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupMarkerManager;
 use Nowo\SiteBackupBundle\Storage\FilesystemRestoreProgressStorage;
 use Nowo\SiteBackupBundle\Tests\Unit\TestFixtures;
+use Nowo\SiteBackupBundle\Worker\WorkerRestartSignal;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Symfony\Component\Filesystem\Filesystem;
@@ -116,6 +117,47 @@ final class RestoreOrchestratorExtendedTest extends TestCase
         $orchestrator = $this->orchestrator($storage);
         $orchestrator->restore($artifact, 'cli');
         self::assertSame(RestoreProgress::PHASE_COMPLETED, $storage->load()->getPhase());
+    }
+
+    public function testRestoreRaisesWorkerRestartSignal(): void
+    {
+        $signal       = new WorkerRestartSignal($this->projectDir . '/var/site-backup/worker-restart.required');
+        $archiver     = $this->archiver();
+        $artifact     = $archiver->create('signal', 'phpunit');
+        $storage      = new FilesystemRestoreProgressStorage($this->progressFile);
+        $orchestrator = new RestoreOrchestrator(
+            projectDir: $this->projectDir,
+            archiver: $archiver,
+            progressStorage: $storage,
+            protectedRelativePaths: [],
+            workerRestartSignal: $signal,
+        );
+
+        $orchestrator->restore($artifact, 'cli');
+
+        self::assertTrue($signal->isRequested());
+        self::assertSame('restore:' . $artifact->getId(), $signal->read()['reason'] ?? null);
+        self::assertStringContainsString('Restart PHP workers', implode("\n", $storage->load()->getLog()));
+    }
+
+    public function testFailedRestoreBeforeApplyDoesNotRaiseWorkerRestartSignal(): void
+    {
+        $signal       = new WorkerRestartSignal($this->projectDir . '/var/site-backup/worker-restart.required');
+        $orchestrator = new RestoreOrchestrator(
+            projectDir: $this->projectDir,
+            archiver: $this->archiver(),
+            progressStorage: new FilesystemRestoreProgressStorage($this->progressFile),
+            protectedRelativePaths: [],
+            workerRestartSignal: $signal,
+        );
+
+        try {
+            $orchestrator->restore(TestFixtures::artifact('bad-id'), 'cli');
+            self::fail('Expected exception');
+        } catch (RuntimeException) {
+        }
+
+        self::assertFalse($signal->isRequested());
     }
 
     private function archiver(): BackupArchiver

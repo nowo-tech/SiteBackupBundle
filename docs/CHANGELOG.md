@@ -7,6 +7,23 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.14.0] - 2026-09-25
+
+### Added
+
+- **Worker restart signal (FrankenPHP worker mode):** `Worker\WorkerRestartSignal` writes `var/site-backup/worker-restart.required` and dispatches `Event\WorkerRestartRequiredEvent` after a restore applied files, after `cache_clear`, and after `database_url` wrote `.env.local`. Command `nowo:site-backup:worker-restart` shows the signal (exit code `3` when a restart is required) and clears it with `--clear`.
+- `ConditionalAnswerStep::getInner()`.
+- Audit document [FRANKENPHP-WORKER-AUDIT.md](FRANKENPHP-WORKER-AUDIT.md) (scenario B: kernel not reset between requests).
+
+### Fixed
+
+- **Worker mode (scenario B):** `DoctrineDbalSetupProgressStorage` and `DoctrineDbalSetupStepJournal` no longer trust a stale "schema ensured" flag for the life of the worker. When a query fails after the table was created earlier in the process (database dropped / recreated), the table is re-created and the query retried once. Both services implement `ResetInterface` (`kernel.reset`); correctness does not depend on the resetter.
+- Cold-start PDO fallback sets `PDO::ATTR_TIMEOUT` (5 s).
+- PHPStan findings cleared (level 8).
+
+### Documentation
+
+- [UPGRADING.md](UPGRADING.md) **From 1.13.8 to 1.14.0**; [DEMO-FRANKENPHP.md](DEMO-FRANKENPHP.md) links the worker audit.
 
 ## [1.13.8] - 2026-08-24
 
@@ -371,7 +388,8 @@ First stable release of **Site Backup Bundle**.
 - Symfony `^7.0 || ^8.0` (CI / mandatory minors: **7.4**, **8.0**, **8.1**)
 - System `tar` required for archive create/extract
 
-[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.13.6...HEAD
+[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.14.0...HEAD
+[1.14.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.13.8...v1.14.0
 [1.9.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.8.1...v1.9.0
 [1.8.1]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.8.0...v1.8.1
 [1.8.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.7.0...v1.8.0

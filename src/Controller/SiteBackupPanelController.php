@@ -243,16 +243,25 @@ final class SiteBackupPanelController
         return $views;
     }
 
+    /**
+     * @return FormInterface<mixed>
+     */
     private function createCreateForm(): FormInterface
     {
         return $this->formFactory->createNamed('', CreateBackupType::class, null, $this->formOptions());
     }
 
+    /**
+     * @return FormInterface<mixed>
+     */
     private function createLoginForm(): FormInterface
     {
         return $this->formFactory->createNamed('', PanelLoginType::class, null, $this->formOptions());
     }
 
+    /**
+     * @return FormInterface<mixed>
+     */
     private function createPanelActionForm(string $action, ?string $backupId = null): FormInterface
     {
         return $this->formFactory->createNamed('', PanelActionType::class, null, $this->formOptions([
@@ -261,6 +270,9 @@ final class SiteBackupPanelController
         ]));
     }
 
+    /**
+     * @return FormInterface<mixed>
+     */
     private function createSubmittedPanelForm(Request $request, string $action): FormInterface
     {
         return match ($action) {
@@ -281,6 +293,9 @@ final class SiteBackupPanelController
         return array_merge(['csrf_protection' => $this->csrfTokenManager instanceof CsrfTokenManagerInterface], $options);
     }
 
+    /**
+     * @param FormInterface<mixed>|null $submittedForm
+     */
     private function resolveCreateFormView(?string $submittedAction, ?FormInterface $submittedForm): FormView
     {
         if ($submittedAction === 'create' && $submittedForm instanceof FormInterface) {

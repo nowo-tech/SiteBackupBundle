@@ -52,6 +52,7 @@ use Nowo\SiteBackupBundle\Storage\FilesystemBackupHistoryStorage;
 use Nowo\SiteBackupBundle\Storage\FilesystemRestoreProgressStorage;
 use Nowo\SiteBackupBundle\Storage\RestoreProgressStorageInterface;
 use Nowo\SiteBackupBundle\Twig\SiteBackupExtension as SiteBackupTwigExtension;
+use Nowo\SiteBackupBundle\Worker\WorkerRestartSignal;
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\Argument\TaggedIteratorArgument;
 use Symfony\Component\DependencyInjection\Compiler\ServiceLocatorTagPass;
@@ -239,7 +240,8 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$protectedRelativePaths', array_values($config['restore']['protected_paths'] ?? []))
             ->setArgument('$setupMarkers', new Reference(SetupMarkerManager::class))
             ->setArgument('$triggerSetupAfterRestore', (bool) ($setup['trigger_after_restore'] ?? true))
-            ->setArgument('$postRestoreSetupProfile', (string) ($setup['post_restore_profile'] ?? 'post_restore'));
+            ->setArgument('$postRestoreSetupProfile', (string) ($setup['post_restore_profile'] ?? 'post_restore'))
+            ->setArgument('$workerRestartSignal', new Reference(WorkerRestartSignal::class));
     }
 
     /**
@@ -628,7 +630,8 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$profiles', $normalized)
             ->setArgument('$defaultProfile', $setup['default_profile'])
             ->setArgument('$eventDispatcher', new Reference('event_dispatcher', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
-            ->setArgument('$defaultAdvanceMode', $globalAdvance);
+            ->setArgument('$defaultAdvanceMode', $globalAdvance)
+            ->setArgument('$workerRestartSignal', new Reference(WorkerRestartSignal::class));
 
         if ($container->hasDefinition(SetupRequestSubscriber::class)) {
             $sub = $container->getDefinition(SetupRequestSubscriber::class);

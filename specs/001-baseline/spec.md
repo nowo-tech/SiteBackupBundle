@@ -2,7 +2,7 @@
 
 **Package**: `nowo-tech/site-backup-bundle`  
 **Baseline**: `001-baseline`  
-**Last amended**: 2026-07-30
+**Last amended**: 2026-09-25
 
 ## User scenarios
 
@@ -104,6 +104,7 @@ Given `setup.profiles.*.tabs` (ordered), When the wizard runs, Then each tab may
 | FR-MODEL-001 | Artifact / progress / history / `SetupProgress` models |
 | FR-ATTR-001 | `#[ExcludeFromRestore]` |
 | FR-DI-001 | `services.yaml` / routes attribute loader with path-prefix parameters |
+| FR-WORKER-001 | FrankenPHP worker scenario B (no kernel reset): no cross-request mutable state in shared services; DBAL setup storages self-heal schema memo + `ResetInterface`; after restore / `cache_clear` / `database_url` env write, `WorkerRestartSignal` + `WorkerRestartRequiredEvent` require an operational worker restart |
 
 ## Success criteria
 
@@ -117,6 +118,7 @@ Given `setup.profiles.*.tabs` (ordered), When the wizard runs, Then each tab may
 | SC-SETUP-003 | `bootstrap_mode` + `when_answer` + full SQL import path covered by unit tests |
 | SC-SETUP-004 | Tabs + checker + `advance_mode` covered by unit tests; tab labels use translation ids |
 | SC-QA-001 | `make phpstan` / `cs-check` clean |
+| SC-WORKER-001 | Safe under FrankenPHP worker with kernel not reset between requests (see `docs/FRANKENPHP-WORKER-AUDIT.md`); DBAL setup storages covered without calling `reset()` |
 
 ## Non-goals
 

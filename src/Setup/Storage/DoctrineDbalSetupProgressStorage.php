@@ -8,6 +8,7 @@ use DateTimeImmutable;
 use JsonException;
 use Nowo\SiteBackupBundle\Model\SetupProgress;
 use RuntimeException;
+use Symfony\Contracts\Service\ResetInterface;
 use Throwable;
 
 use function is_array;
@@ -29,8 +30,11 @@ use const JSON_THROW_ON_ERROR;
  *
  * When a {@see DoctrineDbalSetupStepJournal} is wired, each save also upserts
  * per-step rows (soft-fail) and load merges completed step ids from the journal.
+ *
+ * The "schema ensured" memo is re-validated when a query fails (table dropped while a
+ * long-lived worker keeps this service), and cleared by {@see reset()}.
  */
-final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInterface
+final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInterface, ResetInterface
 {
     public const TABLE = 'nowo_site_backup_setup_progress';
 
@@ -51,8 +55,7 @@ final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInte
         }
 
         try {
-            $this->ensureSchema();
-            $row = $this->fetchRow();
+            $row = $this->withSchema(fn (): ?array => $this->fetchRow());
             if ($row === null) {
                 $progress = new SetupProgress();
             } else {
@@ -83,6 +86,8 @@ final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInte
             throw new RuntimeException('Doctrine DBAL connection is not available for setup progress storage.');
         }
 
+        $schemaWasCached = $this->schemaEnsured;
+
         try {
             $this->ensureSchema();
             $json = json_encode($progress->toArray(), JSON_THROW_ON_ERROR);
@@ -105,42 +110,9 @@ final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInte
         ];
 
         try {
-            if ($this->fetchRow() === null) {
-                $this->executeStatement(
-                    sprintf(
-                        'INSERT INTO %s (id, phase, profile, current_step_id, percent, started_at, updated_at, completed_at, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                        $this->quoteTable(),
-                    ),
-                    [
-                        $params['id'],
-                        $params['phase'],
-                        $params['profile'],
-                        $params['current_step_id'],
-                        $params['percent'],
-                        $params['started_at'],
-                        $params['updated_at'],
-                        $params['completed_at'],
-                        $params['payload'],
-                    ],
-                );
-            } else {
-                $this->executeStatement(
-                    sprintf(
-                        'UPDATE %s SET phase = ?, profile = ?, current_step_id = ?, percent = ?, started_at = ?, updated_at = ?, completed_at = ?, payload = ? WHERE id = 1',
-                        $this->quoteTable(),
-                    ),
-                    [
-                        $params['phase'],
-                        $params['profile'],
-                        $params['current_step_id'],
-                        $params['percent'],
-                        $params['started_at'],
-                        $params['updated_at'],
-                        $params['completed_at'],
-                        $params['payload'],
-                    ],
-                );
-            }
+            $this->retryOnStaleSchema($schemaWasCached, function () use ($params): void {
+                $this->persistRow($params);
+            });
         } catch (Throwable $e) {
             throw new RuntimeException('Unable to persist setup progress to database: ' . $e->getMessage(), 0, $e);
         }
@@ -152,6 +124,54 @@ final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInte
     {
         return is_object($this->connection)
             && (method_exists($this->connection, 'executeQuery') || method_exists($this->connection, 'executeStatement'));
+    }
+
+    public function reset(): void
+    {
+        $this->schemaEnsured = false;
+    }
+
+    /**
+     * @param array<string, mixed> $params
+     */
+    private function persistRow(array $params): void
+    {
+        if ($this->fetchRow() === null) {
+            $this->executeStatement(
+                sprintf(
+                    'INSERT INTO %s (id, phase, profile, current_step_id, percent, started_at, updated_at, completed_at, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                    $this->quoteTable(),
+                ),
+                [
+                    $params['id'],
+                    $params['phase'],
+                    $params['profile'],
+                    $params['current_step_id'],
+                    $params['percent'],
+                    $params['started_at'],
+                    $params['updated_at'],
+                    $params['completed_at'],
+                    $params['payload'],
+                ],
+            );
+        } else {
+            $this->executeStatement(
+                sprintf(
+                    'UPDATE %s SET phase = ?, profile = ?, current_step_id = ?, percent = ?, started_at = ?, updated_at = ?, completed_at = ?, payload = ? WHERE id = 1',
+                    $this->quoteTable(),
+                ),
+                [
+                    $params['phase'],
+                    $params['profile'],
+                    $params['current_step_id'],
+                    $params['percent'],
+                    $params['started_at'],
+                    $params['updated_at'],
+                    $params['completed_at'],
+                    $params['payload'],
+                ],
+            );
+        }
     }
 
     private function syncStepJournal(SetupProgress $progress): void
@@ -188,6 +208,46 @@ final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInte
             return $this->stepJournal->enrich($progress);
         } catch (Throwable) {
             return $progress;
+        }
+    }
+
+    /**
+     * @template T
+     *
+     * @param callable(): T $operation
+     *
+     * @return T
+     */
+    private function withSchema(callable $operation): mixed
+    {
+        $schemaWasCached = $this->schemaEnsured;
+        $this->ensureSchema();
+
+        return $this->retryOnStaleSchema($schemaWasCached, $operation);
+    }
+
+    /**
+     * Retries once after re-running the DDL when the memo predates this call.
+     *
+     * @template T
+     *
+     * @param callable(): T $operation
+     *
+     * @return T
+     */
+    private function retryOnStaleSchema(bool $schemaWasCached, callable $operation): mixed
+    {
+        try {
+            return $operation();
+        } catch (Throwable $e) {
+            if (!$schemaWasCached) {
+                throw $e;
+            }
+
+            $this->schemaEnsured = false;
+            $this->ensureSchema();
+
+            return $operation();
         }
     }
 

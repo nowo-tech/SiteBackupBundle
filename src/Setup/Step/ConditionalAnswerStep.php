@@ -38,6 +38,11 @@ final class ConditionalAnswerStep implements SetupStepInterface
         return $this->inner->getUiKind();
     }
 
+    public function getInner(): SetupStepInterface
+    {
+        return $this->inner;
+    }
+
     public function isEnabled(SetupContext $ctx): bool
     {
         $answer = $ctx->getAnswer($this->answerKey);

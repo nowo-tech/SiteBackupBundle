@@ -12,8 +12,12 @@ use Nowo\SiteBackupBundle\Setup\SetupStepFactory;
 use Nowo\SiteBackupBundle\Setup\SetupStepInput;
 use Nowo\SiteBackupBundle\Setup\Storage\FilesystemSetupProgressStorage;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupMarkerManager;
+use Nowo\SiteBackupBundle\Worker\WorkerRestartSignal;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Filesystem\Filesystem;
+
+use const JSON_THROW_ON_ERROR;
+use const PHP_BINARY;
 
 final class SetupOrchestratorTest extends TestCase
 {
@@ -82,5 +86,69 @@ final class SetupOrchestratorTest extends TestCase
 
         $result = $orch->advance('admin_only');
         self::assertSame(SetupProgress::PHASE_WAITING, $result->getPhase());
+    }
+
+    public function testDatabaseUrlAndCacheClearStepsRaiseWorkerRestartSignal(): void
+    {
+        $this->fs->dumpFile($this->dir . '/bin/console', "<?php echo 'cleared';\n");
+        $signal = new WorkerRestartSignal($this->dir . '/var/worker-restart.required');
+        $orch   = $this->signalOrchestrator($signal, [
+            ['type' => 'database_url', 'optional' => false],
+            ['type' => 'cache_clear'],
+        ]);
+
+        $orch->advance('p', new SetupStepInput(['database_url' => 'mysql://u:p@db/app']));
+        self::assertTrue($signal->isRequested());
+        self::assertFileExists($this->dir . '/.env.local');
+        self::assertSame('setup:cache_clear_1', $signal->read()['reason'] ?? null);
+    }
+
+    public function testConditionalCacheClearStepRaisesWorkerRestartSignal(): void
+    {
+        $this->fs->dumpFile($this->dir . '/bin/console', "<?php echo 'cleared';\n");
+        $signal = new WorkerRestartSignal($this->dir . '/var/worker-restart.required');
+        $orch   = $this->signalOrchestrator($signal, [
+            ['type' => 'cache_clear', 'id' => 'cc', 'when_answer' => ['mode' => 'fresh']],
+        ]);
+
+        $this->fs->dumpFile($this->dir . '/_setup-progress.json', json_encode(
+            (new SetupProgress(phase: SetupProgress::PHASE_RUNNING, profile: 'p', answers: ['mode' => 'fresh']))->toArray(),
+            JSON_THROW_ON_ERROR,
+        ));
+
+        $orch->advance('p');
+        self::assertSame('setup:cc', $signal->read()['reason'] ?? null);
+    }
+
+    public function testSkippedDatabaseUrlStepDoesNotRaiseWorkerRestartSignal(): void
+    {
+        $signal = new WorkerRestartSignal($this->dir . '/var/worker-restart.required');
+        $orch   = $this->signalOrchestrator($signal, [
+            ['type' => 'database_url', 'optional' => true],
+            ['type' => 'marker', 'write_done' => true],
+        ]);
+
+        $result = $orch->advance('p', new SetupStepInput());
+        self::assertSame(SetupProgress::PHASE_COMPLETED, $result->getPhase());
+        self::assertFalse($signal->isRequested());
+    }
+
+    /**
+     * @param list<array<string, mixed>> $steps
+     */
+    private function signalOrchestrator(WorkerRestartSignal $signal, array $steps): SetupOrchestrator
+    {
+        $markers = new SetupMarkerManager($this->dir . '/_setup.required', $this->dir . '/_setup.done');
+        $runner  = new ConsoleProcessRunner($this->dir, PHP_BINARY, 30);
+
+        return new SetupOrchestrator(
+            projectDir: $this->dir,
+            stepFactory: new SetupStepFactory($runner, $markers, new NullAdminUserProvisioner()),
+            progressStorage: new FilesystemSetupProgressStorage($this->dir . '/_setup-progress.json'),
+            markers: $markers,
+            profiles: ['p' => ['steps' => $steps]],
+            defaultProfile: 'p',
+            workerRestartSignal: $signal,
+        );
     }
 }

@@ -44,8 +44,9 @@ final class SetupDbDoneRedirectSubscriberTest extends TestCase
 
         $subscriber->onKernelRequest($event);
 
-        self::assertInstanceOf(RedirectResponse::class, $event->getResponse());
-        self::assertSame('/admin', $event->getResponse()?->getTargetUrl());
+        $response = $event->getResponse();
+        self::assertInstanceOf(RedirectResponse::class, $response);
+        self::assertSame('/admin', $response->getTargetUrl());
     }
 
     public function testMatchesLocalizedSetupPaths(): void

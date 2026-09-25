@@ -28,6 +28,8 @@ final readonly class MysqlSchemaExistenceChecker implements SchemaExistenceCheck
 {
     private const SETUP_TABLE_PREFIX = 'nowo_site_backup%';
 
+    private const CONNECT_TIMEOUT_SECONDS = 5;
+
     public function __construct(
         private mixed $connection = null,
         private ?string $host = null,
@@ -92,7 +94,7 @@ final readonly class MysqlSchemaExistenceChecker implements SchemaExistenceCheck
                     $dsn,
                     is_string($this->user) ? $this->user : '',
                     is_string($this->password) ? $this->password : '',
-                    [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION],
+                    [PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION, PDO::ATTR_TIMEOUT => self::CONNECT_TIMEOUT_SECONDS],
                 );
             } catch (Throwable) {
                 return false;
@@ -170,19 +172,14 @@ final readonly class MysqlSchemaExistenceChecker implements SchemaExistenceCheck
     private function isUnknownDatabase(Throwable $e): bool
     {
         $current = $e;
-        while ($current instanceof Throwable) {
+        do {
             $message = $current->getMessage();
             if (str_contains($message, 'Unknown database') || str_contains($message, '1049')) {
                 return true;
             }
 
-            $previous = $current->getPrevious();
-            if (!$previous instanceof Throwable) {
-                break;
-            }
-
-            $current = $previous;
-        }
+            $current = $current->getPrevious();
+        } while ($current instanceof Throwable);
 
         return false;
     }

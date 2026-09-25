@@ -2,14 +2,22 @@
 
 ## Table of contents
 
+- [From 1.13.8 to 1.14.0](#from-1138-to-1140)
 - [From 1.13.7 to 1.13.8](#from-1137-to-1138)
 
-## From 1.13.7 to 1.13.8
+## From 1.13.8 to 1.14.0
 
-No breaking changes. **No application upgrade steps.**
+**FrankenPHP worker mode (kernel not reset between requests)** — non-breaking.
+
+- `DoctrineDbalSetupProgressStorage` / `DoctrineDbalSetupStepJournal` self-heal a stale schema memo and implement `ResetInterface` (safe under scenario B: no `kernel.reset`).
+- After a restore that applied files, or setup `cache_clear` / `database_url` that wrote `.env.local`, the bundle writes `var/site-backup/worker-restart.required` and dispatches `WorkerRestartRequiredEvent`. Restart workers (Caddy admin `POST /frankenphp/workers/restart` or container restart), then `bin/console nowo:site-backup:worker-restart --clear`. Optional: listen to the event to automate the restart.
+- `RestoreOrchestrator` / `SetupOrchestrator` accept optional last constructor arg `?WorkerRestartSignal` (wired by the bundle; BC default `null`).
+- Cold-start PDO fallback uses a 5 s connect timeout.
+- Audit: [FRANKENPHP-WORKER-AUDIT.md](FRANKENPHP-WORKER-AUDIT.md).
 
 ```bash
 composer update nowo-tech/site-backup-bundle
+php bin/console cache:clear
 ```
 
 ## From 1.13.7 to 1.13.8
@@ -19,8 +27,6 @@ No breaking changes. **No application upgrade steps.**
 ```bash
 composer update nowo-tech/site-backup-bundle
 ```
-
-# Upgrading
 
 ## To 1.13.7
 

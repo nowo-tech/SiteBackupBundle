@@ -1,6 +1,6 @@
 # Release
 
-Current stable target: **v1.13.7**.
+Current stable target: **v1.14.0**.
 
 ## Checklist
 
@@ -13,51 +13,13 @@ Current stable target: **v1.13.7**.
 7. Push the branch and the tag to `git@github.com:nowo-tech/SiteBackupBundle.git` — `.github/workflows/release.yml` creates the GitHub Release from the tag + changelog entry.
 8. Confirm [Packagist](https://packagist.org/packages/nowo-tech/site-backup-bundle) picks up the tag (submit the GitHub repo once if the package is new).
 
-
-## Example: v1.11.0
-
-```bash
-make release-check
-git add docs/CHANGELOG.md docs/UPGRADING.md docs/RELEASE.md
-git commit -m "Release v1.11.0: setup step journal for doctrine/chain progress."
-git tag -a v1.11.0 -m "Release v1.11.0"
-git push origin main
-git push origin v1.11.0
-```
-
-## Example: v1.10.1
+## Example: v1.14.0
 
 ```bash
 make release-check
-git add docs/CHANGELOG.md docs/UPGRADING.md docs/RELEASE.md
-git commit -m "Release v1.10.1: SECURITY firewall docs and REQ-GIT-001 history hygiene."
-git tag -a v1.10.1 -m "Release v1.10.1"
+git tag -a v1.14.0 -m "Release v1.14.0 - FrankenPHP worker mode (reset false) + worker restart signal"
 git push origin main
-git push origin v1.10.1
-```
-
-## Example: v1.9.0
-
-```bash
-# 1. Run pre-release checks
-make release-check
-
-# 2. Commit release docs and feature
-git add -A
-git commit -m "chore(release): prepare 1.9.0"
-
-# 3. Create and push tag (triggers GitHub Release via Actions)
-git tag -a v1.9.0 -m "Release v1.9.0 - REQ-UI-002 panel access_roles / access_checker"
-git push origin main
-git push origin v1.9.0
-```
-
-## Example: v1.8.1
-
-```bash
-git tag -a v1.8.1 -m "Release v1.8.1 - demo showcases layouts, locale, detectors, custom tabs"
-git push origin main
-git push origin v1.8.1
+git push origin v1.14.0
 ```
 
 ## Versioning

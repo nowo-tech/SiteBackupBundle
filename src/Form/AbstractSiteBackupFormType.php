@@ -7,6 +7,9 @@ namespace Nowo\SiteBackupBundle\Form;
 use Symfony\Component\Form\AbstractType;
 use Symfony\Component\OptionsResolver\OptionsResolver;
 
+/**
+ * @extends AbstractType<array<string, mixed>>
+ */
 abstract class AbstractSiteBackupFormType extends AbstractType
 {
     public function configureOptions(OptionsResolver $resolver): void

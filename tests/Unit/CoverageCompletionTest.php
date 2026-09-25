@@ -136,6 +136,11 @@ final class CoverageCompletionTest extends TestCase
         self::assertFalse((new MysqlSchemaExistenceChecker(database: 'app', pdo: $otherPdo))->schemaExists());
 
         $privateQuery = new class {
+            public function probe(): mixed
+            {
+                return $this->executeQuery();
+            }
+
             private function executeQuery(): mixed
             {
                 return null;
@@ -309,7 +314,7 @@ final class CoverageCompletionTest extends TestCase
             profile: '',
             currentStepId: 'running_step',
             error: 'boom',
-            completedStepIds: ['', 'valid', 123],
+            completedStepIds: ['', 'valid'],
             updatedAt: new DateTimeImmutable('2026-08-15T10:00:00+00:00'),
             startedAt: new DateTimeImmutable('2026-08-15T09:00:00+00:00'),
         ));
@@ -367,6 +372,9 @@ final class CoverageCompletionTest extends TestCase
                 throw new RuntimeException('schema fail');
             }
 
+            /**
+             * @param array<mixed> $params
+             */
             public function executeStatement(string $sql, array $params = []): int
             {
                 throw new RuntimeException('schema fail');
@@ -378,16 +386,25 @@ final class CoverageCompletionTest extends TestCase
         self::assertNull($throwingJournal->latestFinishedStep());
 
         $loopConn = new class {
+            /**
+             * @param array<mixed> $params
+             */
             public function executeStatement(string $sql, array $params = []): int
             {
                 return 0;
             }
 
+            /**
+             * @param array<mixed> $params
+             */
             public function executeQuery(string $sql, array $params = []): object
             {
                 return new class {
                     private bool $returned = false;
 
+                    /**
+                     * @return array<string, mixed>|false
+                     */
                     public function fetchAssociative(): array|false
                     {
                         if ($this->returned) {
@@ -404,6 +421,9 @@ final class CoverageCompletionTest extends TestCase
         self::assertSame(['a'], $loopJournal->listCompletedStepIds());
 
         $queryOnlyConn = new class {
+            /**
+             * @param array<mixed> $params
+             */
             public function executeQuery(string $sql, array $params = []): object
             {
                 return new class {
@@ -455,9 +475,15 @@ final class CoverageCompletionTest extends TestCase
     public function testStepJournalExecuteQueryOnlyAndMissingMethods(): void
     {
         $conn = new class {
+            /**
+             * @param array<mixed> $params
+             */
             public function executeQuery(string $sql, array $params = []): object
             {
                 return new class {
+                    /**
+                     * @return array<mixed>
+                     */
                     public function fetchAllAssociative(): array
                     {
                         return ['not-array'];
@@ -767,7 +793,7 @@ final class CoverageCompletionTest extends TestCase
             $throwingStorage,
         );
         $healGuard->healSideEffects();
-        self::assertTrue(true);
+        $this->addToAssertionCount(1);
 
         $completedStorage = new FilesystemSetupProgressStorage($this->harnessProjectDir . '/var/site-backup/setup-progress-completed.json');
         $completedStorage->save(new SetupProgress(phase: SetupProgress::PHASE_COMPLETED, percent: 100.0));
@@ -886,6 +912,9 @@ final class CoverageCompletionTest extends TestCase
         self::assertSame($same, $freshJournal->enrich($same));
 
         $stmtOnly = new class {
+            /**
+             * @param array<mixed> $params
+             */
             public function executeStatement(string $sql, array $params = []): int
             {
                 return 0;
@@ -945,6 +974,9 @@ final class CoverageCompletionTest extends TestCase
         self::assertSame([], $noopJournal->listCompletedStepIds());
 
         $fetchConn = new class {
+            /**
+             * @param array<mixed> $params
+             */
             public function executeStatement(string $sql, array $params = []): int
             {
                 return 0;
@@ -954,11 +986,17 @@ final class CoverageCompletionTest extends TestCase
         $fetchJournal->sync(new SetupProgress(phase: SetupProgress::PHASE_RUNNING, currentStepId: 'only', completedStepIds: ['prev']));
 
         $badResultConn = new class {
+            /**
+             * @param array<mixed> $params
+             */
             public function executeStatement(string $sql, array $params = []): int
             {
                 return 0;
             }
 
+            /**
+             * @param array<mixed> $params
+             */
             public function executeQuery(string $sql, array $params = []): stdClass
             {
                 return new stdClass();
@@ -967,11 +1005,17 @@ final class CoverageCompletionTest extends TestCase
         self::assertSame([], (new DoctrineDbalSetupStepJournal($badResultConn))->listCompletedStepIds());
 
         $loopFetchConn = new class {
+            /**
+             * @param array<mixed> $params
+             */
             public function executeStatement(string $sql, array $params = []): int
             {
                 return 0;
             }
 
+            /**
+             * @param array<mixed> $params
+             */
             public function executeQuery(string $sql, array $params = []): object
             {
                 return new class {
@@ -1072,11 +1116,17 @@ final class CoverageCompletionTest extends TestCase
         self::assertSame($alreadyComplete, $journal->enrich($alreadyComplete));
 
         $badFetchOneConn = new class {
+            /**
+             * @param array<mixed> $params
+             */
             public function executeStatement(string $sql, array $params = []): int
             {
                 return 0;
             }
 
+            /**
+             * @param array<mixed> $params
+             */
             public function executeQuery(string $sql, array $params = []): object
             {
                 if (str_contains(strtolower($sql), 'and step_id')) {
@@ -1094,6 +1144,9 @@ final class CoverageCompletionTest extends TestCase
         ));
 
         $stmtOnlyConn = new class {
+            /**
+             * @param array<mixed> $params
+             */
             public function executeStatement(string $sql, array $params = []): int
             {
                 return 0;
@@ -1102,11 +1155,17 @@ final class CoverageCompletionTest extends TestCase
         self::assertSame([], (new DoctrineDbalSetupStepJournal($stmtOnlyConn))->listCompletedStepIds());
 
         $nullResultConn = new class {
+            /**
+             * @param array<mixed> $params
+             */
             public function executeStatement(string $sql, array $params = []): int
             {
                 return 0;
             }
 
+            /**
+             * @param array<mixed> $params
+             */
             public function executeQuery(string $sql, array $params = []): null
             {
                 return null;

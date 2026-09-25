@@ -20,5 +20,6 @@ make -C demo up-symfony8
 - Custom gate detector: toggle on homepage (`#[AsSetupNeedDetector]`)
 - Health exclusion: `/health`
 - `DATABASE_URL` points at service `mysql` (no host DB ports — REQ-DEMO-006)
+- Worker mode (kernel not reset): after restore / `cache_clear` / `database_url`, check `bin/console nowo:site-backup:worker-restart` and restart workers — see [FRANKENPHP-WORKER-AUDIT.md](FRANKENPHP-WORKER-AUDIT.md)
 
 See [SETUP-WIZARD.md](SETUP-WIZARD.md), [USAGE.md](USAGE.md), and [demo/README.md](../demo/README.md).
