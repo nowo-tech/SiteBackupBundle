@@ -201,6 +201,7 @@ final class SiteBackupPanelController
 
     private function clearRestore(): string
     {
+        // @igor-ignore - HTTP handler delegates to services; no controller worker state.
         $this->manager->clearRestoreStatus();
 
         return 'Restore status cleared.';

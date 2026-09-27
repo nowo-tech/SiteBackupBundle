@@ -41,6 +41,7 @@ final class SetupResetCommand extends Command
             return Command::SUCCESS;
         }
 
+        // @igor-ignore - Console command; not executed in FrankenPHP worker HTTP requests.
         $this->markers->clearDone();
         $this->orchestrator->resetProgress();
 

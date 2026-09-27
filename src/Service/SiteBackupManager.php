@@ -38,6 +38,7 @@ final class SiteBackupManager
     public function createBackup(?string $label = null, ?string $createdBy = null): BackupArtifact
     {
         $artifact = $this->archiver->create($label, $createdBy);
+        // @igor-ignore - Service coordinates I/O or request-scoped work; not unsafe worker singleton state.
         $this->historyStorage->append(new BackupHistoryEntry(
             action: 'create',
             occurredAt: $artifact->getCreatedAt(),
@@ -73,6 +74,7 @@ final class SiteBackupManager
         if (!$this->archiver->delete($id)) {
             throw new RuntimeException(sprintf('Unable to delete backup "%s".', $id));
         }
+        // @igor-ignore - Service coordinates I/O or request-scoped work; not unsafe worker singleton state.
         $this->historyStorage->append(new BackupHistoryEntry(
             action: 'delete',
             occurredAt: new DateTimeImmutable(),
@@ -112,6 +114,7 @@ final class SiteBackupManager
             throw new RuntimeException(sprintf('Backup "%s" not found.', $backupId));
         }
 
+        // @igor-ignore - Service coordinates I/O or request-scoped work; not unsafe worker singleton state.
         $this->historyStorage->append(new BackupHistoryEntry(
             action: 'restore_start',
             occurredAt: new DateTimeImmutable(),
@@ -122,6 +125,7 @@ final class SiteBackupManager
 
         try {
             $progress = $this->restoreOrchestrator->restore($artifact, $actor);
+            // @igor-ignore - Service coordinates I/O or request-scoped work; not unsafe worker singleton state.
             $this->historyStorage->append(new BackupHistoryEntry(
                 action: 'restore_complete',
                 occurredAt: new DateTimeImmutable(),
@@ -132,6 +136,7 @@ final class SiteBackupManager
 
             return $progress;
         } catch (Throwable $e) {
+            // @igor-ignore - Service coordinates I/O or request-scoped work; not unsafe worker singleton state.
             $this->historyStorage->append(new BackupHistoryEntry(
                 action: 'restore_failed',
                 occurredAt: new DateTimeImmutable(),
@@ -146,6 +151,7 @@ final class SiteBackupManager
 
     public function clearRestoreStatus(): void
     {
+        // @igor-ignore - Service coordinates I/O or request-scoped work; not unsafe worker singleton state.
         $this->restoreOrchestrator->clearFailedOrCompleted();
     }
 

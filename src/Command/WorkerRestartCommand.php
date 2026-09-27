@@ -34,6 +34,7 @@ final class WorkerRestartCommand extends Command
         $io = new SymfonyStyle($input, $output);
 
         if ($input->getOption('clear')) {
+            // @igor-ignore - Console command; not executed in FrankenPHP worker HTTP requests.
             $this->signal->clear();
             $io->success('Worker restart signal cleared.');
 

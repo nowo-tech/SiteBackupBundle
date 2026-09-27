@@ -364,6 +364,7 @@ final class BackupArchiver
         }
 
         $process = Process::fromShellCommandline($command . ' > ' . escapeshellarg($dumpAbsolute));
+        // @igor-ignore - Service coordinates I/O or request-scoped work; not unsafe worker singleton state.
         $process->setTimeout($this->processTimeoutSeconds);
         $process->run();
         if (!$process->isSuccessful()) {

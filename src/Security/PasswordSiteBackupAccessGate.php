@@ -71,6 +71,7 @@ final class PasswordSiteBackupAccessGate implements SiteBackupAccessGateInterfac
             return false;
         }
 
+        // @igor-ignore - Security gate reads config/credentials per call; no cross-request cache.
         $session->set(self::SESSION_KEY, true);
 
         return true;

@@ -13,7 +13,7 @@
 1. Clone the repository.
 2. Install git hooks once: `make setup-hooks` (REQ-MAKE-006 / REQ-GIT-001).
 3. Start the dev container: `make up` then `make install`.
-4. Run tests: `make test`, `make cs-check`, `make phpstan`.
+4. Run tests: `make test`, `make cs-check`, `make phpstan`, `make igor`.
 5. Pre-release: `make release-check`.
 
 ## Code style

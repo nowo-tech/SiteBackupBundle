@@ -20,7 +20,7 @@
     },
     "authors": [
         {
-            "name": "Héctor Franco Aceituno",
+            "name": "H\u00e9ctor Franco Aceituno",
             "email": "hectorfranco@nowo.tech",
             "homepage": "https://github.com/HecFranco",
             "role": "Developer"
@@ -52,6 +52,7 @@
     },
     "require-dev": {
         "friendsofphp/php-cs-fixer": "^3.0",
+        "igor-php/igor-php": "^0.9.7",
         "nowo-tech/phpstan-frankenphp": "^1.0",
         "phpstan/extension-installer": "^1.4",
         "phpstan/phpstan": "^2.0",
@@ -59,8 +60,8 @@
         "phpstan/phpstan-symfony": "^2.0",
         "phpunit/phpunit": "^10.0",
         "rector/rector": "^2.0",
-        "symfony/framework-bundle": "^7.0 || ^8.0",
         "symfony/cache": "^7.0 || ^8.0",
+        "symfony/framework-bundle": "^7.0 || ^8.0",
         "symfony/twig-bundle": "^7.0 || ^8.0",
         "twig/twig": "^3.12",
         "vincentlanglet/twig-cs-fixer": "^3.0"
@@ -114,6 +115,10 @@
         ],
         "twig:lint": "twig-cs-fixer lint --config=.twig-cs-fixer.php",
         "twig:fix": "twig-cs-fixer fix --config=.twig-cs-fixer.php",
-        "twig:fix:check": "twig-cs-fixer lint --config=.twig-cs-fixer.php --fix"
+        "twig:fix:check": "twig-cs-fixer lint --config=.twig-cs-fixer.php --fix",
+        "igor": "igor-php --no-agent ."
+    },
+    "scripts-descriptions": {
+        "igor": "Run Igor FrankenPHP worker-state audit (REQ-CS-008)"
     }
 }

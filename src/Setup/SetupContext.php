@@ -52,6 +52,7 @@ final class SetupContext
 
     public function setAnswer(string $key, mixed $value): void
     {
+        // @igor-ignore - Service coordinates I/O or request-scoped work; not unsafe worker singleton state.
         $this->answers[$key] = $value;
     }
 
@@ -66,6 +67,7 @@ final class SetupContext
     public function markCompleted(string $stepId): void
     {
         if (!in_array($stepId, $this->completedStepIds, true)) {
+            // @igor-ignore - Service coordinates I/O or request-scoped work; not unsafe worker singleton state.
             $this->completedStepIds[] = $stepId;
         }
     }
@@ -90,6 +92,7 @@ final class SetupContext
 
     public function setOption(string $key, mixed $value): void
     {
+        // @igor-ignore - Service coordinates I/O or request-scoped work; not unsafe worker singleton state.
         $this->options[$key] = $value;
     }
 

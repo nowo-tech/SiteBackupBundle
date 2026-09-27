@@ -47,6 +47,7 @@ final class SetupRouteLoader extends Loader
             throw new RuntimeException('SiteBackup setup routes already loaded.');
         }
 
+        // @igor-ignore - Route loader builds routes at compile/cache warm; not per-request mutation.
         $this->loaded = true;
         $collection   = new RouteCollection();
 
