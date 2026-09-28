@@ -20,14 +20,14 @@ final class SiteBackupAccessCheckerTest extends TestCase
         self::assertTrue($checker->canAccess(new stdClass()));
     }
 
-    public function testConfigurableGrantsWhenRolesEmpty(): void
+    public function testConfigurableDeniesWhenRolesEmpty(): void
     {
         $auth = $this->createMock(AuthorizationCheckerInterface::class);
         $auth->expects(self::never())->method('isGranted');
 
         $checker = new ConfigurableSiteBackupAccessChecker($auth, []);
 
-        self::assertTrue($checker->canAccess(null));
+        self::assertFalse($checker->canAccess(null));
     }
 
     public function testConfigurableGrantsWhenAnyRoleMatches(): void

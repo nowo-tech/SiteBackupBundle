@@ -7,6 +7,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.14.2] - 2026-09-28
+
+### Security
+
+- Empty `security.access_roles` is fail-closed (deny) unless `allow_unauthenticated` or a custom `access_checker` is set.
+
 ## [1.14.1] - 2026-09-27
 
 ### Added
@@ -17,6 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 - **Worker safety (Igor):** justified `// @igor-ignore` annotations and/or `ResetInterface` / request-scoped fixes so `make igor` passes on package `src/`.
 
+[1.14.2]: https://github.com/nowo-tech/SiteBackupBundle/releases/tag/v1.14.2
 [1.14.1]: https://github.com/nowo-tech/SiteBackupBundle/releases/tag/v1.14.1
 
 ## [1.14.0] - 2026-09-25

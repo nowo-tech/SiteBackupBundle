@@ -3,6 +3,17 @@
 
 ## Unreleased
 
+## To 1.14.2
+
+From **1.14.1** — `access_roles` fail-closed.
+
+```bash
+composer update nowo-tech/site-backup-bundle
+php bin/console cache:clear
+```
+
+- Empty `security.access_roles` denies the admin panel. Set roles / custom checker, or demo-only `allow_unauthenticated`.
+
 ## To 1.14.1
 
 From **1.14.0** — REQ-CS-008 Igor FrankenPHP worker audit (igor-php require-dev, igor.json, make igor).

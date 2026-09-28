@@ -123,7 +123,7 @@ final class Configuration implements ConfigurationInterface
                     ->addDefaultsIfNotSet()
                     ->children()
                         ->arrayNode('access_roles')
-                            ->info('Symfony roles granted access to the panel (at least one). Empty = no bundle-level role check.')
+                            ->info('Symfony roles granted access to the panel (at least one). Empty list is fail-closed (deny via access checker). Use allow_unauthenticated for demos only.')
                             ->scalarPrototype()->end()
                             ->defaultValue(['ROLE_ADMIN'])
                         ->end()
