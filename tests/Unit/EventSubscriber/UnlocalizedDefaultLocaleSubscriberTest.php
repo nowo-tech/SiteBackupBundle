@@ -33,7 +33,9 @@ final class UnlocalizedDefaultLocaleSubscriberTest extends TestCase
         $request->setLocale('en');
         $event = $this->mainEvent($request);
 
-        new UnlocalizedDefaultLocaleSubscriber($translator, 'es', 'serve')->onKernelRequest($event);
+        $subscriber = new UnlocalizedDefaultLocaleSubscriber($translator, 'es', 'serve');
+
+        $subscriber->onKernelRequest($event);
 
         self::assertSame('es', $request->getLocale());
         self::assertSame('es', $request->attributes->get('_locale'));
@@ -49,7 +51,9 @@ final class UnlocalizedDefaultLocaleSubscriberTest extends TestCase
         $request->setLocale('en');
         $event = $this->mainEvent($request);
 
-        new UnlocalizedDefaultLocaleSubscriber($translator, 'es', 'redirect')->onKernelRequest($event);
+        $subscriber = new UnlocalizedDefaultLocaleSubscriber($translator, 'es', 'redirect');
+
+        $subscriber->onKernelRequest($event);
 
         self::assertSame('en', $request->getLocale());
         self::assertSame('en', $request->attributes->get('_locale'));
@@ -65,7 +69,9 @@ final class UnlocalizedDefaultLocaleSubscriberTest extends TestCase
         $request->setLocale('en');
         $event = $this->mainEvent($request);
 
-        new UnlocalizedDefaultLocaleSubscriber($translator, 'es', 'serve')->onKernelRequest($event);
+        $subscriber = new UnlocalizedDefaultLocaleSubscriber($translator, 'es', 'serve');
+
+        $subscriber->onKernelRequest($event);
 
         self::assertSame('en', $request->getLocale());
         self::assertSame('en', $request->attributes->get('_locale'));
@@ -81,7 +87,9 @@ final class UnlocalizedDefaultLocaleSubscriberTest extends TestCase
         $request->setLocale('en');
         $event = $this->mainEvent($request);
 
-        new UnlocalizedDefaultLocaleSubscriber($translator, 'es', 'serve')->onKernelRequest($event);
+        $subscriber = new UnlocalizedDefaultLocaleSubscriber($translator, 'es', 'serve');
+
+        $subscriber->onKernelRequest($event);
 
         self::assertSame('en', $request->getLocale());
         self::assertSame('en', $request->attributes->get('_locale'));
@@ -96,7 +104,9 @@ final class UnlocalizedDefaultLocaleSubscriberTest extends TestCase
         $request->setLocale('en');
         $event = $this->mainEvent($request);
 
-        new UnlocalizedDefaultLocaleSubscriber(null, 'es', 'serve')->onKernelRequest($event);
+        $subscriber = new UnlocalizedDefaultLocaleSubscriber(null, 'es', 'serve');
+
+        $subscriber->onKernelRequest($event);
 
         self::assertSame('es', $request->getLocale());
         self::assertSame('es', $request->attributes->get('_locale'));
