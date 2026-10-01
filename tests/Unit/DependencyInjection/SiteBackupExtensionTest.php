@@ -12,6 +12,7 @@ use Nowo\SiteBackupBundle\DependencyInjection\Configuration;
 use Nowo\SiteBackupBundle\DependencyInjection\SiteBackupExtension;
 use Nowo\SiteBackupBundle\EventSubscriber\ColdStartSchemaGateSubscriber;
 use Nowo\SiteBackupBundle\EventSubscriber\SetupDbDoneRedirectSubscriber;
+use Nowo\SiteBackupBundle\EventSubscriber\UnlocalizedDefaultLocaleSubscriber;
 use Nowo\SiteBackupBundle\Exclusion\SiteBackupExclusionMatcher;
 use Nowo\SiteBackupBundle\Routing\SetupPathPrefixResolver;
 use Nowo\SiteBackupBundle\Routing\SetupRouteLoader;
@@ -60,6 +61,7 @@ final class SiteBackupExtensionTest extends TestCase
         self::assertTrue($container->hasDefinition(SetupRouteLoader::class));
         self::assertTrue($container->hasDefinition(SetupPathPrefixResolver::class));
         self::assertTrue($container->hasDefinition(SetupUnlocalizedLocaleRedirectController::class));
+        self::assertFalse($container->hasDefinition(UnlocalizedDefaultLocaleSubscriber::class));
     }
 
     public function testLocaleAlwaysAddsExclusionPatternAndLayoutTemplates(): void
@@ -153,6 +155,11 @@ final class SiteBackupExtensionTest extends TestCase
         self::assertSame('es', $routeLoader->getArgument('$defaultLocale'));
         self::assertSame(['en', 'es'], $routeLoader->getArgument('$enabledLocales'));
         self::assertSame('serve', $routeLoader->getArgument('$unlocalizedMode'));
+
+        self::assertTrue($container->hasDefinition(UnlocalizedDefaultLocaleSubscriber::class));
+        $localeSubscriber = $container->getDefinition(UnlocalizedDefaultLocaleSubscriber::class);
+        self::assertSame('es', $localeSubscriber->getArgument('$defaultLocale'));
+        self::assertSame('serve', $localeSubscriber->getArgument('$unlocalizedMode'));
     }
 
     public function testTabsPreferOverStepsAndWireCheckers(): void
