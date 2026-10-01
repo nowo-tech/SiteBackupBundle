@@ -417,8 +417,6 @@ First stable release of **Site Backup Bundle**.
 
 [Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.14.3...HEAD
 [1.14.3]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.14.2...v1.14.3
-[1.14.2]: https://github.com/nowo-tech/SiteBackupBundle/releases/tag/v1.14.2
-[1.14.1]: https://github.com/nowo-tech/SiteBackupBundle/releases/tag/v1.14.1
 [1.14.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.13.8...v1.14.0
 [1.9.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.8.1...v1.9.0
 [1.8.1]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.8.0...v1.8.1
