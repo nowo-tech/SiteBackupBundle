@@ -7,9 +7,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.14.3] - 2026-10-01
+
 ### Fixed
 
 - **`setup.locale.unlocalized: serve`:** `UnlocalizedDefaultLocaleSubscriber` forces `setup.locale.default` at request time on SiteBackup `*_unlocalized` routes (after Symfony `LocaleListener`), so bare `/setup` stays correct when the compiled route `_locale` default was warmed with a different value (Docker image build vs runtime env). Registered only when setup is enabled, `in_path: both`, and `unlocalized: serve`.
+
+[1.14.3]: https://github.com/nowo-tech/SiteBackupBundle/releases/tag/v1.14.3
 
 ## [1.14.2] - 2026-09-28
 
@@ -411,7 +415,10 @@ First stable release of **Site Backup Bundle**.
 - Symfony `^7.0 || ^8.0` (CI / mandatory minors: **7.4**, **8.0**, **8.1**)
 - System `tar` required for archive create/extract
 
-[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.14.0...HEAD
+[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.14.3...HEAD
+[1.14.3]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.14.2...v1.14.3
+[1.14.2]: https://github.com/nowo-tech/SiteBackupBundle/releases/tag/v1.14.2
+[1.14.1]: https://github.com/nowo-tech/SiteBackupBundle/releases/tag/v1.14.1
 [1.14.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.13.8...v1.14.0
 [1.9.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.8.1...v1.9.0
 [1.8.1]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.8.0...v1.8.1
