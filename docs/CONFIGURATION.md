@@ -30,7 +30,7 @@ Root key: `nowo_site_backup`.
 | `setup.locale.in_path` | `never` | `never` \| `always` \| `both` — locale prefix on setup URLs (AuthKit-style) |
 | `setup.locale.default` | `en` | Default `{_locale}` for localized setup routes |
 | `setup.locale.enabled` | `[en]` | Allowed locale codes |
-| `setup.locale.unlocalized` | `redirect` | When `in_path: both`: `serve` or `redirect` bare `/_setup` |
+| `setup.locale.unlocalized` | `redirect` | When `in_path: both`: `serve` or `redirect` bare `/_setup`. With `serve`, `UnlocalizedDefaultLocaleSubscriber` re-applies `setup.locale.default` each request (stale route-cache / image-vs-runtime env). |
 | `setup.layout_template` | `null` (bundle `setup/layout.html.twig`) | Host Twig shell; Twig global `nowo_site_backup_setup_layout_template`; blocks `nowo_ui_content` / `nowo_site_backup_content` |
 | `templates.setup_layout` | `@NowoSiteBackupBundle/setup/layout.html.twig` | Same as `setup.layout_template` when set |
 | `setup.progress_storage` | `filesystem` | `filesystem` \| `doctrine` \| `chain` (prefer DB on load) |

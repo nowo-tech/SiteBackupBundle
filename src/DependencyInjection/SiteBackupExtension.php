@@ -13,6 +13,7 @@ use Nowo\SiteBackupBundle\EventSubscriber\ColdStartSchemaGateSubscriber;
 use Nowo\SiteBackupBundle\EventSubscriber\RestoreRequestSubscriber;
 use Nowo\SiteBackupBundle\EventSubscriber\SetupDbDoneRedirectSubscriber;
 use Nowo\SiteBackupBundle\EventSubscriber\SetupRequestSubscriber;
+use Nowo\SiteBackupBundle\EventSubscriber\UnlocalizedDefaultLocaleSubscriber;
 use Nowo\SiteBackupBundle\Exclusion\SiteBackupExclusionMatcher;
 use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
 use Nowo\SiteBackupBundle\Routing\SetupPathPrefixResolver;
@@ -459,6 +460,20 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$unlocalizedMode', $unlocalizedStr)
             ->setArgument('$enabled', $setupEnabled)
             ->addTag('routing.loader');
+
+        if ($container->hasDefinition(UnlocalizedDefaultLocaleSubscriber::class)) {
+            if ($setupEnabled && $localeInPath === 'both' && $unlocalizedStr === 'serve') {
+                $container->getDefinition(UnlocalizedDefaultLocaleSubscriber::class)
+                    ->setArgument('$defaultLocale', $localeDefault)
+                    ->setArgument('$unlocalizedMode', $unlocalizedStr)
+                    ->setArgument(
+                        '$translator',
+                        new Reference('translator', ContainerBuilder::NULL_ON_INVALID_REFERENCE),
+                    );
+            } else {
+                $container->removeDefinition(UnlocalizedDefaultLocaleSubscriber::class);
+            }
+        }
 
         $container->getDefinition(SetupMarkerManager::class)
             ->setArgument('$requiredFile', $setup['required_marker_file'])

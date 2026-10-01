@@ -87,7 +87,7 @@ Given `setup.profiles.*.tabs` (ordered), When the wizard runs, Then each tab may
 | FR-SETUP-001 | Wizard steps, orchestrator, markers, profiles, admin provisioner |
 | FR-SETUP-002 | Progress storage: `filesystem` \| `doctrine` \| `chain`; `started_at` / `completed_at`; optional DBAL table auto-create (runtime DDL, not migrations); optional per-step journal (`progress_step_rows`) |
 | FR-SETUP-003 | Detectors: marker, doctrine connect, schema empty, **incomplete progress** (toggleable) + **app-tagged** `SetupNeedDetectorInterface`; evaluator ORs enabled detectors |
-| FR-SETUP-004 | Default `setup.path_prefix` is `/_setup`; routes honour config via parameters; path auto-added to exclusions |
+| FR-SETUP-004 | Default `setup.path_prefix` is `/_setup`; routes honour config via parameters; path auto-added to exclusions; when `setup.locale.in_path: both` + `unlocalized: serve`, `UnlocalizedDefaultLocaleSubscriber` forces `setup.locale.default` at runtime on `*_unlocalized` setup routes |
 | FR-SETUP-005 | Starting the wizard marks `setup.required` until `setup.done`; gate stays on while progress is incomplete |
 | FR-SETUP-006 | Step type `bootstrap_mode` (`guided` \| `full_database`) + answer `sql_import_path`; `when_answer` filters steps |
 | FR-SETUP-007 | Profile `fresh_install` includes bootstrap + conditional full SQL import; profile `full_database` deep-link; migrations + idempotent loaders always after import; `admin_user` skip_if_admin_exists |

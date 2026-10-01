@@ -7,6 +7,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **`setup.locale.unlocalized: serve`:** `UnlocalizedDefaultLocaleSubscriber` forces `setup.locale.default` at request time on SiteBackup `*_unlocalized` routes (after Symfony `LocaleListener`), so bare `/setup` stays correct when the compiled route `_locale` default was warmed with a different value (Docker image build vs runtime env). Registered only when setup is enabled, `in_path: both`, and `unlocalized: serve`.
+
 ## [1.14.2] - 2026-09-28
 
 ### Security

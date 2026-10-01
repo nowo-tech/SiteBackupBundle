@@ -47,6 +47,7 @@ Every production source under `src/` is listed below (REQ-SPECKIT-001 / REQ-SPEC
 | `EventSubscriber/RestoreRequestSubscriber.php` | FR-HTTP-002 |
 | `EventSubscriber/SetupDbDoneRedirectSubscriber.php` | FR-HTTP-002 |
 | `EventSubscriber/SetupRequestSubscriber.php` | FR-HTTP-002 |
+| `EventSubscriber/UnlocalizedDefaultLocaleSubscriber.php` | FR-SETUP-004 |
 | `Exclusion/SiteBackupExclusionMatcher.php` | FR-BACKUP-002 |
 | `Form/AbstractSiteBackupFormType.php` | FR-HTTP-001 |
 | `Form/Panel/CreateBackupType.php` | FR-HTTP-001 |
