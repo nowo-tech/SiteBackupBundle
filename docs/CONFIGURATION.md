@@ -39,6 +39,7 @@ Root key: `nowo_site_backup`.
 | `setup.progress_steps_table` | `nowo_site_backup_setup_step` | Per-step journal table (`profile` + `step_id` PK) |
 | `setup.require_done_marker` | `false` | Missing `setup.done` forces the wizard |
 | `setup.short_circuit_when_done` | `true` | Skip all need detectors when `setup.done` exists or durable store `isDone()` (perf; set `false` to re-evaluate host detectors after done) |
+| `setup.reopen_when_detector_requires` | `false` | (v1.15+) With `short_circuit_when_done`, still run detectors; if one requires setup, clear `setup.done` + durable `clearDone()` + reset progress so the wizard re-opens (one detector pass per request) |
 | `setup.durable_done.enabled` | `false` | Register `SetupDbDoneRedirectSubscriber`; host replaces `DurableSetupDoneStoreInterface` alias |
 | `setup.durable_done.redirect_target` | `/` | Redirect when durable done closes the wizard |
 | `setup.cold_start.enabled` | `false` | Register cold-start schema gate subscriber + checker |

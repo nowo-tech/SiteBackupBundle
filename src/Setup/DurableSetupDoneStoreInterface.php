@@ -15,4 +15,13 @@ interface DurableSetupDoneStoreInterface
     public function isDone(): bool;
 
     public function markDone(): void;
+
+    /**
+     * Clears the durable completion signal (v1.15+).
+     *
+     * Called by {@see SetupWizardReopener} when {@code setup.reopen_when_detector_requires} is enabled and a
+     * need detector still reports setup is required although {@see isDone()} was true. Implementations that
+     * cannot (or must not) clear should no-op; {@see NullDurableSetupDoneStore} does.
+     */
+    public function clearDone(): void;
 }

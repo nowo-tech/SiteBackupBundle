@@ -6,6 +6,7 @@ namespace Nowo\SiteBackupBundle\Setup\Detector;
 
 use Nowo\SiteBackupBundle\Setup\DurableSetupDoneStoreInterface;
 use Nowo\SiteBackupBundle\Setup\SetupNeedDetectorInterface;
+use Nowo\SiteBackupBundle\Setup\SetupWizardReopener;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupMarkerManager;
 use Throwable;
 
@@ -15,6 +16,11 @@ use Throwable;
  * When {@see $shortCircuitWhenDone} is true (default), a present {@code setup.done}
  * marker or a durable store reporting complete skips all detectors. That avoids
  * repeated Doctrine / host catalog probes on every HTTP request after setup.
+ *
+ * When {@see $reopenWhenDetectorRequires} is also true (v1.15+, default false), that short-circuit no longer
+ * hides detectors: they are still evaluated, and if one reports setup is required the done markers
+ * (file + durable store) are cleared and progress is reset via {@see SetupWizardReopener}, so the
+ * wizard can run again (e.g. platform catalogs were wiped). This costs one detector pass per request.
  */
 final class SetupNeedEvaluator
 {
@@ -27,6 +33,8 @@ final class SetupNeedEvaluator
         private readonly bool $shortCircuitWhenDone = true,
         private readonly ?SetupMarkerManager $markers = null,
         private readonly ?DurableSetupDoneStoreInterface $durableDoneStore = null,
+        private readonly bool $reopenWhenDetectorRequires = false,
+        private readonly ?SetupWizardReopener $reopener = null,
     ) {
     }
 
@@ -36,12 +44,17 @@ final class SetupNeedEvaluator
             return false;
         }
 
-        if ($this->isAlreadyDone()) {
+        $done = $this->isAlreadyDone();
+        if ($done && !$this->reopenWhenDetectorRequires) {
             return false;
         }
 
         foreach ($this->detectors as $detector) {
             if ($detector->isSetupRequired()) {
+                if ($done) {
+                    $this->reopener?->reopen();
+                }
+
                 return true;
             }
         }
@@ -54,7 +67,12 @@ final class SetupNeedEvaluator
      */
     public function getReasons(): array
     {
-        if (!$this->setupEnabled || $this->isAlreadyDone()) {
+        if (!$this->setupEnabled) {
+            return [];
+        }
+
+        $done = $this->isAlreadyDone();
+        if ($done && !$this->reopenWhenDetectorRequires) {
             return [];
         }
 
@@ -63,6 +81,10 @@ final class SetupNeedEvaluator
             if ($detector->isSetupRequired()) {
                 $reasons[] = $detector->getReason();
             }
+        }
+
+        if ($done && $reasons !== []) {
+            $this->reopener?->reopen();
         }
 
         return $reasons;

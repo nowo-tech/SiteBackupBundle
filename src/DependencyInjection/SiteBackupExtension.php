@@ -40,6 +40,7 @@ use Nowo\SiteBackupBundle\Setup\SetupDbDoneGuard;
 use Nowo\SiteBackupBundle\Setup\SetupOrchestrator;
 use Nowo\SiteBackupBundle\Setup\SetupStepFactory;
 use Nowo\SiteBackupBundle\Setup\SetupTabCheckerLocator;
+use Nowo\SiteBackupBundle\Setup\SetupWizardReopener;
 use Nowo\SiteBackupBundle\Setup\Storage\CacheDoctrineSetupProgressStorage;
 use Nowo\SiteBackupBundle\Setup\Storage\CacheSetupProgressStorage;
 use Nowo\SiteBackupBundle\Setup\Storage\ChainSetupProgressStorage;
@@ -576,12 +577,20 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
         // Built-ins (above) + host apps via SetupNeedDetectorInterface / #[AsSetupNeedDetector].
         // Distinct from profile tab checkers (SetupTabCheckerInterface / checker: YAML).
         // short_circuit_when_done: skip detectors when setup.done or durable store says complete.
+        $container->getDefinition(SetupWizardReopener::class)
+            ->setArgument('$markers', new Reference(SetupMarkerManager::class))
+            ->setArgument('$progressStorage', new Reference(SetupProgressStorageInterface::class))
+            ->setArgument('$durableDoneStore', new Reference(DurableSetupDoneStoreInterface::class))
+            ->setPublic(true);
+
         $container->getDefinition(SetupNeedEvaluator::class)
             ->setArgument('$detectors', new TaggedIteratorArgument('nowo.site_backup.setup_need_detector'))
             ->setArgument('$setupEnabled', (bool) $setup['enabled'])
             ->setArgument('$shortCircuitWhenDone', (bool) ($setup['short_circuit_when_done'] ?? true))
             ->setArgument('$markers', new Reference(SetupMarkerManager::class))
-            ->setArgument('$durableDoneStore', new Reference(DurableSetupDoneStoreInterface::class));
+            ->setArgument('$durableDoneStore', new Reference(DurableSetupDoneStoreInterface::class))
+            ->setArgument('$reopenWhenDetectorRequires', (bool) ($setup['reopen_when_detector_requires'] ?? false))
+            ->setArgument('$reopener', new Reference(SetupWizardReopener::class));
 
         $container->getDefinition(SetupStepFactory::class)
             ->setArgument('$runner', new Reference(ConsoleProcessRunner::class))

@@ -7,6 +7,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.15.0] - 2026-10-07
+
+### Added
+
+- **`setup.reopen_when_detector_requires`** (default `false`, BC): when `true`, `short_circuit_when_done` no longer hides detectors. If `setup.done` or the durable store says complete but a tagged `SetupNeedDetectorInterface` still reports setup required (e.g. platform catalogs wiped), `SetupNeedEvaluator` clears `setup.done`, calls `DurableSetupDoneStoreInterface::clearDone()` and resets wizard progress so the wizard can run again. Costs one detector pass per request.
+- **`SetupWizardReopener`** (public service): kit-side helper (`reopen()`, `resetProgress()`) so hosts no longer copy the clear-done / reset-progress logic into their own subscribers.
+- **`DurableSetupDoneStoreInterface::clearDone(): void`** (SPI). `NullDurableSetupDoneStore` implements it as a no-op.
+
+### Changed
+
+- **BC note (SPI):** custom `DurableSetupDoneStoreInterface` implementations must add `clearDone()` (no-op is acceptable if the host does not want the bundle to clear its durable flag).
+
 ### Fixed
 
 - Tests: avoid PHP 8.4-only `new Foo()->method()` chaining in `UnlocalizedDefaultLocaleSubscriberTest` so PHP 8.2/8.3 CI jobs parse the suite.
@@ -419,7 +431,8 @@ First stable release of **Site Backup Bundle**.
 - Symfony `^7.0 || ^8.0` (CI / mandatory minors: **7.4**, **8.0**, **8.1**)
 - System `tar` required for archive create/extract
 
-[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.14.3...HEAD
+[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.15.0...HEAD
+[1.15.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.14.3...v1.15.0
 [1.14.3]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.14.2...v1.14.3
 [1.14.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.13.8...v1.14.0
 [1.9.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.8.1...v1.9.0

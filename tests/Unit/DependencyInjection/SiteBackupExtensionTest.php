@@ -31,6 +31,7 @@ use Nowo\SiteBackupBundle\Setup\DurableSetupDoneStoreInterface;
 use Nowo\SiteBackupBundle\Setup\NullDurableSetupDoneStore;
 use Nowo\SiteBackupBundle\Setup\SetupOrchestrator;
 use Nowo\SiteBackupBundle\Setup\SetupTabCheckerLocator;
+use Nowo\SiteBackupBundle\Setup\SetupWizardReopener;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\DependencyInjection\Argument\TaggedIteratorArgument;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
@@ -238,6 +239,24 @@ final class SiteBackupExtensionTest extends TestCase
         self::assertTrue($evaluator->getArgument('$shortCircuitWhenDone'));
         self::assertInstanceOf(Reference::class, $evaluator->getArgument('$markers'));
         self::assertInstanceOf(Reference::class, $evaluator->getArgument('$durableDoneStore'));
+        self::assertFalse($evaluator->getArgument('$reopenWhenDetectorRequires'));
+        self::assertInstanceOf(Reference::class, $evaluator->getArgument('$reopener'));
+        self::assertTrue($container->getDefinition(SetupWizardReopener::class)->isPublic());
+    }
+
+    public function testSetupNeedEvaluatorCanReopenWhenDetectorRequires(): void
+    {
+        $container = new ContainerBuilder();
+        $container->setParameter('kernel.project_dir', sys_get_temp_dir());
+
+        (new SiteBackupExtension())->load([[
+            'enabled'  => true,
+            'security' => ['allow_unauthenticated' => true],
+            'setup'    => ['reopen_when_detector_requires' => true],
+        ]], $container);
+
+        $evaluator = $container->getDefinition(SetupNeedEvaluator::class);
+        self::assertTrue($evaluator->getArgument('$reopenWhenDetectorRequires'));
     }
 
     public function testSetupNeedEvaluatorCanDisableShortCircuitWhenDone(): void

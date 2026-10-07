@@ -87,6 +87,8 @@ services:
     Nowo\SiteBackupBundle\Setup\Detector\IncompleteSetupProgressDetector:
         autoconfigure: false
 
+    Nowo\SiteBackupBundle\Setup\SetupWizardReopener: ~
+
     Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator: ~
 
     Nowo\SiteBackupBundle\EventSubscriber\RestoreRequestSubscriber: ~

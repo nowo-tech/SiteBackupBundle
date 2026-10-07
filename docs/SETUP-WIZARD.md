@@ -60,6 +60,8 @@ Priority (first match wins):
 
 **Fast path (v1.13.7+):** when `setup.short_circuit_when_done: true` (default), `SetupNeedEvaluator` returns “not required” immediately if the `setup.done` file marker exists **or** `DurableSetupDoneStoreInterface::isDone()` is true — without calling detectors. That avoids repeated Doctrine / host catalog probes on every request after setup. Set `short_circuit_when_done: false` only when a host detector must re-open the gate after done (unusual).
 
+**Re-open after done (v1.15+):** with `setup.reopen_when_detector_requires: true` (default `false`), the fast path no longer hides detectors. When `setup.done` or the durable store says complete **but** a tagged `SetupNeedDetectorInterface` still reports setup required (e.g. platform catalogs were wiped), `SetupNeedEvaluator` calls `SetupWizardReopener::reopen()`: it removes `setup.done`, calls `DurableSetupDoneStoreInterface::clearDone()` and resets persisted progress, then reports setup as required so the wizard can run again (no `/` ↔ `/setup` loop). This trades the fast path for one detector pass per request, so keep detectors cheap. `SetupWizardReopener` is a public service hosts can inject instead of copying the clear-done / reset-progress logic; host-owned flags outside SiteBackup must still be cleared by the host.
+
 Detectors (wired in `SetupNeedEvaluator` via tag `nowo.site_backup.setup_need_detector`; built-ins toggled under `setup.detectors`):
 
 | Detector | When it triggers |
@@ -121,7 +123,7 @@ tabs:
 
 Progress payload includes `started_at`, `current_step_id`, `phase`, `percent`, `completed_at`, plus log/answers.
 
-**Durable setup done (v1.12+):** file marker `setup.done` is ephemeral in container images. Host apps that persist completion in the database implement `DurableSetupDoneStoreInterface` and replace the default `NullDurableSetupDoneStore` alias. Enable `setup.durable_done.enabled: true` to register `SetupDbDoneRedirectSubscriber` (priority 3), which closes the wizard and heals markers/progress from the durable store when detectors no longer require setup. With `short_circuit_when_done` (default true), a durable `isDone()` also skips detectors on the site gate (same fast path as the file marker).
+**Durable setup done (v1.12+):** file marker `setup.done` is ephemeral in container images. Host apps that persist completion in the database implement `DurableSetupDoneStoreInterface` and replace the default `NullDurableSetupDoneStore` alias. Enable `setup.durable_done.enabled: true` to register `SetupDbDoneRedirectSubscriber` (priority 3), which closes the wizard and heals markers/progress from the durable store when detectors no longer require setup. With `short_circuit_when_done` (default true), a durable `isDone()` also skips detectors on the site gate (same fast path as the file marker). Custom stores must implement `clearDone()` (v1.15+; no-op allowed) — it is invoked when `reopen_when_detector_requires` re-opens the wizard.
 
 **Cold-start schema gate (v1.12+ / v1.13+):** when `setup.cold_start.enabled: true`, `ColdStartSchemaGateSubscriber` probes MySQL schema reachability (DBAL `SELECT 1` or `setup.cold_start.mysql_*` PDO fallback) and redirects other paths to the setup prefix until the schema exists. With `require_application_tables: true` (default since 1.13), an empty named schema is still treated as cold. Safe paths (`setup.cold_start.safe_path_prefixes`, default includes `/health/`, `/_wdt`, …) bypass the redirect; `stop_propagation` prevents lower-priority listeners from assuming a working schema.
 

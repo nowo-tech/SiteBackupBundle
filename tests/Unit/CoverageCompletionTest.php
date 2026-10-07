@@ -761,6 +761,11 @@ final class CoverageCompletionTest extends TestCase
             public function markDone(): void
             {
             }
+
+            public function clearDone(): void
+            {
+
+            }
         };
         $guard = new SetupDbDoneGuard(
             $store,

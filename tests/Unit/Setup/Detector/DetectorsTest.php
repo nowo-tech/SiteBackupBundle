@@ -11,7 +11,9 @@ use Nowo\SiteBackupBundle\Setup\Detector\IncompleteSetupProgressDetector;
 use Nowo\SiteBackupBundle\Setup\Detector\MarkerFileDetector;
 use Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator;
 use Nowo\SiteBackupBundle\Setup\DurableSetupDoneStoreInterface;
+use Nowo\SiteBackupBundle\Setup\NullDurableSetupDoneStore;
 use Nowo\SiteBackupBundle\Setup\SetupNeedDetectorInterface;
+use Nowo\SiteBackupBundle\Setup\SetupWizardReopener;
 use Nowo\SiteBackupBundle\Setup\Storage\FilesystemSetupProgressStorage;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupMarkerManager;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupProgressStorageInterface;
@@ -187,6 +189,156 @@ final class DetectorsTest extends TestCase
         self::assertSame(['still-needed'], $evaluator->getReasons());
     }
 
+    public function testSetupNeedEvaluatorReopensWhenDetectorStillRequires(): void
+    {
+        $markers = new SetupMarkerManager($this->dir . '/ro-req', $this->dir . '/ro-done');
+        $markers->markDone();
+        $durable  = new FakeDurableSetupDoneStore(true);
+        $progress = new FilesystemSetupProgressStorage($this->dir . '/ro-progress.json');
+        $progress->save((new SetupProgress())->with(phase: SetupProgress::PHASE_COMPLETED, percent: 100.0));
+
+        $evaluator = new SetupNeedEvaluator(
+            [$this->detector(true, 'catalogs empty')],
+            setupEnabled: true,
+            shortCircuitWhenDone: true,
+            markers: $markers,
+            durableDoneStore: $durable,
+            reopenWhenDetectorRequires: true,
+            reopener: new SetupWizardReopener($markers, $progress, $durable),
+        );
+
+        self::assertTrue($evaluator->isSetupRequired());
+        self::assertFalse($markers->isDone());
+        self::assertFalse($durable->isDone());
+        self::assertSame(1, $durable->clearCalls);
+        self::assertSame(SetupProgress::PHASE_IDLE, $progress->load()->getPhase());
+    }
+
+    public function testSetupNeedEvaluatorReopenReasonsClearsMarkers(): void
+    {
+        $markers = new SetupMarkerManager($this->dir . '/ro2-req', $this->dir . '/ro2-done');
+        $markers->markDone();
+        $progress = new FilesystemSetupProgressStorage($this->dir . '/ro2-progress.json');
+
+        $evaluator = new SetupNeedEvaluator(
+            [$this->detector(true, 'catalogs empty')],
+            markers: $markers,
+            reopenWhenDetectorRequires: true,
+            reopener: new SetupWizardReopener($markers, $progress),
+        );
+
+        self::assertSame(['catalogs empty'], $evaluator->getReasons());
+        self::assertFalse($markers->isDone());
+    }
+
+    public function testSetupNeedEvaluatorReopenKeepsDoneWhenDetectorsSatisfied(): void
+    {
+        $markers = new SetupMarkerManager($this->dir . '/ro3-req', $this->dir . '/ro3-done');
+        $markers->markDone();
+        $durable = new FakeDurableSetupDoneStore(true);
+
+        $evaluator = new SetupNeedEvaluator(
+            [$this->detector(false, 'ok')],
+            markers: $markers,
+            durableDoneStore: $durable,
+            reopenWhenDetectorRequires: true,
+            reopener: new SetupWizardReopener($markers, new FilesystemSetupProgressStorage($this->dir . '/ro3-p.json'), $durable),
+        );
+
+        self::assertFalse($evaluator->isSetupRequired());
+        self::assertSame([], $evaluator->getReasons());
+        self::assertTrue($markers->isDone());
+        self::assertSame(0, $durable->clearCalls);
+    }
+
+    public function testSetupNeedEvaluatorReopenDisabledKeepsShortCircuit(): void
+    {
+        $markers = new SetupMarkerManager($this->dir . '/ro4-req', $this->dir . '/ro4-done');
+        $markers->markDone();
+
+        $evaluator = new SetupNeedEvaluator(
+            [$this->detector(true, 'x')],
+            markers: $markers,
+            reopener: new SetupWizardReopener($markers, new FilesystemSetupProgressStorage($this->dir . '/ro4-p.json')),
+        );
+
+        self::assertFalse($evaluator->isSetupRequired());
+        self::assertTrue($markers->isDone());
+    }
+
+    public function testSetupNeedEvaluatorReopenWithoutReopenerStillReportsRequired(): void
+    {
+        $markers = new SetupMarkerManager($this->dir . '/ro5-req', $this->dir . '/ro5-done');
+        $markers->markDone();
+
+        $evaluator = new SetupNeedEvaluator(
+            [$this->detector(true, 'x')],
+            markers: $markers,
+            reopenWhenDetectorRequires: true,
+        );
+
+        self::assertTrue($evaluator->isSetupRequired());
+        self::assertSame(['x'], $evaluator->getReasons());
+    }
+
+    public function testSetupWizardReopenerHandlesNothingToClearAndFailures(): void
+    {
+        $markers  = new SetupMarkerManager($this->dir . '/ro6-req', $this->dir . '/ro6-done');
+        $progress = new FilesystemSetupProgressStorage($this->dir . '/ro6-p.json');
+
+        self::assertFalse((new SetupWizardReopener($markers, $progress, new FakeDurableSetupDoneStore(false)))->reopen());
+
+        $broken = new class implements DurableSetupDoneStoreInterface {
+            public function isDone(): bool
+            {
+                throw new RuntimeException('db down');
+            }
+
+            public function markDone(): void
+            {
+            }
+
+            public function clearDone(): void
+            {
+            }
+        };
+        self::assertFalse((new SetupWizardReopener($markers, $progress, $broken))->reopen());
+
+        $markers->markDone();
+        $failingProgress = new class implements SetupProgressStorageInterface {
+            public function load(): SetupProgress
+            {
+                return new SetupProgress();
+            }
+
+            public function save(SetupProgress $progress): void
+            {
+                throw new RuntimeException('storage down');
+            }
+        };
+        self::assertTrue((new SetupWizardReopener($markers, $failingProgress, new NullDurableSetupDoneStore()))->reopen());
+        self::assertFalse($markers->isDone());
+    }
+
+    private function detector(bool $required, string $reason): SetupNeedDetectorInterface
+    {
+        return new readonly class($required, $reason) implements SetupNeedDetectorInterface {
+            public function __construct(private bool $required, private string $reason)
+            {
+            }
+
+            public function isSetupRequired(): bool
+            {
+                return $this->required;
+            }
+
+            public function getReason(): string
+            {
+                return $this->reason;
+            }
+        };
+    }
+
     public function testSetupNeedEvaluatorDurableThrowDoesNotShortCircuit(): void
     {
         $broken = new class implements DurableSetupDoneStoreInterface {
@@ -197,6 +349,11 @@ final class DetectorsTest extends TestCase
 
             public function markDone(): void
             {
+            }
+
+            public function clearDone(): void
+            {
+
             }
         };
 

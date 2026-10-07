@@ -17,4 +17,8 @@ final readonly class NullDurableSetupDoneStore implements DurableSetupDoneStoreI
     public function markDone(): void
     {
     }
+
+    public function clearDone(): void
+    {
+    }
 }

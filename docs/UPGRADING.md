@@ -3,6 +3,26 @@
 
 ## Unreleased
 
+## To 1.15.0
+
+From **1.14.3** — `setup.done` short-circuit can re-open the wizard when detectors still require setup.
+
+```bash
+composer update nowo-tech/site-backup-bundle
+php bin/console cache:clear
+```
+
+- **SPI (action required for custom stores):** `DurableSetupDoneStoreInterface` gains `clearDone(): void`. Add it to your implementation (clear the durable flag, or no-op to keep it).
+- **Opt-in:** `setup.reopen_when_detector_requires: true` re-opens the wizard (clears `setup.done`, durable `clearDone()`, resets progress) when `short_circuit_when_done` would skip detectors but a tagged detector still requires setup. Default `false` keeps 1.14 behaviour.
+- Hosts with a custom "re-open after catalog wipe" subscriber can inject `Nowo\SiteBackupBundle\Setup\SetupWizardReopener` and call `reopen()`; state stored outside SiteBackup (e.g. an instance-settings flag not behind the durable store) must still be cleared by the host.
+
+```yaml
+nowo_site_backup:
+    setup:
+        short_circuit_when_done: true
+        reopen_when_detector_requires: true
+```
+
 ## To 1.14.2
 
 From **1.14.1** — `access_roles` fail-closed.

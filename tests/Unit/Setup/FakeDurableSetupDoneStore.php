@@ -6,8 +6,10 @@ namespace Nowo\SiteBackupBundle\Tests\Unit\Setup;
 
 use Nowo\SiteBackupBundle\Setup\DurableSetupDoneStoreInterface;
 
-final readonly class FakeDurableSetupDoneStore implements DurableSetupDoneStoreInterface
+final class FakeDurableSetupDoneStore implements DurableSetupDoneStoreInterface
 {
+    public int $clearCalls = 0;
+
     public function __construct(private bool $done)
     {
     }
@@ -19,5 +21,12 @@ final readonly class FakeDurableSetupDoneStore implements DurableSetupDoneStoreI
 
     public function markDone(): void
     {
+        $this->done = true;
+    }
+
+    public function clearDone(): void
+    {
+        $this->done = false;
+        ++$this->clearCalls;
     }
 }
