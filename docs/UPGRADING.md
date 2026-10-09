@@ -3,6 +3,14 @@
 
 ## Unreleased
 
+## To 1.15.1
+
+From **1.15.0** — dependency refresh and a test-only PHP 8.2 fix. No breaking changes. No application upgrade steps.
+
+```bash
+composer update nowo-tech/site-backup-bundle
+```
+
 ## To 1.15.0
 
 From **1.14.3** — `setup.done` short-circuit can re-open the wizard when detectors still require setup.
@@ -47,6 +55,8 @@ php bin/console cache:clear
 
 ## Table of contents
 
+- [To 1.15.1](#to-1151)
+- [To 1.15.0](#to-1150)
 - [From 1.13.8 to 1.14.0](#from-1138-to-1140)
 - [From 1.13.7 to 1.13.8](#from-1137-to-1138)
 

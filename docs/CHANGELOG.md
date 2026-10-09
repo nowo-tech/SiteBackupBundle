@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.15.1] - 2026-10-09
+
+### Fixed
+
+- Tests: `DetectorsTest` no longer uses an anonymous `readonly` class (PHP 8.3+), so the suite parses on PHP 8.2.
+
+### Changed
+
+- Dependencies (lock refresh): UiKitBundle 1.9.1; dev PHPStan 2.3.1 (+ phpunit/symfony extensions 2.1), PHPUnit 10.5.66, Rector 2.7.0, `nowo-tech/phpstan-frankenphp` 1.2.3.
+- Demo (Symfony 8): regenerated `config/reference.php`.
+
 ## [1.15.0] - 2026-10-07
 
 ### Added
@@ -431,7 +442,8 @@ First stable release of **Site Backup Bundle**.
 - Symfony `^7.0 || ^8.0` (CI / mandatory minors: **7.4**, **8.0**, **8.1**)
 - System `tar` required for archive create/extract
 
-[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.15.0...HEAD
+[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.15.1...HEAD
+[1.15.1]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.15.0...v1.15.1
 [1.15.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.14.3...v1.15.0
 [1.14.3]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.14.2...v1.14.3
 [1.14.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.13.8...v1.14.0
