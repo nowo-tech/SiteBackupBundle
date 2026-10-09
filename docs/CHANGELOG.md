@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.16.0] - 2026-10-09
+
+### Added
+
+- **`setup.worker_memo`** (`schema_probe_ttl`, default `60`; `progress_ddl_ttl`, default `3600`): per-worker TTL memos (`Setup\Memo\WorkerTtlMemo`, deliberately not `ResetInterface`) so FrankenPHP workers stop probing `information_schema` and running `CREATE TABLE IF NOT EXISTS` on every request. `MemoizedSchemaExistenceChecker` wraps the cold-start `MysqlSchemaExistenceChecker`; `DoctrineConnectDetector` / `DoctrineSchemaEmptyDetector` reuse a healthy answer; `DoctrineDbalSetupProgressStorage` / `DoctrineDbalSetupStepJournal` remember the DDL across `kernel.reset`. Only positive answers are cached; a dropped table is still re-created on the first failing query. `0` restores the previous behaviour.
+- **`bump_time_limit`** (default `false`) + **`bump_time_limit_seconds`** (default `null` = `process_timeout`; `0` = unlimited): `LongRequestTimeLimitSubscriber` calls `set_time_limit()` on main requests under the setup prefix (incl. `/{locale}` variants) and the panel prefix, so migrate / dump / restore subprocesses are not killed mid-pipe by a short prod `max_execution_time`.
+- **`nowo:site-backup:db-dump`**: built-in `backup.database_dump_command` — `mysqldump` from `DATABASE_URL` (or `--url`), password via `MYSQL_PWD` (never argv), `--single-transaction --no-tablespaces`, no `--routines` (restore replays through PDO), optional `--skip-ssl-verify-server-cert` (MariaDB client), `--binary`, repeatable `-o` options. Pure argv builder: `Database\MysqlDumpCommandFactory`.
+- **`security_guard`** (opt-in, default `enabled: false`): `ProductionSecretsGuardSubscriber` fails closed outside `local_environments` (default `dev`, `test`) on HTTP requests and console commands when the setup token, panel password hash or `APP_SECRET` are empty, listed placeholders or (APP_SECRET) shorter than 16 characters. Skips `cache:clear`, `cache:warmup`, `assets:install`, `nowo:site-backup:hash-password`.
+
+### Changed
+
+- **CSP:** inline script and style tags in the restore page, setup and panel layouts, wizard and panel index carry `nonce` from the request attribute `csp_nonce` when present (nowo-tech kit convention). Panel restore / delete confirms use `data-nowo-confirm` + one delegated nonce'd listener instead of `onsubmit="return confirm(…)"`. Inline `style=""` attributes were replaced by classes (wizard progress bar is now a `<progress class="bar">` element).
+- Docs: `setup.reopen_when_detector_requires` documents its cost (one detector pass per request).
+
 ## [1.15.1] - 2026-10-09
 
 ### Fixed
@@ -442,7 +456,8 @@ First stable release of **Site Backup Bundle**.
 - Symfony `^7.0 || ^8.0` (CI / mandatory minors: **7.4**, **8.0**, **8.1**)
 - System `tar` required for archive create/extract
 
-[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.15.1...HEAD
+[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.16.0...HEAD
+[1.16.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.15.1...v1.16.0
 [1.15.1]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.15.0...v1.15.1
 [1.15.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.14.3...v1.15.0
 [1.14.3]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.14.2...v1.14.3

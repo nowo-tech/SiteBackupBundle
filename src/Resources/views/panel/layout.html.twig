@@ -1,6 +1,7 @@
 {# Default standalone panel chrome (REQ-UI-001).
    Host apps: set panel.layout_template to the project layout / bridge that defines
    nowo_ui_content (or nowo_site_backup_panel_content). #}
+{% set _csp_nonce = app is defined and app and app.request ? app.request.attributes.get('csp_nonce')|default('') : '' %}
 <!DOCTYPE html>
 <html lang="en" class="nowo-ui-root nowo-site-backup-panel nowo-ui-css-{{ nowo_site_backup_css_framework|default('custom') }}" data-css-framework="{{ nowo_site_backup_css_framework|default('custom') }}">
 <head>
@@ -11,7 +12,7 @@
     {% block stylesheets %}
         {% block nowo_ui_styles %}
             <link href="{{ asset('css/nowo-ui.css', 'nowo_ui_kit') }}" rel="stylesheet">
-            <style>
+            <style{% if _csp_nonce %} nonce="{{ _csp_nonce }}"{% endif %}>
                 .nowo-site-backup-panel body,
                 .nowo-ui-body { font-family: system-ui, sans-serif; margin: 0; background: #f8fafc; color: #0f172a; }
                 .nowo-ui-header { background: #0f172a; color: #fff; padding: 1rem 1.5rem; display: flex; gap: 1rem; align-items: center; }

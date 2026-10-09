@@ -7,6 +7,7 @@ namespace Nowo\SiteBackupBundle\Setup\Storage;
 use DateTimeImmutable;
 use JsonException;
 use Nowo\SiteBackupBundle\Model\SetupProgress;
+use Nowo\SiteBackupBundle\Setup\Memo\WorkerTtlMemo;
 use RuntimeException;
 use Symfony\Contracts\Service\ResetInterface;
 use Throwable;
@@ -32,7 +33,10 @@ use const JSON_THROW_ON_ERROR;
  * per-step rows (soft-fail) and load merges completed step ids from the journal.
  *
  * The "schema ensured" memo is re-validated when a query fails (table dropped while a
- * long-lived worker keeps this service), and cleared by {@see reset()}.
+ * long-lived worker keeps this service), and cleared by {@see reset()}. When a
+ * {@see WorkerTtlMemo} is wired (`setup.worker_memo.progress_ddl_ttl` > 0), the DDL is
+ * additionally remembered across `kernel.reset` for that TTL, so FrankenPHP workers run
+ * `CREATE TABLE IF NOT EXISTS` at most once per worker and TTL window instead of per request.
  */
 final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInterface, ResetInterface
 {
@@ -45,6 +49,7 @@ final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInte
         private readonly string $tableName = self::TABLE,
         private readonly ?DoctrineDbalSetupStepJournal $stepJournal = null,
         private readonly bool $stepRowsEnabled = true,
+        private readonly ?WorkerTtlMemo $ddlMemo = null,
     ) {
     }
 
@@ -86,7 +91,7 @@ final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInte
             throw new RuntimeException('Doctrine DBAL connection is not available for setup progress storage.');
         }
 
-        $schemaWasCached = $this->schemaEnsured;
+        $schemaWasCached = $this->isSchemaKnown();
 
         try {
             $this->ensureSchema();
@@ -126,6 +131,9 @@ final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInte
             && (method_exists($this->connection, 'executeQuery') || method_exists($this->connection, 'executeStatement'));
     }
 
+    /**
+     * Forgets the per-request memo. The optional worker TTL memo survives on purpose.
+     */
     public function reset(): void
     {
         $this->schemaEnsured = false;
@@ -220,7 +228,7 @@ final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInte
      */
     private function withSchema(callable $operation): mixed
     {
-        $schemaWasCached = $this->schemaEnsured;
+        $schemaWasCached = $this->isSchemaKnown();
         $this->ensureSchema();
 
         return $this->retryOnStaleSchema($schemaWasCached, $operation);
@@ -245,6 +253,7 @@ final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInte
             }
 
             $this->schemaEnsured = false;
+            $this->ddlMemo?->forget();
             $this->ensureSchema();
 
             return $operation();
@@ -253,7 +262,7 @@ final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInte
 
     private function ensureSchema(): void
     {
-        if ($this->schemaEnsured || !$this->isUsable()) {
+        if ($this->isSchemaKnown() || !$this->isUsable()) {
             return;
         }
 
@@ -274,6 +283,12 @@ final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInte
 
         $this->executeStatement($sql, []);
         $this->schemaEnsured = true;
+        $this->ddlMemo?->mark();
+    }
+
+    private function isSchemaKnown(): bool
+    {
+        return $this->schemaEnsured || ($this->ddlMemo?->isFresh() ?? false);
     }
 
     /**

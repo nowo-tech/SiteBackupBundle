@@ -9,11 +9,19 @@ Root key: `nowo_site_backup`.
 | `status_code` | `503` | HTTP status while restore is active |
 | `subscriber_priority` | `31` | After router (exclusions / attributes) |
 | `process_timeout` | `600` | Seconds for `tar` / dump processes (REQ-RUNTIME-001) |
+| `bump_time_limit` | `false` | (v1.16+) `set_time_limit()` on main requests under `panel.path_prefix` and `setup.path_prefix` (incl. `/{locale}` variants) so a short prod `max_execution_time` / FrankenPHP worker timer does not kill dump, restore or migrate subprocesses mid-pipe. Other requests keep the host limit |
+| `bump_time_limit_seconds` | `null` | Value for `set_time_limit()` when `bump_time_limit` is on; `null` = `process_timeout`, `0` = unlimited |
+| `security_guard.enabled` | `false` | (v1.16+) Opt-in production safety guard (`ProductionSecretsGuardSubscriber`): outside `local_environments`, main HTTP requests and console commands fail with a `RuntimeException` while secrets are empty / placeholders |
+| `security_guard.local_environments` | `[dev, test]` | `kernel.environment` values where the guard is skipped (so `staging`, `preprod`, … are checked) |
+| `security_guard.require_setup_token` / `forbidden_setup_tokens` | `true` / `[]` | Non-empty `setup.setup_token` (when setup is enabled) and not one of the listed documented values |
+| `security_guard.require_panel_password` / `forbidden_password_hashes` | `true` / `[]` | Non-empty `security.password_hash` (when panel + `password_protection` are on and no custom `access_gate`) and not a listed hash |
+| `security_guard.check_app_secret` / `app_secret` / `forbidden_app_secrets` / `app_secret_min_length` | `true` / `null` (= `%env(default::APP_SECRET)%`) / Symfony & common placeholders / `16` | APP_SECRET must be set, not a placeholder, long enough |
+| `security_guard.skip_console_commands` | `cache:clear`, `cache:warmup`, `assets:install`, `nowo:site-backup:hash-password` | Image builds warm the cache without runtime secrets; `hash-password` generates the hash |
 | `css_framework` | `custom` | Host CSS stack hint (REQ-UI-001): `bootstrap5`, `bootstrap`, `bootstrap4`, `tabler`, `tailwind`, `foundation`, `custom`, `none`. Twig global `nowo_site_backup_css_framework`. Demo uses semantic `nowo-ui-*` (`custom`). |
 | `backup.include_paths` | config, public, templates, … | Relative to `kernel.project_dir`. **`[]` or `["."]` = entire project** (minus `exclude_patterns`). Omitting the key keeps the selective defaults. |
 | `backup.exclude_patterns` | cache/log/vendor/… | `fnmatch` against relative paths |
 | `backup.storage_dir` | `%kernel.project_dir%/var/site-backup/archives` | Archives + `.meta.json` |
-| `backup.database_dump_command` | `null` | Shell command writing SQL to stdout |
+| `backup.database_dump_command` | `null` | Shell command writing SQL to stdout. Built-in: `php %kernel.project_dir%/bin/console nowo:site-backup:db-dump` (see [USAGE.md](USAGE.md#built-in-database-dumper)) |
 | `restore.progress_file` | `var/site-backup/restore-progress.json` | Polled by the loading UI |
 | `restore.protected_paths` | `.env.local`, `var/site-backup` | Never overwritten on apply |
 | `panel.path_prefix` | `/_site_backup` | Auto-excluded from loading page; drives imported panel routes |
@@ -39,7 +47,9 @@ Root key: `nowo_site_backup`.
 | `setup.progress_steps_table` | `nowo_site_backup_setup_step` | Per-step journal table (`profile` + `step_id` PK) |
 | `setup.require_done_marker` | `false` | Missing `setup.done` forces the wizard |
 | `setup.short_circuit_when_done` | `true` | Skip all need detectors when `setup.done` exists or durable store `isDone()` (perf; set `false` to re-evaluate host detectors after done) |
-| `setup.reopen_when_detector_requires` | `false` | (v1.15+) With `short_circuit_when_done`, still run detectors; if one requires setup, clear `setup.done` + durable `clearDone()` + reset progress so the wizard re-opens (one detector pass per request) |
+| `setup.reopen_when_detector_requires` | `false` | (v1.15+) With `short_circuit_when_done`, still run detectors; if one requires setup, clear `setup.done` + durable `clearDone()` + reset progress so the wizard re-opens. **Cost:** one detector pass on every request (the built-in Doctrine detectors reuse a healthy answer for `worker_memo.schema_probe_ttl`; host detectors must stay cheap) |
+| `setup.worker_memo.schema_probe_ttl` | `60` | (v1.16+) Seconds a **positive** answer is reused per worker (survives `kernel.reset`): cold-start `schemaExists()`, `doctrine_connect` (DB reachable), `doctrine_schema_empty` (tables present). Negative answers are never cached. `0` = probe every time |
+| `setup.worker_memo.progress_ddl_ttl` | `3600` | (v1.16+) Seconds the Doctrine progress / step-journal `CREATE TABLE IF NOT EXISTS` is remembered across requests (a dropped table is still re-created on the first failing query). `0` = once per request (pre-1.16) |
 | `setup.durable_done.enabled` | `false` | Register `SetupDbDoneRedirectSubscriber`; host replaces `DurableSetupDoneStoreInterface` alias |
 | `setup.durable_done.redirect_target` | `/` | Redirect when durable done closes the wizard |
 | `setup.cold_start.enabled` | `false` | Register cold-start schema gate subscriber + checker |
@@ -81,7 +91,13 @@ nowo_site_backup:
         # Or back up the whole project and only skip noise:
         # include_paths: []
         # exclude_patterns: [tmp/*, .pnpm-store/*, .phpunit.cache/*, var/*]
-        database_dump_command: 'mysqldump --single-transaction -u$DB_USER -p$DB_PASSWORD $DB_NAME'
+        # Built-in dumper (DATABASE_URL, password via MYSQL_PWD):
+        database_dump_command: 'php %kernel.project_dir%/bin/console nowo:site-backup:db-dump --no-debug'
+    bump_time_limit: true          # setup + panel requests get set_time_limit(process_timeout)
+    security_guard:
+        enabled: true
+        forbidden_setup_tokens: ['app-local-setup']           # the value in your .env.dist
+        forbidden_password_hashes: ['$2y$12$…local-dev-hash…']
     restore:
         protected_paths: ['.env.local', 'var/site-backup', 'config/secrets']
     exclusions:

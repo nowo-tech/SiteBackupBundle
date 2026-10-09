@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Setup\Detector;
 
+use Nowo\SiteBackupBundle\Setup\Memo\WorkerTtlMemo;
 use Nowo\SiteBackupBundle\Setup\SetupNeedDetectorInterface;
 use Throwable;
 
@@ -17,6 +18,7 @@ final class DoctrineConnectDetector implements SetupNeedDetectorInterface
     public function __construct(
         private readonly mixed $connection = null,
         private readonly bool $enabled = true,
+        private readonly ?WorkerTtlMemo $healthyMemo = null,
     ) {
     }
 
@@ -26,7 +28,23 @@ final class DoctrineConnectDetector implements SetupNeedDetectorInterface
             return false;
         }
 
-        $connection = $this->connection;
+        // A healthy answer is reused per worker for setup.worker_memo.schema_probe_ttl seconds.
+        if ($this->healthyMemo?->isFresh() ?? false) {
+            return false;
+        }
+
+        $required = $this->probe($this->connection);
+        if ($required) {
+            $this->healthyMemo?->forget();
+        } else {
+            $this->healthyMemo?->mark();
+        }
+
+        return $required;
+    }
+
+    private function probe(object $connection): bool
+    {
 
         try {
             if (method_exists($connection, 'executeQuery')) {

@@ -1,7 +1,31 @@
 # Upgrading
 
 
-## Unreleased
+## To 1.16.0
+
+From **1.15.1** — no breaking changes; new features are opt-in except the worker memos.
+
+```bash
+composer update nowo-tech/site-backup-bundle
+php bin/console cache:clear
+```
+
+- **Worker memos (on by default):** `setup.worker_memo.schema_probe_ttl: 60` reuses a positive cold-start / Doctrine detector probe per worker; `progress_ddl_ttl: 3600` keeps the progress-table DDL off the request path. If you drop the database under a running worker and rely on the gate re-opening *immediately*, set `schema_probe_ttl: 0` (or restart workers). Set both to `0` for the exact 1.15 behaviour.
+- **Template overrides:** if you copied `panel/index.html.twig`, replace `onsubmit: "return confirm(…)"` with `'data-nowo-confirm': '…'` and keep the bundle's small listener script (or your own). If you copied `setup/wizard.html.twig`, the progress bar is now `<progress class="bar" max="100" value="…">`; the old `.bar > i` CSS still exists for overrides. Hosts with a nonce-based CSP should set `$request->attributes->set('csp_nonce', $nonce)`.
+- **Opt-in:** replace a hand-written `mysqldump` line with the built-in command, raise the time limit for setup / panel requests, and enable the production guard:
+
+```yaml
+nowo_site_backup:
+    bump_time_limit: true
+    backup:
+        database_dump_command: 'php %kernel.project_dir%/bin/console nowo:site-backup:db-dump --no-debug'
+    security_guard:
+        enabled: true
+        forbidden_setup_tokens: ['app-local-setup']        # values documented in .env.dist
+        forbidden_password_hashes: ['$2y$12$…']
+```
+
+- Hosts that ported `MemoizedSchemaExistenceChecker`, `SetupAdvanceTimeLimitSubscriber`, `SiteBackupSecurityDefaultsGuard` or a `bin/site-backup-db-dump` script can drop them. Keep any app-specific checks (e.g. Redis password) in the host. Remove a host decorator of `MysqlSchemaExistenceChecker` or set `schema_probe_ttl: 0` to avoid double memoization.
 
 ## To 1.15.1
 

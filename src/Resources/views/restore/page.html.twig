@@ -1,3 +1,5 @@
+{# CSP: inline script/style tags carry the request attribute csp_nonce when present (nowo-tech kit convention). #}
+{% set _csp_nonce = app is defined and app and app.request ? app.request.attributes.get('csp_nonce')|default('') : '' %}
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -5,7 +7,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <meta http-equiv="refresh" content="8">
     <title>{{ 'restore.page.title'|trans({}, 'NowoSiteBackupBundle') }}</title>
-    <style>
+    <style{% if _csp_nonce %} nonce="{{ _csp_nonce }}"{% endif %}>
         :root {
             --bg: #0f172a;
             --card: #1e293b;
@@ -90,7 +92,7 @@
         <p class="ok">{{ 'restore.page.done'|trans({}, 'NowoSiteBackupBundle') }}</p>
     {% endif %}
 </main>
-<script>
+<script{% if _csp_nonce %} nonce="{{ _csp_nonce }}"{% endif %}>
 (function () {
   var url = {{ progressUrl|json_encode|raw }};
   function tick() {

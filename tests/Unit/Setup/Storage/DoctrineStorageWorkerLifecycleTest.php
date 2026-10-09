@@ -6,6 +6,7 @@ namespace Nowo\SiteBackupBundle\Tests\Unit\Setup\Storage;
 
 use DateTimeImmutable;
 use Nowo\SiteBackupBundle\Model\SetupProgress;
+use Nowo\SiteBackupBundle\Setup\Memo\WorkerTtlMemo;
 use Nowo\SiteBackupBundle\Setup\Storage\DoctrineDbalSetupProgressStorage;
 use Nowo\SiteBackupBundle\Setup\Storage\DoctrineDbalSetupStepJournal;
 use PHPUnit\Framework\TestCase;
@@ -17,6 +18,53 @@ use RuntimeException;
  */
 final class DoctrineStorageWorkerLifecycleTest extends TestCase
 {
+    private int $now = 1_000;
+
+    private function memo(int $ttl): WorkerTtlMemo
+    {
+        return new WorkerTtlMemo($ttl, fn (): int => $this->now);
+    }
+
+    public function testProgressDdlRunsOncePerWorkerAcrossKernelReset(): void
+    {
+        $conn    = new DroppableDbalConnection();
+        $journal = new DoctrineDbalSetupStepJournal($conn, DoctrineDbalSetupStepJournal::TABLE, $this->memo(300));
+        $storage = new DoctrineDbalSetupProgressStorage($conn, DoctrineDbalSetupProgressStorage::TABLE, $journal, true, $this->memo(300));
+
+        $storage->save(new SetupProgress(phase: SetupProgress::PHASE_RUNNING, profile: 'p', currentStepId: 's'));
+        $ddl = $conn->ddlCount;
+        self::assertSame(2, $ddl);
+
+        for ($i = 0; $i < 3; ++$i) {
+            $storage->reset();
+            $journal->reset();
+            $storage->load();
+            $storage->save(new SetupProgress(phase: SetupProgress::PHASE_RUNNING, profile: 'p', currentStepId: 's'));
+        }
+        self::assertSame($ddl, $conn->ddlCount);
+
+        // TTL elapsed: DDL runs again once.
+        $this->now += 301;
+        $storage->reset();
+        $journal->reset();
+        $storage->save(new SetupProgress(phase: SetupProgress::PHASE_RUNNING, profile: 'p', currentStepId: 's'));
+        self::assertSame($ddl + 2, $conn->ddlCount);
+    }
+
+    public function testProgressDdlMemoStillRecreatesDroppedTable(): void
+    {
+        $conn    = new DroppableDbalConnection();
+        $storage = new DoctrineDbalSetupProgressStorage($conn, DoctrineDbalSetupProgressStorage::TABLE, null, false, $this->memo(300));
+        $storage->save(new SetupProgress(phase: SetupProgress::PHASE_RUNNING, currentStepId: 'a'));
+
+        $storage->reset();
+        $conn->dropAll();
+
+        $storage->save(new SetupProgress(phase: SetupProgress::PHASE_WAITING, currentStepId: 'b'));
+        self::assertSame('b', $storage->load()->getCurrentStepId());
+        self::assertTrue($conn->hasTable(DoctrineDbalSetupProgressStorage::TABLE));
+    }
+
     public function testProgressStorageRecreatesDroppedTableWithoutReset(): void
     {
         $conn    = new DroppableDbalConnection();

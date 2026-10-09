@@ -10,6 +10,7 @@
 - [Setup wizard](#setup-wizard)
 - [Twig helpers](#twig-helpers)
 - [Template overrides (REQ-TWIG-001)](#template-overrides-req-twig-001)
+- [Built-in database dumper](#built-in-database-dumper)
 - [Database import note](#database-import-note)
 
 ## Create an integral backup
@@ -150,6 +151,27 @@ Place overrides under `templates/bundles/NowoSiteBackupBundle/` with the **same 
 
 For setup tabs, put domain logic in YAML `checker` / `runner`; keep Twig in the bundle or in a thin override of a **partial** — see [SETUP-WIZARD.md](SETUP-WIZARD.md).
 
+
+## Built-in database dumper
+
+`nowo:site-backup:db-dump` (v1.16+) streams a MySQL / MariaDB dump of `DATABASE_URL` to stdout, so `backup.database_dump_command` does not need a hand-written `mysqldump` line:
+
+```yaml
+nowo_site_backup:
+    backup:
+        database_dump_command: 'php %kernel.project_dir%/bin/console nowo:site-backup:db-dump --no-debug'
+        # MariaDB client against a MySQL server with a self-signed certificate on a private network:
+        # database_dump_command: 'php %kernel.project_dir%/bin/console nowo:site-backup:db-dump --no-debug --skip-ssl-verify-server-cert'
+```
+
+- **Connection** comes from `DATABASE_URL` (the URL Doctrine uses), or `--url=`. Supported schemes: `mysql`, `mysql2`, `mariadb`, `pdo-mysql`; `?unix_socket=` becomes `--socket=`.
+- **Password** travels in the `MYSQL_PWD` environment variable, never in argv (not visible in `ps`).
+- **Flags:** `--single-transaction` (consistent InnoDB snapshot, no table locks) and `--no-tablespaces` (the app user usually lacks the `PROCESS` privilege; not needed to restore one schema).
+- **No `--routines`:** the setup wizard / restore replays the file through PDO, which cannot parse `DELIMITER` blocks. If your schema has stored routines, write your own dump command and restore it with the `mysql` client.
+- **`--skip-ssl-verify-server-cert`** is a **MariaDB client** option (Debian/Alpine images ship `mariadb-client`, whose `mysqldump` is MariaDB's). It keeps TLS but skips CA verification — use it only on a private network. The MariaDB 11+ client verifies server certificates by default, so a MySQL 8 server with its auto-generated self-signed certificate fails with `SSL certificate validation failure` without it. The Oracle MySQL client does not know this flag (use `-o=--ssl-mode=REQUIRED` instead).
+- **Client / server mismatch:** the MariaDB client dumping a MySQL 8 server works for plain tables (`--no-tablespaces` avoids the `PROCESS` privilege error). The opposite mismatch — Oracle `mysqldump` 8 against MariaDB or MySQL 5.7 — needs `-o=--column-statistics=0`.
+- `--binary=mariadb-dump` picks another binary; `-o=<option>` (repeatable) appends raw mysqldump options. Only SQL goes to stdout; diagnostics go to stderr. The exit code of mysqldump is propagated. Timeout: `process_timeout`.
+- Use an absolute console path: `BackupArchiver` runs the command with the PHP process working directory (under FrankenPHP that is often `public/`).
 
 ## Database import note
 

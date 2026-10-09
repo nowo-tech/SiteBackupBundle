@@ -21,7 +21,8 @@ nowo_site_backup:
             - 'vendor/*'
             - 'node_modules/*'
             - '.git/*'
-        # database_dump_command: 'mysqldump -u$DB_USER -p$DB_PASSWORD $DB_NAME'
+        # Built-in dumper (DATABASE_URL, password via MYSQL_PWD — never in argv):
+        # database_dump_command: 'php %kernel.project_dir%/bin/console nowo:site-backup:db-dump --no-debug'
     security:
         password_protection: true
         # password_hash: '%env(SITE_BACKUP_PASSWORD_HASH)%'

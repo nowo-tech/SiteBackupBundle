@@ -17,7 +17,9 @@ This bundle is **FrankenPHP worker mode friendly**.
 - **Loading page** — While restore is active, `kernel.request` returns **HTTP 503** with a progress UI (polls `/_site_backup/progress.json`); panel stays reachable.
 - **Setup wizard** — Cold start / post-restore: bootstrap mode (guided vs full SQL), DB, migrations/schema, YAML **tabs** + checkers, `advance_mode`, idempotent loaders, super-admin, optional sample data; durable progress (`filesystem` / `doctrine` / `cache` / `cache_doctrine` / `chain`); MySQL **cold-start schema gate** (`setup.cold_start.require_application_tables`) — see [docs/SETUP-WIZARD.md](docs/SETUP-WIZARD.md).
 - **Admin panel** — Create / verify / restore / delete under `/_site_backup` (password gate + CSRF).
-- **CLI** — `create`, `list`, `verify`, `restore`, `setup`, `setup-status`, `setup-reset`, `hash-password`.
+- **CLI** — `create`, `list`, `verify`, `restore`, `setup`, `setup-status`, `setup-reset`, `hash-password`, `db-dump` (built-in `database_dump_command`: mysqldump from `DATABASE_URL`, password via `MYSQL_PWD`).
+- **Worker-friendly performance** — per-worker TTL memos (`setup.worker_memo`) so schema probes and the progress-table DDL do not run on every FrankenPHP request; opt-in `bump_time_limit` for long setup / panel requests.
+- **Production hardening** — opt-in `security_guard` refuses empty / placeholder setup token, panel hash and `APP_SECRET` outside dev/test; templates carry the request `csp_nonce` and use no inline event handlers.
 
 ## Installation
 ```bash
@@ -44,7 +46,7 @@ nowo_site_backup:
     enabled: true
     backup:
         include_paths: [config, public, templates, src, composer.json, composer.lock]
-        database_dump_command: '%env(default::SITE_BACKUP_DUMP_CMD)%'
+        database_dump_command: 'php %kernel.project_dir%/bin/console nowo:site-backup:db-dump --no-debug'
     panel:
         path_prefix: '/_site_backup'
     security:
@@ -54,6 +56,9 @@ nowo_site_backup:
         # allow_unauthenticated: false
     setup:
         admin_provisioner: App\Setup\AdminUserProvisioner
+        # worker_memo: { schema_probe_ttl: 60, progress_ddl_ttl: 3600 }   # defaults
+    # bump_time_limit: true        # set_time_limit(process_timeout) on setup + panel requests
+    # security_guard: { enabled: true, forbidden_setup_tokens: ['app-local-setup'] }
 ```
 
 ## Usage

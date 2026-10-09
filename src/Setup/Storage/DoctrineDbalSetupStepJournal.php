@@ -6,6 +6,7 @@ namespace Nowo\SiteBackupBundle\Setup\Storage;
 
 use DateTimeImmutable;
 use Nowo\SiteBackupBundle\Model\SetupProgress;
+use Nowo\SiteBackupBundle\Setup\Memo\WorkerTtlMemo;
 use RuntimeException;
 use Symfony\Contracts\Service\ResetInterface;
 use Throwable;
@@ -24,7 +25,10 @@ use function sprintf;
  * because early wizard steps run before the host DB / migrations exist.
  *
  * The "schema ensured" memo is re-validated when a query fails (table dropped while a
- * long-lived worker keeps this service), and cleared by {@see reset()}.
+ * long-lived worker keeps this service), and cleared by {@see reset()}. When a
+ * {@see WorkerTtlMemo} is wired (`setup.worker_memo.progress_ddl_ttl` > 0), the DDL is
+ * additionally remembered across `kernel.reset` for that TTL, so FrankenPHP workers run
+ * `CREATE TABLE IF NOT EXISTS` at most once per worker and TTL window instead of per request.
  */
 final class DoctrineDbalSetupStepJournal implements ResetInterface
 {
@@ -40,6 +44,7 @@ final class DoctrineDbalSetupStepJournal implements ResetInterface
     public function __construct(
         private readonly mixed $connection = null,
         private readonly string $tableName = self::TABLE,
+        private readonly ?WorkerTtlMemo $ddlMemo = null,
     ) {
     }
 
@@ -49,6 +54,9 @@ final class DoctrineDbalSetupStepJournal implements ResetInterface
             && (method_exists($this->connection, 'executeQuery') || method_exists($this->connection, 'executeStatement'));
     }
 
+    /**
+     * Forgets the per-request memo. The optional worker TTL memo survives on purpose.
+     */
     public function reset(): void
     {
         $this->schemaEnsured = false;
@@ -256,7 +264,7 @@ final class DoctrineDbalSetupStepJournal implements ResetInterface
      */
     private function withSchema(callable $operation): mixed
     {
-        $schemaWasCached = $this->schemaEnsured;
+        $schemaWasCached = $this->isSchemaKnown();
         $this->ensureSchema();
 
         try {
@@ -267,6 +275,7 @@ final class DoctrineDbalSetupStepJournal implements ResetInterface
             }
 
             $this->schemaEnsured = false;
+            $this->ddlMemo?->forget();
             $this->ensureSchema();
 
             return $operation();
@@ -275,7 +284,7 @@ final class DoctrineDbalSetupStepJournal implements ResetInterface
 
     private function ensureSchema(): void
     {
-        if ($this->schemaEnsured || !$this->isUsable()) {
+        if ($this->isSchemaKnown() || !$this->isUsable()) {
             return;
         }
 
@@ -297,6 +306,12 @@ final class DoctrineDbalSetupStepJournal implements ResetInterface
 
         $this->executeStatement($sql, []);
         $this->schemaEnsured = true;
+        $this->ddlMemo?->mark();
+    }
+
+    private function isSchemaKnown(): bool
+    {
+        return $this->schemaEnsured || ($this->ddlMemo?->isFresh() ?? false);
     }
 
     private function upsert(

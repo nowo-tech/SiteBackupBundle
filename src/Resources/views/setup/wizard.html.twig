@@ -14,7 +14,7 @@
                 <span class="{% if progress.currentStepId == step.id %}on{% elseif step.id in progress.completedStepIds %}done{% endif %}">{{ step.label|trans({}, tabDomain) }}</span>
             {% endfor %}
         </div>
-        <div class="bar"><i style="width: {{ progress.percent }}%"></i></div>
+        <progress class="bar" max="100" value="{{ progress.percent }}">{{ progress.percent }}%</progress>
         <p><strong>{{ progress.percent|number_format(0) }}%</strong> - {{ progress.message|trans({}, 'NowoSiteBackupBundle') }}</p>
 
         {% set setup_reasons = reasons|default([]) %}
@@ -43,9 +43,9 @@
                     {% endfor %}
                 </ul>
                 {% if db_connection_failed %}
-                    <p class="sub" style="margin:.75rem 0 0">{{ 'setup.reason.db_connection_hint'|trans({}, 'NowoSiteBackupBundle') }}</p>
+                    <p class="sub sub--hint">{{ 'setup.reason.db_connection_hint'|trans({}, 'NowoSiteBackupBundle') }}</p>
                 {% elseif db_schema_empty %}
-                    <p class="sub" style="margin:.75rem 0 0">{{ 'setup.reason.db_schema_hint'|trans({}, 'NowoSiteBackupBundle') }}</p>
+                    <p class="sub sub--hint">{{ 'setup.reason.db_schema_hint'|trans({}, 'NowoSiteBackupBundle') }}</p>
                 {% endif %}
             </div>
         {% endif %}
@@ -83,7 +83,8 @@
                     <button type="submit">{{ 'setup.wizard.continue'|trans({}, 'NowoSiteBackupBundle') }}</button>
                 {{ form_end(wizardForm) }}
                 {% if advanceMode|default('automatic') == 'automatic' and progress.phase == 'running' %}
-                    <script>setTimeout(function () { document.getElementById('auto-advance').submit(); }, 600);</script>
+                    {% set _csp_nonce = app is defined and app and app.request ? app.request.attributes.get('csp_nonce')|default('') : '' %}
+                    <script{% if _csp_nonce %} nonce="{{ _csp_nonce }}"{% endif %}>setTimeout(function () { document.getElementById('auto-advance').submit(); }, 600);</script>
                 {% endif %}
             {% endif %}
         {% endblock %}

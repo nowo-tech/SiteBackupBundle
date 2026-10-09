@@ -60,7 +60,16 @@ Priority (first match wins):
 
 **Fast path (v1.13.7+):** when `setup.short_circuit_when_done: true` (default), `SetupNeedEvaluator` returns “not required” immediately if the `setup.done` file marker exists **or** `DurableSetupDoneStoreInterface::isDone()` is true — without calling detectors. That avoids repeated Doctrine / host catalog probes on every request after setup. Set `short_circuit_when_done: false` only when a host detector must re-open the gate after done (unusual).
 
-**Re-open after done (v1.15+):** with `setup.reopen_when_detector_requires: true` (default `false`), the fast path no longer hides detectors. When `setup.done` or the durable store says complete **but** a tagged `SetupNeedDetectorInterface` still reports setup required (e.g. platform catalogs were wiped), `SetupNeedEvaluator` calls `SetupWizardReopener::reopen()`: it removes `setup.done`, calls `DurableSetupDoneStoreInterface::clearDone()` and resets persisted progress, then reports setup as required so the wizard can run again (no `/` ↔ `/setup` loop). This trades the fast path for one detector pass per request, so keep detectors cheap. `SetupWizardReopener` is a public service hosts can inject instead of copying the clear-done / reset-progress logic; host-owned flags outside SiteBackup must still be cleared by the host.
+**Re-open after done (v1.15+):** with `setup.reopen_when_detector_requires: true` (default `false`), the fast path no longer hides detectors. When `setup.done` or the durable store says complete **but** a tagged `SetupNeedDetectorInterface` still reports setup required (e.g. platform catalogs were wiped), `SetupNeedEvaluator` calls `SetupWizardReopener::reopen()`: it removes `setup.done`, calls `DurableSetupDoneStoreInterface::clearDone()` and resets persisted progress, then reports setup as required so the wizard can run again (no `/` ↔ `/setup` loop). This trades the fast path for **one detector pass per request**, so keep detectors cheap (the built-in Doctrine detectors reuse a healthy answer for `setup.worker_memo.schema_probe_ttl`, default 60 s; host detectors should do the same or rely on a cheap signal). `SetupWizardReopener` is a public service hosts can inject instead of copying the clear-done / reset-progress logic; host-owned flags outside SiteBackup must still be cleared by the host.
+
+**Per-worker memo (v1.16+):** in FrankenPHP worker mode `kernel.reset` runs between requests, so a per-request flag does not save anything. `setup.worker_memo` keeps two TTL memos per worker that are **not** reset per request:
+
+- `schema_probe_ttl` (default `60`): a *positive* answer from the cold-start checker (`MemoizedSchemaExistenceChecker` wraps `MysqlSchemaExistenceChecker`), `DoctrineConnectDetector` (DB reachable) and `DoctrineSchemaEmptyDetector` (tables present) is reused for the TTL. Negative answers (empty DB, wizard running) are never cached, so the gate reacts as soon as migrations create the schema. After dropping the schema on a running worker, the gate notices within the TTL.
+- `progress_ddl_ttl` (default `3600`): `CREATE TABLE IF NOT EXISTS` for the Doctrine progress / step-journal tables runs at most once per worker and TTL (a dropped table is still re-created on the first failing query).
+
+Set either to `0` to restore the pre-1.16 behaviour.
+
+**Long requests:** with `bump_time_limit: true`, main requests under the setup prefix (and `/{locale}` variants) and the panel prefix call `set_time_limit(process_timeout)` (or `bump_time_limit_seconds`) at `kernel.request` priority 512, so automatic `advance` chains of migrate / seed subprocesses are not killed by a short prod `max_execution_time`.
 
 Detectors (wired in `SetupNeedEvaluator` via tag `nowo.site_backup.setup_need_detector`; built-ins toggled under `setup.detectors`):
 
@@ -373,7 +382,7 @@ Restore orchestrator can set `setup.required` + preferred profile `post_restore`
 ## Security
 
 - Wizard routes are public **only while setup is required**; once `setup.done` exists, `/_setup` returns 404 or redirects home.
-- Optional **setup token** (`?token=` / env `SITE_SETUP_TOKEN`) for internet-facing first boot.
+- Optional **setup token** (`?token=` / env `SITE_SETUP_TOKEN`) for internet-facing first boot. With `security_guard.enabled: true` (v1.16+) an empty or documented token (`forbidden_setup_tokens`) makes every non-local request / console command fail closed.
 - Admin password never logged; CSRF on all POSTs.
 - `database_url` step must not echo password back in HTML.
 - `console` commands are **config-defined only** (no free-form HTTP command execution).

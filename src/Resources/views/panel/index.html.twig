@@ -1,6 +1,8 @@
 {% extends nowo_site_backup_panel_layout_template %}
 {% import '@NowoUiKitBundle/macros/ui.html.twig' as ui %}
 {% set _sbb_fw = nowo_site_backup_css_framework|default('custom') %}
+{# CSP: inline script/style tags carry the request attribute csp_nonce when the host sets one (nowo-tech kit convention). #}
+{% set _csp_nonce = app is defined and app and app.request ? app.request.attributes.get('csp_nonce')|default('') : '' %}
 
 {% block nowo_ui_document_title %}Site Backup panel{% endblock %}
 
@@ -48,10 +50,10 @@
                         {{ form_start(backupForms[b.id].verify, {attr: {class: 'nowo-ui-form--inline inline'}}) }}
                             <button type="submit" class="nowo-ui-btn">Verify</button>
                         {{ form_end(backupForms[b.id].verify) }}
-                        {{ form_start(backupForms[b.id].restore, {attr: {class: 'nowo-ui-form--inline inline', onsubmit: "return confirm('Restore this backup now? Visitors will see the loading page.');"}}) }}
+                        {{ form_start(backupForms[b.id].restore, {attr: {class: 'nowo-ui-form--inline inline', 'data-nowo-confirm': 'Restore this backup now? Visitors will see the loading page.'}}) }}
                             <button type="submit" class="nowo-ui-btn">Restore</button>
                         {{ form_end(backupForms[b.id].restore) }}
-                        {{ form_start(backupForms[b.id].delete, {attr: {class: 'nowo-ui-form--inline inline', onsubmit: "return confirm('Delete backup?');"}}) }}
+                        {{ form_start(backupForms[b.id].delete, {attr: {class: 'nowo-ui-form--inline inline', 'data-nowo-confirm': 'Delete backup?'}}) }}
                             <button class="nowo-ui-btn nowo-ui-btn--danger danger" type="submit">Delete</button>
                         {{ form_end(backupForms[b.id].delete) }}
                     </td>
@@ -65,4 +67,19 @@
 {{ form_start(logoutForm, {attr: {class: 'nowo-ui-form'}}) }}
     <button type="submit" class="nowo-ui-btn">Logout</button>
 {{ form_end(logoutForm) }}
+{# No inline on* handlers (CSP): confirm via data-nowo-confirm + one delegated listener. #}
+<script{% if _csp_nonce %} nonce="{{ _csp_nonce }}"{% endif %}>
+(function () {
+  if (window.__nowoSiteBackupConfirm) { return; }
+  window.__nowoSiteBackupConfirm = true;
+  document.addEventListener('submit', function (event) {
+    var form = event.target;
+    if (!form || !form.getAttribute) { return; }
+    var message = form.getAttribute('data-nowo-confirm');
+    if (message && !window.confirm(message)) {
+      event.preventDefault();
+    }
+  }, true);
+})();
+</script>
 {% endblock %}

@@ -6,10 +6,13 @@ namespace Nowo\SiteBackupBundle\DependencyInjection;
 
 use LogicException;
 use Nowo\SiteBackupBundle\Backup\BackupArchiver;
+use Nowo\SiteBackupBundle\Command\DatabaseDumpCommand;
 use Nowo\SiteBackupBundle\Controller\SetupUnlocalizedLocaleRedirectController;
 use Nowo\SiteBackupBundle\Controller\SetupWizardController;
 use Nowo\SiteBackupBundle\Controller\SiteBackupPanelController;
 use Nowo\SiteBackupBundle\EventSubscriber\ColdStartSchemaGateSubscriber;
+use Nowo\SiteBackupBundle\EventSubscriber\LongRequestTimeLimitSubscriber;
+use Nowo\SiteBackupBundle\EventSubscriber\ProductionSecretsGuardSubscriber;
 use Nowo\SiteBackupBundle\EventSubscriber\RestoreRequestSubscriber;
 use Nowo\SiteBackupBundle\EventSubscriber\SetupDbDoneRedirectSubscriber;
 use Nowo\SiteBackupBundle\EventSubscriber\SetupRequestSubscriber;
@@ -25,6 +28,7 @@ use Nowo\SiteBackupBundle\Security\SiteBackupAccessCheckerInterface;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessGateInterface;
 use Nowo\SiteBackupBundle\Service\SiteBackupManager;
 use Nowo\SiteBackupBundle\Setup\AdminUserProvisionerInterface;
+use Nowo\SiteBackupBundle\Setup\ColdStart\MemoizedSchemaExistenceChecker;
 use Nowo\SiteBackupBundle\Setup\ColdStart\MysqlSchemaExistenceChecker;
 use Nowo\SiteBackupBundle\Setup\ColdStart\SchemaExistenceCheckerInterface;
 use Nowo\SiteBackupBundle\Setup\ConsoleProcessRunner;
@@ -34,6 +38,7 @@ use Nowo\SiteBackupBundle\Setup\Detector\IncompleteSetupProgressDetector;
 use Nowo\SiteBackupBundle\Setup\Detector\MarkerFileDetector;
 use Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator;
 use Nowo\SiteBackupBundle\Setup\DurableSetupDoneStoreInterface;
+use Nowo\SiteBackupBundle\Setup\Memo\WorkerTtlMemo;
 use Nowo\SiteBackupBundle\Setup\NullAdminUserProvisioner;
 use Nowo\SiteBackupBundle\Setup\NullDurableSetupDoneStore;
 use Nowo\SiteBackupBundle\Setup\SetupDbDoneGuard;
@@ -184,6 +189,102 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
         $this->configureTwigGlobals($container, $config);
         $this->configurePanel($container, $config);
         $this->configureSetup($container, $config);
+        $this->configureTimeLimit($container, $config);
+        $this->configureSecurityGuard($container, $config);
+        $this->configureDatabaseDump($container, $config);
+    }
+
+    /**
+     * Separate memo instance per consumer (each one tracks its own table / probe).
+     */
+    private function workerMemo(int $ttlSeconds): Definition
+    {
+        return (new Definition(WorkerTtlMemo::class))->setArgument('$ttlSeconds', $ttlSeconds);
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     */
+    private function configureTimeLimit(ContainerBuilder $container, array $config): void
+    {
+        if (!(bool) ($config['bump_time_limit'] ?? false)) {
+            return;
+        }
+
+        $prefixes = [];
+        if ((bool) $config['panel']['enabled']) {
+            $prefixes[] = (string) $config['panel']['path_prefix'];
+        }
+
+        $setup = $config['setup'];
+        if ((bool) $setup['enabled']) {
+            $setupPrefix = (string) $setup['path_prefix'];
+            $prefixes[]  = $setupPrefix;
+            $localeConf  = $setup['locale'] ?? [];
+            if ((string) ($localeConf['in_path'] ?? 'never') !== 'never') {
+                foreach (array_values($localeConf['enabled'] ?? []) as $locale) {
+                    $prefixes[] = '/' . $locale . $setupPrefix;
+                }
+            }
+        }
+
+        $seconds = $config['bump_time_limit_seconds'] ?? null;
+
+        $container->register(LongRequestTimeLimitSubscriber::class, LongRequestTimeLimitSubscriber::class)
+            ->setArgument('$pathPrefixes', $prefixes)
+            ->setArgument('$seconds', is_int($seconds) ? $seconds : (int) $config['process_timeout'])
+            // Before the router (32) and every SiteBackup gate.
+            ->addTag('kernel.event_listener', ['event' => 'kernel.request', 'method' => 'onKernelRequest', 'priority' => 512]);
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     */
+    private function configureSecurityGuard(ContainerBuilder $container, array $config): void
+    {
+        $guard = $config['security_guard'] ?? [];
+        if (!(bool) ($guard['enabled'] ?? false)) {
+            return;
+        }
+
+        $security      = $config['security'];
+        $customGate    = is_string($security['access_gate'] ?? null) && $security['access_gate'] !== '';
+        $checkPassword = (bool) $guard['require_panel_password']
+            && (bool) $config['panel']['enabled']
+            && (bool) ($security['password_protection'] ?? true)
+            && !$customGate;
+        $checkToken = (bool) $guard['require_setup_token'] && (bool) $config['setup']['enabled'];
+        $appSecret  = $guard['app_secret'] ?? null;
+
+        $container->register(ProductionSecretsGuardSubscriber::class, ProductionSecretsGuardSubscriber::class)
+            ->setArgument('$environment', '%kernel.environment%')
+            ->setArgument('$localEnvironments', array_values($guard['local_environments']))
+            ->setArgument('$checkSetupToken', $checkToken)
+            ->setArgument('$setupToken', $config['setup']['setup_token'] ?? null)
+            ->setArgument('$forbiddenSetupTokens', array_values($guard['forbidden_setup_tokens']))
+            ->setArgument('$checkPanelPassword', $checkPassword)
+            ->setArgument('$panelPasswordHash', $security['password_hash'] ?? null)
+            ->setArgument('$forbiddenPasswordHashes', array_values($guard['forbidden_password_hashes']))
+            ->setArgument('$checkAppSecret', (bool) $guard['check_app_secret'])
+            ->setArgument('$appSecret', is_string($appSecret) && $appSecret !== '' ? $appSecret : '%env(default::APP_SECRET)%')
+            ->setArgument('$forbiddenAppSecrets', array_values($guard['forbidden_app_secrets']))
+            ->setArgument('$appSecretMinLength', (int) $guard['app_secret_min_length'])
+            ->setArgument('$skipConsoleCommands', array_values($guard['skip_console_commands']))
+            ->addTag('kernel.event_subscriber');
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     */
+    private function configureDatabaseDump(ContainerBuilder $container, array $config): void
+    {
+        if (!$container->hasDefinition(DatabaseDumpCommand::class)) {
+            return;
+        }
+
+        $container->getDefinition(DatabaseDumpCommand::class)
+            ->setArgument('$databaseUrl', '%env(default::DATABASE_URL)%')
+            ->setArgument('$timeoutSeconds', (int) $config['process_timeout']);
     }
 
     public function getAlias(): string
@@ -485,9 +586,14 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
         $container->getDefinition(FilesystemSetupProgressStorage::class)
             ->setArgument('$filePath', $setup['progress_file']);
 
+        $workerMemo = $setup['worker_memo'] ?? [];
+        $probeTtl   = (int) ($workerMemo['schema_probe_ttl'] ?? 60);
+        $ddlTtl     = (int) ($workerMemo['progress_ddl_ttl'] ?? 3600);
+
         $container->getDefinition(DoctrineDbalSetupStepJournal::class)
             ->setArgument('$connection', $dbalRef)
-            ->setArgument('$tableName', (string) ($setup['progress_steps_table'] ?? DoctrineDbalSetupStepJournal::TABLE));
+            ->setArgument('$tableName', (string) ($setup['progress_steps_table'] ?? DoctrineDbalSetupStepJournal::TABLE))
+            ->setArgument('$ddlMemo', $ddlTtl > 0 ? $this->workerMemo($ddlTtl) : null);
 
         $stepRowsEnabled = (bool) ($setup['progress_step_rows'] ?? true);
         $progressMode    = (string) ($setup['progress_storage'] ?? 'filesystem');
@@ -499,7 +605,8 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$connection', $dbalRef)
             ->setArgument('$tableName', (string) ($setup['progress_table'] ?? DoctrineDbalSetupProgressStorage::TABLE))
             ->setArgument('$stepJournal', new Reference(DoctrineDbalSetupStepJournal::class))
-            ->setArgument('$stepRowsEnabled', $stepRowsEnabled);
+            ->setArgument('$stepRowsEnabled', $stepRowsEnabled)
+            ->setArgument('$ddlMemo', $ddlTtl > 0 ? $this->workerMemo($ddlTtl) : null);
 
         $container->getDefinition(ChainSetupProgressStorage::class)
             ->setArgument('$filesystem', new Reference(FilesystemSetupProgressStorage::class))
@@ -558,11 +665,13 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
         $container->getDefinition(DoctrineConnectDetector::class)
             ->setArgument('$connection', $dbalRef)
             ->setArgument('$enabled', (bool) ($setup['detectors']['doctrine_connect'] ?? false))
+            ->setArgument('$healthyMemo', $probeTtl > 0 ? $this->workerMemo($probeTtl) : null)
             ->addTag('nowo.site_backup.setup_need_detector', ['priority' => 90]);
 
         $container->getDefinition(DoctrineSchemaEmptyDetector::class)
             ->setArgument('$connection', $dbalRef)
             ->setArgument('$enabled', (bool) ($setup['detectors']['doctrine_schema_empty'] ?? false))
+            ->setArgument('$healthyMemo', $probeTtl > 0 ? $this->workerMemo($probeTtl) : null)
             ->addTag('nowo.site_backup.setup_need_detector', ['priority' => 80]);
 
         $container->getDefinition(IncompleteSetupProgressDetector::class)
@@ -768,7 +877,15 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$database', is_string($mysqlDb) && $mysqlDb !== '' ? $mysqlDb : null)
             ->setArgument('$requireApplicationTables', (bool) ($coldStart['require_application_tables'] ?? true));
 
-        $container->setAlias(SchemaExistenceCheckerInterface::class, MysqlSchemaExistenceChecker::class)->setPublic(false);
+        $probeTtl = (int) ($setup['worker_memo']['schema_probe_ttl'] ?? 60);
+        if ($probeTtl > 0) {
+            $container->register(MemoizedSchemaExistenceChecker::class, MemoizedSchemaExistenceChecker::class)
+                ->setArgument('$inner', new Reference(MysqlSchemaExistenceChecker::class))
+                ->setArgument('$memo', $this->workerMemo($probeTtl));
+            $container->setAlias(SchemaExistenceCheckerInterface::class, MemoizedSchemaExistenceChecker::class)->setPublic(false);
+        } else {
+            $container->setAlias(SchemaExistenceCheckerInterface::class, MysqlSchemaExistenceChecker::class)->setPublic(false);
+        }
 
         $safePrefixes = array_values($coldStart['safe_path_prefixes'] ?? []);
 

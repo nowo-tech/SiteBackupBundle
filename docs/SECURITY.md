@@ -6,6 +6,8 @@
 - [Attack surface](#attack-surface)
 - [Threat model](#threat-model)
 - [Secrets & cryptography](#secrets-cryptography)
+- [Production secrets guard (opt-in, v1.16+)](#production-secrets-guard-opt-in-v116)
+- [CSP nonces](#csp-nonces)
 - [Logging](#logging)
 - [Dependency and updates](#dependency-and-updates)
 - [Firewall / `access_control` (host app)](#firewall--access_control-host-app)
@@ -40,6 +42,20 @@ Covers backup creation, integrity verification, restore orchestration, restore l
 - Panel password stored as `password_hash` (bcrypt/argon2id). **Required** whenever `security.password_protection` is true (default). Generate with `php bin/console nowo:site-backup:hash-password`.
 - Integrity uses SHA-256 (checksums, not secrecy)
 - Never commit real `.env` with production dump credentials
+
+## Production secrets guard (opt-in, v1.16+)
+
+`security_guard.enabled: true` registers `ProductionSecretsGuardSubscriber` (`kernel.request` and `console.command`, priority 1024). Outside `security_guard.local_environments` (default `dev`, `test` — so `staging` and misnamed environments are checked) it throws when:
+
+- `setup.setup_token` is empty (setup enabled) or listed in `forbidden_setup_tokens`;
+- `security.password_hash` is empty (panel + `password_protection`, no custom `access_gate`) or listed in `forbidden_password_hashes`;
+- `APP_SECRET` (`security_guard.app_secret`, default `%env(default::APP_SECRET)%`) is empty, a known placeholder (`forbidden_app_secrets`) or shorter than `app_secret_min_length` (16).
+
+`cache:clear`, `cache:warmup`, `assets:install` and `nowo:site-backup:hash-password` are skipped (`skip_console_commands`) so Docker image builds can warm the cache without runtime secrets. The guard is stateless (re-checks on each request; no latch kept in workers). Put the values documented in your `.env.dist` into the `forbidden_*` lists.
+
+## CSP nonces
+
+Bundle templates follow the nowo-tech kit convention: inline script and style tags carry `nonce="…"` from the request attribute `csp_nonce` when the host sets it (`$request->attributes->set('csp_nonce', $nonce)` in its CSP subscriber). There are no inline event handlers or `style=""` attributes: the panel confirm dialogs use `data-nowo-confirm` plus one delegated, nonce'd listener.
 
 ## Logging
 

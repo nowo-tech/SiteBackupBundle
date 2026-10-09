@@ -5,12 +5,15 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\Tests\Unit\DependencyInjection;
 
 use LogicException;
+use Nowo\SiteBackupBundle\Command\DatabaseDumpCommand;
 use Nowo\SiteBackupBundle\Controller\SetupUnlocalizedLocaleRedirectController;
 use Nowo\SiteBackupBundle\Controller\SetupWizardController;
 use Nowo\SiteBackupBundle\Controller\SiteBackupPanelController;
 use Nowo\SiteBackupBundle\DependencyInjection\Configuration;
 use Nowo\SiteBackupBundle\DependencyInjection\SiteBackupExtension;
 use Nowo\SiteBackupBundle\EventSubscriber\ColdStartSchemaGateSubscriber;
+use Nowo\SiteBackupBundle\EventSubscriber\LongRequestTimeLimitSubscriber;
+use Nowo\SiteBackupBundle\EventSubscriber\ProductionSecretsGuardSubscriber;
 use Nowo\SiteBackupBundle\EventSubscriber\SetupDbDoneRedirectSubscriber;
 use Nowo\SiteBackupBundle\EventSubscriber\UnlocalizedDefaultLocaleSubscriber;
 use Nowo\SiteBackupBundle\Exclusion\SiteBackupExclusionMatcher;
@@ -21,17 +24,22 @@ use Nowo\SiteBackupBundle\Security\ConfigurableSiteBackupAccessChecker;
 use Nowo\SiteBackupBundle\Security\PasswordSiteBackupAccessGate;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessCheckerInterface;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessGateInterface;
+use Nowo\SiteBackupBundle\Setup\ColdStart\MemoizedSchemaExistenceChecker;
 use Nowo\SiteBackupBundle\Setup\ColdStart\MysqlSchemaExistenceChecker;
+use Nowo\SiteBackupBundle\Setup\ColdStart\SchemaExistenceCheckerInterface;
 use Nowo\SiteBackupBundle\Setup\Detector\DoctrineConnectDetector;
 use Nowo\SiteBackupBundle\Setup\Detector\DoctrineSchemaEmptyDetector;
 use Nowo\SiteBackupBundle\Setup\Detector\IncompleteSetupProgressDetector;
 use Nowo\SiteBackupBundle\Setup\Detector\MarkerFileDetector;
 use Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator;
 use Nowo\SiteBackupBundle\Setup\DurableSetupDoneStoreInterface;
+use Nowo\SiteBackupBundle\Setup\Memo\WorkerTtlMemo;
 use Nowo\SiteBackupBundle\Setup\NullDurableSetupDoneStore;
 use Nowo\SiteBackupBundle\Setup\SetupOrchestrator;
 use Nowo\SiteBackupBundle\Setup\SetupTabCheckerLocator;
 use Nowo\SiteBackupBundle\Setup\SetupWizardReopener;
+use Nowo\SiteBackupBundle\Setup\Storage\DoctrineDbalSetupProgressStorage;
+use Nowo\SiteBackupBundle\Setup\Storage\DoctrineDbalSetupStepJournal;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\DependencyInjection\Argument\TaggedIteratorArgument;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
@@ -385,5 +393,125 @@ final class SiteBackupExtensionTest extends TestCase
         self::assertFalse($container->hasDefinition(SetupDbDoneRedirectSubscriber::class));
         self::assertFalse($container->hasDefinition(ColdStartSchemaGateSubscriber::class));
         self::assertFalse($container->hasDefinition(MysqlSchemaExistenceChecker::class));
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     */
+    private function loadWith(array $config): ContainerBuilder
+    {
+        $container = new ContainerBuilder();
+        $container->setParameter('kernel.project_dir', sys_get_temp_dir());
+        (new SiteBackupExtension())->load([array_replace_recursive(['security' => ['allow_unauthenticated' => true]], $config)], $container);
+
+        return $container;
+    }
+
+    /**
+     * Classes excluded from the resource glob are still registered as abstract `container.excluded` definitions.
+     */
+    private function isRegistered(ContainerBuilder $container, string $id): bool
+    {
+        return $container->hasDefinition($id) && !$container->getDefinition($id)->hasTag('container.excluded');
+    }
+
+    private function memoTtl(mixed $definition): ?int
+    {
+        if (!$definition instanceof Definition) {
+            return null;
+        }
+        self::assertSame(WorkerTtlMemo::class, $definition->getClass());
+
+        return $definition->getArgument('$ttlSeconds');
+    }
+
+    public function testWorkerMemoDefaultsAreWired(): void
+    {
+        $container = $this->loadWith(['setup' => ['cold_start' => ['enabled' => true]]]);
+
+        self::assertSame(3600, $this->memoTtl($container->getDefinition(DoctrineDbalSetupProgressStorage::class)->getArgument('$ddlMemo')));
+        self::assertSame(3600, $this->memoTtl($container->getDefinition(DoctrineDbalSetupStepJournal::class)->getArgument('$ddlMemo')));
+        self::assertSame(60, $this->memoTtl($container->getDefinition(DoctrineConnectDetector::class)->getArgument('$healthyMemo')));
+        self::assertSame(60, $this->memoTtl($container->getDefinition(DoctrineSchemaEmptyDetector::class)->getArgument('$healthyMemo')));
+        self::assertSame(MemoizedSchemaExistenceChecker::class, (string) $container->getAlias(SchemaExistenceCheckerInterface::class));
+        $memoized = $container->getDefinition(MemoizedSchemaExistenceChecker::class);
+        self::assertSame(MysqlSchemaExistenceChecker::class, (string) $memoized->getArgument('$inner'));
+        self::assertSame(60, $this->memoTtl($memoized->getArgument('$memo')));
+    }
+
+    public function testWorkerMemoZeroDisables(): void
+    {
+        $container = $this->loadWith(['setup' => [
+            'cold_start'  => ['enabled' => true],
+            'worker_memo' => ['schema_probe_ttl' => 0, 'progress_ddl_ttl' => 0],
+        ]]);
+
+        self::assertNull($container->getDefinition(DoctrineDbalSetupProgressStorage::class)->getArgument('$ddlMemo'));
+        self::assertNull($container->getDefinition(DoctrineConnectDetector::class)->getArgument('$healthyMemo'));
+        self::assertSame(MysqlSchemaExistenceChecker::class, (string) $container->getAlias(SchemaExistenceCheckerInterface::class));
+        self::assertFalse($this->isRegistered($container, MemoizedSchemaExistenceChecker::class));
+    }
+
+    public function testTimeLimitSubscriberIsOptIn(): void
+    {
+        self::assertFalse($this->isRegistered($this->loadWith([]), LongRequestTimeLimitSubscriber::class));
+
+        $container = $this->loadWith([
+            'bump_time_limit' => true,
+            'process_timeout' => 900,
+            'setup'           => ['locale' => ['in_path' => 'both', 'enabled' => ['en', 'es']]],
+        ]);
+        $def = $container->getDefinition(LongRequestTimeLimitSubscriber::class);
+        self::assertSame(['/_site_backup', '/_setup', '/en/_setup', '/es/_setup'], $def->getArgument('$pathPrefixes'));
+        self::assertSame(900, $def->getArgument('$seconds'));
+        self::assertSame(512, $def->getTag('kernel.event_listener')[0]['priority']);
+
+        $container = $this->loadWith([
+            'bump_time_limit'         => true,
+            'bump_time_limit_seconds' => 0,
+            'panel'                   => ['enabled' => false],
+            'setup'                   => ['enabled' => false],
+        ]);
+        $def = $container->getDefinition(LongRequestTimeLimitSubscriber::class);
+        self::assertSame([], $def->getArgument('$pathPrefixes'));
+        self::assertSame(0, $def->getArgument('$seconds'));
+    }
+
+    public function testSecurityGuardIsOptInAndWired(): void
+    {
+        self::assertFalse($this->isRegistered($this->loadWith([]), ProductionSecretsGuardSubscriber::class));
+
+        $container = $this->loadWith([
+            'security_guard' => ['enabled' => true, 'forbidden_setup_tokens' => ['local']],
+            'setup'          => ['setup_token' => '%env(SITE_SETUP_TOKEN)%'],
+            'security'       => ['password_hash' => 'h'],
+        ]);
+        $def = $container->getDefinition(ProductionSecretsGuardSubscriber::class);
+        self::assertTrue($def->hasTag('kernel.event_subscriber'));
+        self::assertSame('%kernel.environment%', $def->getArgument('$environment'));
+        self::assertTrue($def->getArgument('$checkSetupToken'));
+        self::assertSame('%env(SITE_SETUP_TOKEN)%', $def->getArgument('$setupToken'));
+        self::assertSame(['local'], $def->getArgument('$forbiddenSetupTokens'));
+        self::assertTrue($def->getArgument('$checkPanelPassword'));
+        self::assertSame('%env(default::APP_SECRET)%', $def->getArgument('$appSecret'));
+        self::assertContains('nowo:site-backup:hash-password', $def->getArgument('$skipConsoleCommands'));
+
+        $container = $this->loadWith([
+            'security_guard' => ['enabled' => true, 'app_secret' => 'explicit'],
+            'security'       => ['access_gate' => 'app.gate'],
+            'setup'          => ['enabled' => false],
+        ]);
+        $def = $container->getDefinition(ProductionSecretsGuardSubscriber::class);
+        self::assertFalse($def->getArgument('$checkSetupToken'));
+        self::assertFalse($def->getArgument('$checkPanelPassword'));
+        self::assertSame('explicit', $def->getArgument('$appSecret'));
+    }
+
+    public function testDatabaseDumpCommandWired(): void
+    {
+        $container = $this->loadWith(['process_timeout' => 120]);
+        $def       = $container->getDefinition(DatabaseDumpCommand::class);
+        self::assertSame('%env(default::DATABASE_URL)%', $def->getArgument('$databaseUrl'));
+        self::assertSame(120, $def->getArgument('$timeoutSeconds'));
     }
 }
