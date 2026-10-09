@@ -322,8 +322,8 @@ final class DetectorsTest extends TestCase
 
     private function detector(bool $required, string $reason): SetupNeedDetectorInterface
     {
-        return new readonly class($required, $reason) implements SetupNeedDetectorInterface {
-            public function __construct(private bool $required, private string $reason)
+        return new class($required, $reason) implements SetupNeedDetectorInterface {
+            public function __construct(private readonly bool $required, private readonly string $reason)
             {
             }
 
