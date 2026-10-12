@@ -6,6 +6,7 @@ namespace Nowo\SiteBackupBundle;
 
 use Nowo\SiteBackupBundle\Attribute\AsSetupNeedDetector;
 use Nowo\SiteBackupBundle\Attribute\AsSetupTabChecker;
+use Nowo\SiteBackupBundle\DependencyInjection\Compiler\LoginThrottleStoragePass;
 use Nowo\SiteBackupBundle\DependencyInjection\Compiler\TwigPathsPass;
 use Nowo\SiteBackupBundle\DependencyInjection\SiteBackupExtension;
 use Symfony\Component\DependencyInjection\ChildDefinition;
@@ -19,6 +20,7 @@ final class NowoSiteBackupBundle extends Bundle
     {
         parent::build($container);
         $container->addCompilerPass(new TwigPathsPass());
+        $container->addCompilerPass(new LoginThrottleStoragePass());
         // Attribute-only (same pattern as AsSetupTabChecker) — avoids double-tagging
         // if we also autoconfigured SetupNeedDetectorInterface.
         $container->registerAttributeForAutoconfiguration(

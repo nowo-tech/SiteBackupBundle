@@ -5,6 +5,8 @@ restore:
     done: 'Ripristino completato. Ricaricamento…'
 panel:
   title: 'Backup del sito'
+  login:
+    too_many_attempts: 'Troppi tentativi di accesso. Riprova tra %minutes% minuto/i.'
 setup:
   wizard:
     title: 'Configura questo sito'

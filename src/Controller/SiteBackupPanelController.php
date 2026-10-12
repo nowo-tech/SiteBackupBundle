@@ -17,14 +17,20 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 use Throwable;
 use Twig\Environment;
 
 use function array_merge;
+use function ceil;
 use function implode;
+use function is_numeric;
+use function max;
 use function method_exists;
+use function sprintf;
 
 final class SiteBackupPanelController
 {
@@ -41,6 +47,7 @@ final class SiteBackupPanelController
         private readonly ?CsrfTokenManagerInterface $csrfTokenManager = null,
         private readonly ?SiteBackupAccessCheckerInterface $accessChecker = null,
         private readonly bool $allowUnauthenticated = true,
+        private readonly ?TranslatorInterface $translator = null,
     ) {
     }
 
@@ -137,8 +144,9 @@ final class SiteBackupPanelController
 
     private function login(Request $request): Response
     {
-        $error     = null;
-        $loginForm = $this->createLoginForm();
+        $error      = null;
+        $loginForm  = $this->createLoginForm();
+        $retryAfter = null;
 
         if ($request->isMethod('POST') && $request->request->getString('action') === 'login') {
             if (!$this->csrfTokenManager instanceof CsrfTokenManagerInterface) {
@@ -147,22 +155,55 @@ final class SiteBackupPanelController
                 $loginForm->handleRequest($request);
                 if (!$loginForm->isSubmitted() || !$loginForm->isValid()) {
                     $error = 'Invalid CSRF token.';
-                } elseif ($this->accessGate->authenticate($request, $request->request->getString('password'))) {
-                    return new RedirectResponse($this->pathPrefix);
                 } else {
-                    $error = 'Invalid password.';
+                    try {
+                        if ($this->accessGate->authenticate($request, $request->request->getString('password'))) {
+                            return new RedirectResponse($this->pathPrefix);
+                        }
+
+                        $error = 'Invalid password.';
+                    } catch (TooManyRequestsHttpException $e) {
+                        // Login throttle (security.login_throttle): friendly 429, never a 500 / raw error page.
+                        $retryAfter = $this->retryAfterSeconds($e);
+                        $error      = $this->tooManyAttemptsMessage($retryAfter);
+                    }
                 }
             }
         }
 
-        return new Response($this->twig->render($this->templates['panel_login'], [
+        $response = new Response($this->twig->render($this->templates['panel_login'], [
             'pathPrefix'        => $this->pathPrefix,
             'error'             => $error,
             'protectionEnabled' => $this->accessGate->isProtectionEnabled(),
             'misconfigured'     => $this->accessGate->isMisconfigured(),
             'csrfToken'         => $this->csrfTokenManager?->getToken('nowo_site_backup_login')->getValue(),
             'loginForm'         => $loginForm->createView(),
+            'throttled'         => $retryAfter !== null,
         ]), $error || $this->accessGate->isMisconfigured() ? 401 : 200);
+
+        if ($retryAfter !== null) {
+            $response->setStatusCode(Response::HTTP_TOO_MANY_REQUESTS);
+            $response->headers->set('Retry-After', (string) $retryAfter);
+        }
+
+        return $response;
+    }
+
+    private function retryAfterSeconds(TooManyRequestsHttpException $e): int
+    {
+        $header = $e->getHeaders()['Retry-After'] ?? null;
+
+        return is_numeric($header) ? max(1, (int) $header) : 60;
+    }
+
+    private function tooManyAttemptsMessage(int $retryAfter): string
+    {
+        $minutes = (string) max(1, (int) ceil($retryAfter / 60));
+        if (!$this->translator instanceof TranslatorInterface) {
+            return sprintf('Too many login attempts. Try again in %s minute(s).', $minutes);
+        }
+
+        return $this->translator->trans('panel.login.too_many_attempts', ['%minutes%' => $minutes], 'NowoSiteBackupBundle');
     }
 
     private function handleCreate(Request $request): string

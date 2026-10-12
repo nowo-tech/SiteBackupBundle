@@ -77,9 +77,25 @@ nowo_site_backup:
         allow_unauthenticated: false
         password_protection: true
         password_hash: '%env(SITE_BACKUP_PASSWORD_HASH)%'
+        login_throttle:            # v1.17+, defaults shown
+            enabled: true
+            limit: 5
+            interval: '15 minutes'
+            policy: fixed_window
+            limiter: null          # or a host limiter, e.g. limiter.site_backup_login
+            cache_pool: null       # null = cache.rate_limiter, else cache.app
 ```
 
 Create, verify, restore, delete, and view history from the UI.
+
+### Login throttle and session rotation
+
+Every `SiteBackupAccessGateInterface` (the default password gate or your `security.access_gate`) is wrapped by `ThrottledSiteBackupAccessGate` (service `nowo_site_backup.access_gate`, the target of the interface alias):
+
+- while `isProtectionEnabled()` is true, each password attempt consumes one token of a per-client-IP limiter; once exhausted the gate throws `TooManyRequestsHttpException` and the panel re-renders the login page with HTTP **429**, a `Retry-After` header and the translated `panel.login.too_many_attempts` message (the template also gets `throttled: true`);
+- a successful login resets the limiter for that IP and rotates the session id (`migrate(true)`).
+
+To reuse a limiter you already declare under `framework.rate_limiter`, set `login_throttle.limiter: limiter.<name>`. Host decorators of `SiteBackupAccessGateInterface` keep working (they decorate the wrapper); a decorator that only throttles and migrates the session can be removed.
 
 ## Setup wizard
 

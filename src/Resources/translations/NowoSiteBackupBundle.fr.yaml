@@ -5,6 +5,8 @@ restore:
     done: 'Restauration terminée. Rechargement…'
 panel:
   title: 'Sauvegarde du site'
+  login:
+    too_many_attempts: 'Trop de tentatives de connexion. Réessayez dans %minutes% minute(s).'
 setup:
   wizard:
     title: 'Configurer ce site'

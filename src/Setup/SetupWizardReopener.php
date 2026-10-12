@@ -37,6 +37,7 @@ final readonly class SetupWizardReopener
         $cleared = false;
 
         if ($this->markers->isDone()) {
+            // @igor-ignore - Persistent I/O (marker file), not in-memory worker state.
             $this->markers->clearDone();
             $cleared = true;
         }
@@ -44,6 +45,7 @@ final readonly class SetupWizardReopener
         if ($this->durableDoneStore instanceof DurableSetupDoneStoreInterface) {
             try {
                 if ($this->durableDoneStore->isDone()) {
+                    // @igor-ignore - Persistent I/O (host durable store), not in-memory worker state.
                     $this->durableDoneStore->clearDone();
                     $cleared = true;
                 }

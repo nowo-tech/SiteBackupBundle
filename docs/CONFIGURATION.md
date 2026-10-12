@@ -32,7 +32,13 @@ Root key: `nowo_site_backup`.
 | `security.allow_unauthenticated` | `false` | DEV/DEMO only: skip Symfony role check (password gate may still apply). Requires SecurityBundle when `false` and panel is enabled |
 | `security.password_protection` | `true` | Ops password gate (additional to role check). Fail-closed without `password_hash` when true |
 | `security.password_hash` | `null` | Prefer env `SITE_BACKUP_PASSWORD_HASH` |
-| `security.access_gate` | `null` | Custom `SiteBackupAccessGateInterface` service |
+| `security.access_gate` | `null` | Custom `SiteBackupAccessGateInterface` service (still wrapped by the login throttle / session rotation below) |
+| `security.login_throttle.enabled` | `true` | (v1.17+) Per-client-IP rate limit of panel password attempts. Only while the gate reports `isProtectionEnabled()`. Exceeded → login page re-rendered with HTTP **429** + `Retry-After` and translated `panel.login.too_many_attempts`. Reset on a successful login. The session id is always rotated (`migrate(true)`) after a successful login, even when `enabled: false` |
+| `security.login_throttle.limit` | `5` | Attempts per client IP per window (min `1`) |
+| `security.login_throttle.interval` | `15 minutes` | Window, relative date format; validated at config time |
+| `security.login_throttle.policy` | `fixed_window` | `fixed_window` \| `sliding_window` |
+| `security.login_throttle.limiter` | `null` | Host `RateLimiterFactoryInterface` service id (e.g. `limiter.site_backup_login` from `framework.rate_limiter`). When set, `limit` / `interval` / `policy` / `cache_pool` are ignored |
+| `security.login_throttle.cache_pool` | `null` | PSR-6 pool for the built-in limiter (`nowo_site_backup.login_limiter`). `null` = `cache.rate_limiter`, else `cache.app`; none available → `LogicException` at container compile time. Use a shared pool (Redis) with several app servers |
 | `templates.*` | `@NowoSiteBackupBundle/...` | Overrideable Twig templates |
 | `setup.path_prefix` | `/_setup` | Wizard URL prefix; drives imported setup routes + site-gate exclusions |
 | `setup.locale.in_path` | `never` | `never` \| `always` \| `both` — locale prefix on setup URLs (AuthKit-style) |

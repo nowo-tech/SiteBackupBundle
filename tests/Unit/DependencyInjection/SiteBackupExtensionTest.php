@@ -9,6 +9,7 @@ use Nowo\SiteBackupBundle\Command\DatabaseDumpCommand;
 use Nowo\SiteBackupBundle\Controller\SetupUnlocalizedLocaleRedirectController;
 use Nowo\SiteBackupBundle\Controller\SetupWizardController;
 use Nowo\SiteBackupBundle\Controller\SiteBackupPanelController;
+use Nowo\SiteBackupBundle\DependencyInjection\Compiler\LoginThrottleStoragePass;
 use Nowo\SiteBackupBundle\DependencyInjection\Configuration;
 use Nowo\SiteBackupBundle\DependencyInjection\SiteBackupExtension;
 use Nowo\SiteBackupBundle\EventSubscriber\ColdStartSchemaGateSubscriber;
@@ -24,6 +25,7 @@ use Nowo\SiteBackupBundle\Security\ConfigurableSiteBackupAccessChecker;
 use Nowo\SiteBackupBundle\Security\PasswordSiteBackupAccessGate;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessCheckerInterface;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessGateInterface;
+use Nowo\SiteBackupBundle\Security\ThrottledSiteBackupAccessGate;
 use Nowo\SiteBackupBundle\Setup\ColdStart\MemoizedSchemaExistenceChecker;
 use Nowo\SiteBackupBundle\Setup\ColdStart\MysqlSchemaExistenceChecker;
 use Nowo\SiteBackupBundle\Setup\ColdStart\SchemaExistenceCheckerInterface;
@@ -45,6 +47,7 @@ use Symfony\Component\DependencyInjection\Argument\TaggedIteratorArgument;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Reference;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
 
 final class SiteBackupExtensionTest extends TestCase
 {
@@ -61,7 +64,16 @@ final class SiteBackupExtensionTest extends TestCase
         self::assertTrue($container->getParameter('nowo.site_backup.enabled'));
         self::assertTrue($container->hasDefinition(SiteBackupPanelController::class));
         self::assertTrue($container->hasDefinition(SetupWizardController::class));
-        self::assertSame(PasswordSiteBackupAccessGate::class, (string) $container->getAlias(SiteBackupAccessGateInterface::class));
+        self::assertSame(SiteBackupExtension::ACCESS_GATE_ID, (string) $container->getAlias(SiteBackupAccessGateInterface::class));
+        $gate = $container->getDefinition(SiteBackupExtension::ACCESS_GATE_ID);
+        self::assertSame(ThrottledSiteBackupAccessGate::class, $gate->getClass());
+        self::assertSame(PasswordSiteBackupAccessGate::class, (string) $gate->getArgument('$inner'));
+        self::assertSame(SiteBackupExtension::LOGIN_LIMITER_ID, (string) $gate->getArgument('$limiterFactory'));
+        $limiter = $container->getDefinition(SiteBackupExtension::LOGIN_LIMITER_ID);
+        self::assertSame(RateLimiterFactory::class, $limiter->getClass());
+        self::assertSame(['id' => 'nowo_site_backup_login', 'policy' => 'fixed_window', 'limit' => 5, 'interval' => '15 minutes'], $limiter->getArgument('$config'));
+        self::assertSame(SiteBackupExtension::LOGIN_LIMITER_STORAGE_ID, (string) $limiter->getArgument('$storage'));
+        self::assertSame([['cache_pool' => null]], $container->getDefinition(SiteBackupExtension::LOGIN_LIMITER_STORAGE_ID)->getTag(LoginThrottleStoragePass::TAG));
 
         self::assertSame('never', $container->getParameter('nowo.site_backup.setup.locale.in_path'));
         self::assertSame('en', $container->getParameter('nowo.site_backup.setup.locale.default'));
@@ -129,7 +141,56 @@ final class SiteBackupExtensionTest extends TestCase
             'security' => ['access_gate' => 'App\\Security\\CustomGate', 'allow_unauthenticated' => true],
         ]], $container);
 
-        self::assertSame('App\\Security\\CustomGate', (string) $container->getAlias(SiteBackupAccessGateInterface::class));
+        self::assertSame(SiteBackupExtension::ACCESS_GATE_ID, (string) $container->getAlias(SiteBackupAccessGateInterface::class));
+        self::assertSame('App\\Security\\CustomGate', (string) $container->getDefinition(SiteBackupExtension::ACCESS_GATE_ID)->getArgument('$inner'));
+    }
+
+    public function testLoginThrottleDisabledKeepsSessionRotationWrapperOnly(): void
+    {
+        $container = new ContainerBuilder();
+        $container->setParameter('kernel.project_dir', sys_get_temp_dir());
+
+        (new SiteBackupExtension())->load([[
+            'security' => ['allow_unauthenticated' => true, 'login_throttle' => ['enabled' => false]],
+        ]], $container);
+
+        self::assertNull($container->getDefinition(SiteBackupExtension::ACCESS_GATE_ID)->getArgument('$limiterFactory'));
+        self::assertFalse($container->hasDefinition(SiteBackupExtension::LOGIN_LIMITER_ID));
+        self::assertFalse($container->hasDefinition(SiteBackupExtension::LOGIN_LIMITER_STORAGE_ID));
+    }
+
+    public function testLoginThrottleUsesHostLimiterService(): void
+    {
+        $container = new ContainerBuilder();
+        $container->setParameter('kernel.project_dir', sys_get_temp_dir());
+
+        (new SiteBackupExtension())->load([[
+            'security' => ['allow_unauthenticated' => true, 'login_throttle' => ['limiter' => 'limiter.site_backup_login']],
+        ]], $container);
+
+        self::assertSame('limiter.site_backup_login', (string) $container->getDefinition(SiteBackupExtension::ACCESS_GATE_ID)->getArgument('$limiterFactory'));
+        self::assertFalse($container->hasDefinition(SiteBackupExtension::LOGIN_LIMITER_ID));
+    }
+
+    public function testLoginThrottleCustomBuiltInLimiter(): void
+    {
+        $container = new ContainerBuilder();
+        $container->setParameter('kernel.project_dir', sys_get_temp_dir());
+
+        (new SiteBackupExtension())->load([[
+            'security' => ['allow_unauthenticated' => true, 'login_throttle' => [
+                'limit'      => 3,
+                'interval'   => '1 hour',
+                'policy'     => 'sliding_window',
+                'cache_pool' => 'cache.redis',
+            ]],
+        ]], $container);
+
+        self::assertSame(
+            ['id' => 'nowo_site_backup_login', 'policy' => 'sliding_window', 'limit' => 3, 'interval' => '1 hour'],
+            $container->getDefinition(SiteBackupExtension::LOGIN_LIMITER_ID)->getArgument('$config'),
+        );
+        self::assertSame([['cache_pool' => 'cache.redis']], $container->getDefinition(SiteBackupExtension::LOGIN_LIMITER_STORAGE_ID)->getTag(LoginThrottleStoragePass::TAG));
     }
 
     public function testGetAlias(): void

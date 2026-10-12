@@ -7,6 +7,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.17.0] - 2026-10-12
+
+### Added
+
+- **`security.login_throttle`** (on by default: `enabled: true`, `limit: 5`, `interval: '15 minutes'`, `policy: fixed_window`, `limiter: null`, `cache_pool: null`): per-client-IP rate limit of panel password attempts. `Security\ThrottledSiteBackupAccessGate` (service `nowo_site_backup.access_gate`, target of the `SiteBackupAccessGateInterface` alias) wraps the default password gate or the custom `security.access_gate`; it only throttles while `isProtectionEnabled()` is true, resets the limiter on success and throws `TooManyRequestsHttpException` with `Retry-After` when exhausted. The built-in limiter is `nowo_site_backup.login_limiter` (`RateLimiterFactory`, `CacheStorage` on `cache_pool` ?? `cache.rate_limiter` ?? `cache.app`, optional `lock.factory`); `limiter` plugs a host `RateLimiterFactoryInterface` service instead. `DependencyInjection\Compiler\LoginThrottleStoragePass` fails at compile time with an actionable message when no pool exists.
+- Panel login renders the throttle as the login page with **HTTP 429**, `Retry-After` and the translated `panel.login.too_many_attempts` message (all 7 locales; template variable `throttled`). Also applies to host decorators that throw `TooManyRequestsHttpException`.
+- **Session fixation protection:** after a successful panel login the session id is rotated (`$session->migrate(true)`), also when `login_throttle.enabled: false` or with a custom gate.
+
+### Changed
+
+- **`symfony/rate-limiter` (`^7.3 || ^8.0`) is now a hard requirement** (needed by the default-on throttle; `RateLimiterFactoryInterface` exists since 7.3).
+- The `SiteBackupAccessGateInterface` alias now points to `nowo_site_backup.access_gate` instead of `PasswordSiteBackupAccessGate` / the custom gate id (both remain registered and are injected as the inner gate).
+- `SiteBackupPanelController` takes an optional `$translator` (last argument).
+- Igor: annotated four pre-existing false positives (persistent I/O / per-request locale) with `@igor-ignore`.
+- Tooling: Rector skips `DependencyInjection/Configuration.php` (its scope analysis never finished, so `rector-dry` timed out); two Rector fixes applied (`Command::INVALID`, redundant string cast). Lock refresh: UiKitBundle 1.12.0. Demo `config/reference.php` regenerated.
+
 ## [1.16.0] - 2026-10-09
 
 ### Added

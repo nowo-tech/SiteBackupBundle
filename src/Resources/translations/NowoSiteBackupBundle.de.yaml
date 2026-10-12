@@ -5,6 +5,8 @@ restore:
     done: 'Wiederherstellung abgeschlossen. Neu laden…'
 panel:
   title: 'Website-Backup'
+  login:
+    too_many_attempts: 'Zu viele Anmeldeversuche. Bitte in %minutes% Minute(n) erneut versuchen.'
 setup:
   wizard:
     title: 'Diese Website einrichten'

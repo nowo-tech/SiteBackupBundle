@@ -16,7 +16,7 @@ This bundle is **FrankenPHP worker mode friendly**.
 - **Safe restore** — Validate → extract to staging → apply with protected paths → progress JSON; `var/site-backup/` never overwritten mid-restore.
 - **Loading page** — While restore is active, `kernel.request` returns **HTTP 503** with a progress UI (polls `/_site_backup/progress.json`); panel stays reachable.
 - **Setup wizard** — Cold start / post-restore: bootstrap mode (guided vs full SQL), DB, migrations/schema, YAML **tabs** + checkers, `advance_mode`, idempotent loaders, super-admin, optional sample data; durable progress (`filesystem` / `doctrine` / `cache` / `cache_doctrine` / `chain`); MySQL **cold-start schema gate** (`setup.cold_start.require_application_tables`) — see [docs/SETUP-WIZARD.md](docs/SETUP-WIZARD.md).
-- **Admin panel** — Create / verify / restore / delete under `/_site_backup` (password gate + CSRF).
+- **Admin panel** — Create / verify / restore / delete under `/_site_backup` (password gate + CSRF). Password attempts are rate-limited per client IP (`security.login_throttle`, on by default: friendly HTTP 429 + `Retry-After`) and the session id is rotated after login.
 - **CLI** — `create`, `list`, `verify`, `restore`, `setup`, `setup-status`, `setup-reset`, `hash-password`, `db-dump` (built-in `database_dump_command`: mysqldump from `DATABASE_URL`, password via `MYSQL_PWD`).
 - **Worker-friendly performance** — per-worker TTL memos (`setup.worker_memo`) so schema probes and the progress-table DDL do not run on every FrankenPHP request; opt-in `bump_time_limit` for long setup / panel requests.
 - **Production hardening** — opt-in `security_guard` refuses empty / placeholder setup token, panel hash and `APP_SECRET` outside dev/test; templates carry the request `csp_nonce` and use no inline event handlers.
@@ -54,6 +54,7 @@ nowo_site_backup:
         password_hash: '%env(SITE_BACKUP_PASSWORD_HASH)%'
         access_roles: [ROLE_ADMIN]
         # allow_unauthenticated: false
+        # login_throttle: { enabled: true, limit: 5, interval: '15 minutes' }   # defaults (v1.17+)
     setup:
         admin_provisioner: App\Setup\AdminUserProvisioner
         # worker_memo: { schema_probe_ttl: 60, progress_ddl_ttl: 3600 }   # defaults

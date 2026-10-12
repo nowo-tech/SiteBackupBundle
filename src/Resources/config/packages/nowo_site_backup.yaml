@@ -29,6 +29,8 @@ nowo_site_backup:
         # access_roles: [ROLE_ADMIN]
         # access_checker: null
         # allow_unauthenticated: false   # default; never true in production
+        # Per-IP panel password rate limit (v1.17+, on by default; HTTP 429 + Retry-After):
+        # login_throttle: { enabled: true, limit: 5, interval: '15 minutes', limiter: null, cache_pool: null }
     setup:
         enabled: true
         path_prefix: '/_setup'

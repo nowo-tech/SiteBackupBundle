@@ -195,6 +195,7 @@ final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInte
 
             if ($idleEmpty) {
                 $profile = $progress->getProfile() !== '' ? $progress->getProfile() : null;
+                // @igor-ignore - Deletes journal rows in the database; no in-memory state to reset.
                 $this->stepJournal->clear($profile);
 
                 return;

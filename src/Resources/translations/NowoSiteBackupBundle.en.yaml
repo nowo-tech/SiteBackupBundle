@@ -5,6 +5,8 @@ restore:
     done: 'Restore finished. Reloading…'
 panel:
   title: 'Site Backup'
+  login:
+    too_many_attempts: 'Too many login attempts. Try again in %minutes% minute(s).'
 setup:
   wizard:
     title: 'Set up this site'

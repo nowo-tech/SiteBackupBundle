@@ -30,6 +30,7 @@ Covers backup creation, integrity verification, restore orchestration, restore l
 
 | Threat | Risk | Mitigation |
 | --- | --- | --- |
+| Panel password guessing / session fixation | High | `security.login_throttle` per-IP rate limit (HTTP 429 + `Retry-After`) and session id rotation after login (v1.17+) |
 | Unauthorized restore/delete | High | REQ-UI-002 `access_roles` / `SiteBackupAccessCheckerInterface` (default `ROLE_ADMIN`) unless `allow_unauthenticated`; plus password gate / custom `SiteBackupAccessGateInterface` (**fail-closed** when `password_protection` is true but `password_hash` is empty); CSRF on panel POSTs (**fail-closed** if CSRF manager missing — require `symfony/security-csrf`). Password gate is **additional** to role check. `allow_unauthenticated: true` is demo/dev only |
 | Unauthorized setup / admin creation | High | Wizard only while detectors say required; optional `setup_token`; CSRF fail-closed; `AdminUserProvisionerInterface` is app-owned |
 | Path traversal on apply | High | Relative paths from archive; protected paths; never overwrite `var/site-backup/` |
@@ -40,6 +41,8 @@ Covers backup creation, integrity verification, restore orchestration, restore l
 ## Secrets & cryptography
 
 - Panel password stored as `password_hash` (bcrypt/argon2id). **Required** whenever `security.password_protection` is true (default). Generate with `php bin/console nowo:site-backup:hash-password`.
+- **Brute force (v1.17+):** `security.login_throttle` (on by default) limits panel password attempts per client IP (5 per 15 minutes, `symfony/rate-limiter` on a cache pool). Over the limit the login page answers **HTTP 429** with `Retry-After` (never a 500). The limiter is reset on success. Behind a reverse proxy configure `framework.trusted_proxies` so `Request::getClientIp()` is the real client.
+- **Session fixation (v1.17+):** after a correct password the session id is rotated (`$session->migrate(true)`), for the default and for custom `access_gate` services.
 - Integrity uses SHA-256 (checksums, not secrecy)
 - Never commit real `.env` with production dump credentials
 

@@ -10,6 +10,7 @@ use Nowo\SiteBackupBundle\Command\DatabaseDumpCommand;
 use Nowo\SiteBackupBundle\Controller\SetupUnlocalizedLocaleRedirectController;
 use Nowo\SiteBackupBundle\Controller\SetupWizardController;
 use Nowo\SiteBackupBundle\Controller\SiteBackupPanelController;
+use Nowo\SiteBackupBundle\DependencyInjection\Compiler\LoginThrottleStoragePass;
 use Nowo\SiteBackupBundle\EventSubscriber\ColdStartSchemaGateSubscriber;
 use Nowo\SiteBackupBundle\EventSubscriber\LongRequestTimeLimitSubscriber;
 use Nowo\SiteBackupBundle\EventSubscriber\ProductionSecretsGuardSubscriber;
@@ -26,6 +27,7 @@ use Nowo\SiteBackupBundle\Security\ConfigurableSiteBackupAccessChecker;
 use Nowo\SiteBackupBundle\Security\PasswordSiteBackupAccessGate;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessCheckerInterface;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessGateInterface;
+use Nowo\SiteBackupBundle\Security\ThrottledSiteBackupAccessGate;
 use Nowo\SiteBackupBundle\Service\SiteBackupManager;
 use Nowo\SiteBackupBundle\Setup\AdminUserProvisionerInterface;
 use Nowo\SiteBackupBundle\Setup\ColdStart\MemoizedSchemaExistenceChecker;
@@ -69,6 +71,8 @@ use Symfony\Component\DependencyInjection\Extension\Extension;
 use Symfony\Component\DependencyInjection\Extension\PrependExtensionInterface;
 use Symfony\Component\DependencyInjection\Loader\YamlFileLoader;
 use Symfony\Component\DependencyInjection\Reference;
+use Symfony\Component\RateLimiter\RateLimiterFactory;
+use Symfony\Component\RateLimiter\Storage\CacheStorage;
 use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
 
 use function array_key_exists;
@@ -80,6 +84,14 @@ use function is_string;
 
 final class SiteBackupExtension extends Extension implements PrependExtensionInterface
 {
+    /** Service the SiteBackupAccessGateInterface alias points to (throttling + session rotation wrapper). */
+    public const ACCESS_GATE_ID = 'nowo_site_backup.access_gate';
+
+    /** Built-in panel login RateLimiterFactory (when login_throttle.limiter is null). */
+    public const LOGIN_LIMITER_ID = 'nowo_site_backup.login_limiter';
+
+    public const LOGIN_LIMITER_STORAGE_ID = 'nowo_site_backup.login_limiter.storage';
+
     public function prepend(ContainerBuilder $container): void
     {
         $this->prependUiKitDefaults($container);
@@ -393,17 +405,52 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
     {
         $custom = $security['access_gate'] ?? null;
         if (is_string($custom) && $custom !== '') {
-            $container->setAlias(SiteBackupAccessGateInterface::class, $custom)->setPublic(false);
-
-            return;
+            $innerId = $custom;
+        } else {
+            $hash = $security['password_hash'] ?? null;
+            $container->getDefinition(PasswordSiteBackupAccessGate::class)
+                ->setArgument('$passwordHash', is_string($hash) ? $hash : null)
+                ->setArgument('$enabled', (bool) ($security['password_protection'] ?? true));
+            $innerId = PasswordSiteBackupAccessGate::class;
         }
 
-        $hash = $security['password_hash'] ?? null;
-        $container->getDefinition(PasswordSiteBackupAccessGate::class)
-            ->setArgument('$passwordHash', is_string($hash) ? $hash : null)
-            ->setArgument('$enabled', (bool) ($security['password_protection'] ?? true));
+        // v1.17+: every gate (default or custom) is wrapped: login throttle + session id rotation.
+        $container->register(self::ACCESS_GATE_ID, ThrottledSiteBackupAccessGate::class)
+            ->setArgument('$inner', new Reference($innerId))
+            ->setArgument('$limiterFactory', $this->loginLimiterReference($container, $security['login_throttle'] ?? []));
 
-        $container->setAlias(SiteBackupAccessGateInterface::class, PasswordSiteBackupAccessGate::class)->setPublic(false);
+        $container->setAlias(SiteBackupAccessGateInterface::class, self::ACCESS_GATE_ID)->setPublic(false);
+    }
+
+    /**
+     * @param array<string, mixed> $throttle
+     */
+    private function loginLimiterReference(ContainerBuilder $container, array $throttle): ?Reference
+    {
+        if (!(bool) ($throttle['enabled'] ?? true)) {
+            return null;
+        }
+
+        $hostLimiter = $throttle['limiter'] ?? null;
+        if (is_string($hostLimiter) && $hostLimiter !== '') {
+            return new Reference($hostLimiter);
+        }
+
+        // Storage pool is resolved by LoginThrottleStoragePass (cache_pool, cache.rate_limiter, cache.app).
+        $container->register(self::LOGIN_LIMITER_STORAGE_ID, CacheStorage::class)
+            ->addTag(LoginThrottleStoragePass::TAG, ['cache_pool' => $throttle['cache_pool'] ?? null]);
+
+        $container->register(self::LOGIN_LIMITER_ID, RateLimiterFactory::class)
+            ->setArgument('$config', [
+                'id'       => 'nowo_site_backup_login',
+                'policy'   => (string) ($throttle['policy'] ?? 'fixed_window'),
+                'limit'    => (int) ($throttle['limit'] ?? 5),
+                'interval' => (string) ($throttle['interval'] ?? '15 minutes'),
+            ])
+            ->setArgument('$storage', new Reference(self::LOGIN_LIMITER_STORAGE_ID))
+            ->setArgument('$lockFactory', new Reference('lock.factory', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE));
+
+        return new Reference(self::LOGIN_LIMITER_ID);
     }
 
     /** @param array<string, mixed> $security */
@@ -530,6 +577,7 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$csrfTokenManager', new Reference(CsrfTokenManagerInterface::class, ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
             ->setArgument('$accessChecker', new Reference(SiteBackupAccessCheckerInterface::class))
             ->setArgument('$allowUnauthenticated', (bool) $config['security']['allow_unauthenticated'])
+            ->setArgument('$translator', new Reference('translator', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
             ->setPublic(true);
     }
 

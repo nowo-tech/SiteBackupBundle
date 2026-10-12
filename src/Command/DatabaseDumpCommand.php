@@ -66,7 +66,7 @@ final class DatabaseDumpCommand extends Command
         } catch (InvalidArgumentException $e) {
             $stderr->writeln('nowo:site-backup:db-dump: ' . $e->getMessage());
 
-            return 2;
+            return Command::INVALID;
         }
 
         $process = new Process($spec['command'], null, $spec['env'], null, (float) $this->timeoutSeconds);

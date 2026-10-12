@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\DependencyInjection;
 
+use DateTimeImmutable;
 use Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition;
 use Symfony\Component\Config\Definition\Builder\NodeBuilder;
 use Symfony\Component\Config\Definition\Builder\TreeBuilder;
 use Symfony\Component\Config\Definition\ConfigurationInterface;
+use Throwable;
 
 use function in_array;
+use function is_string;
 
 /**
  * Bundle configuration tree under alias `nowo_site_backup`.
@@ -193,6 +196,39 @@ final class Configuration implements ConfigurationInterface
                         ->booleanNode('password_protection')->defaultTrue()->end()
                         ->scalarNode('password_hash')->defaultNull()->end()
                         ->scalarNode('access_gate')->defaultNull()->end()
+                        ->arrayNode('login_throttle')
+                            ->info('v1.17+: per-client-IP rate limit of panel password attempts (HTTP 429 + Retry-After when exceeded; reset on success). Only applies while the gate reports isProtectionEnabled(). The session id is always rotated after a successful login.')
+                            ->addDefaultsIfNotSet()
+                            ->children()
+                                ->booleanNode('enabled')->defaultTrue()->end()
+                                ->integerNode('limit')
+                                    ->info('Maximum failed + successful attempts per client IP within interval.')
+                                    ->defaultValue(5)
+                                    ->min(1)
+                                ->end()
+                                ->scalarNode('interval')
+                                    ->info('Window length, any relative date format (e.g. "15 minutes", "1 hour").')
+                                    ->defaultValue('15 minutes')
+                                    ->cannotBeEmpty()
+                                    ->validate()
+                                        ->ifTrue(static fn (mixed $v): bool => !is_string($v) || !self::isValidInterval($v))
+                                        ->thenInvalid('Invalid login_throttle.interval %s (use e.g. "15 minutes").')
+                                    ->end()
+                                ->end()
+                                ->enumNode('policy')
+                                    ->values(['fixed_window', 'sliding_window'])
+                                    ->defaultValue('fixed_window')
+                                ->end()
+                                ->scalarNode('limiter')
+                                    ->info('Optional host RateLimiterFactoryInterface service id (e.g. "limiter.site_backup_login"). When set, limit/interval/policy/cache_pool are ignored.')
+                                    ->defaultNull()
+                                ->end()
+                                ->scalarNode('cache_pool')
+                                    ->info('PSR-6 cache pool service id for the built-in limiter storage. null = "cache.rate_limiter", else "cache.app".')
+                                    ->defaultNull()
+                                ->end()
+                            ->end()
+                        ->end()
                     ->end()
                 ->end()
                 ->arrayNode('storage')
@@ -582,5 +618,21 @@ final class Configuration implements ConfigurationInterface
                 ],
             ],
         ];
+    }
+
+    /**
+     * Same parsing as symfony/rate-limiter ("+<interval>" relative format); must move time forward.
+     */
+    private static function isValidInterval(string $interval): bool
+    {
+        $now = new DateTimeImmutable('@0');
+
+        try {
+            $then = @$now->modify('+' . $interval);
+        } catch (Throwable) {
+            return false;
+        }
+
+        return $then instanceof DateTimeImmutable && $then > $now;
     }
 }

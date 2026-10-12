@@ -68,6 +68,7 @@ final readonly class UnlocalizedDefaultLocaleSubscriber implements EventSubscrib
         $request->attributes->set('_locale', $locale);
         $request->setLocale($locale);
         if ($this->translator instanceof LocaleAwareInterface) {
+            // @igor-ignore - Set on every matching main request (same as Symfony LocaleListener); framework LocaleAwareListener resets it.
             $this->translator->setLocale($locale);
         }
     }

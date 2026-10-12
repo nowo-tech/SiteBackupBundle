@@ -5,6 +5,8 @@ restore:
     done: 'Herstel voltooid. Opnieuw laden…'
 panel:
   title: 'Siteback-up'
+  login:
+    too_many_attempts: 'Te veel inlogpogingen. Probeer het over %minutes% minuut/minuten opnieuw.'
 setup:
   wizard:
     title: 'Deze site instellen'

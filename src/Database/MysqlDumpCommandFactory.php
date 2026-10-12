@@ -79,7 +79,7 @@ final class MysqlDumpCommandFactory
                 throw new InvalidArgumentException('DATABASE_URL has no host.');
             }
             $command[] = '--host=' . rawurldecode($parts['host']);
-            $command[] = '--port=' . (string) ($parts['port'] ?? 3306);
+            $command[] = '--port=' . ($parts['port'] ?? 3306);
         }
 
         $command[] = '--user=' . rawurldecode((string) ($parts['user'] ?? ''));

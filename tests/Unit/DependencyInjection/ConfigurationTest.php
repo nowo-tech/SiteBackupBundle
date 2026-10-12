@@ -34,6 +34,10 @@ final class ConfigurationTest extends TestCase
         self::assertNull($config['setup']['layout_template']);
         self::assertNull($config['panel']['layout_template']);
         self::assertSame('custom', $config['css_framework']);
+        self::assertSame(
+            ['enabled' => true, 'limit' => 5, 'interval' => '15 minutes', 'policy' => 'fixed_window', 'limiter' => null, 'cache_pool' => null],
+            $config['security']['login_throttle'],
+        );
         self::assertSame('never', $config['setup']['locale']['in_path']);
         self::assertSame('en', $config['setup']['locale']['default']);
         self::assertSame(['en'], $config['setup']['locale']['enabled']);
@@ -174,5 +178,24 @@ final class ConfigurationTest extends TestCase
                 'locale' => ['unlocalized' => 'invalid'],
             ],
         ]]);
+    }
+
+    public function testLoginThrottleRejectsInvalidInterval(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage('Invalid login_throttle.interval');
+        (new Processor())->processConfiguration(new Configuration(), [['security' => ['login_throttle' => ['interval' => 'not a duration']]]]);
+    }
+
+    public function testLoginThrottleRejectsNonPositiveInterval(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+        (new Processor())->processConfiguration(new Configuration(), [['security' => ['login_throttle' => ['interval' => '0 seconds']]]]);
+    }
+
+    public function testLoginThrottleRejectsZeroLimit(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+        (new Processor())->processConfiguration(new Configuration(), [['security' => ['login_throttle' => ['limit' => 0]]]]);
     }
 }

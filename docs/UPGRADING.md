@@ -1,5 +1,29 @@
 # Upgrading
 
+## To 1.17.0
+
+From **1.16.0** — no breaking configuration changes. The panel login throttle is **on by default**.
+
+```bash
+composer update nowo-tech/site-backup-bundle   # pulls symfony/rate-limiter
+php bin/console cache:clear
+```
+
+- **New hard dependency:** `symfony/rate-limiter` `^7.3 || ^8.0`. With FrameworkBundle it also enables `framework.rate_limiter` and the `cache.rate_limiter` pool, which the built-in limiter uses (fallback `cache.app`). If neither pool exists the container fails to compile with a message naming `security.login_throttle.cache_pool` / `limiter` / `enabled: false`.
+- **Default behaviour:** 5 password attempts per client IP per 15 minutes (only when the password gate is enabled). Over the limit the login page answers HTTP 429 with `Retry-After`. A successful login resets the counter and rotates the session id. With several app servers, point `cache_pool` to a shared pool (e.g. Redis); behind a proxy configure `framework.trusted_proxies`. Tests that post many wrong passwords can raise `limit` under `when@test` or set `enabled: false`.
+- **Hosts that already decorate `SiteBackupAccessGateInterface`** with their own throttle + `migrate(true)` keep working (the decorator now wraps the bundle wrapper; attempts are then counted twice, by both limiters). Remove the decorator, or keep your limiter and plug it in:
+
+```yaml
+nowo_site_backup:
+    security:
+        login_throttle:
+            limiter: limiter.site_backup_login   # existing framework.rate_limiter.site_backup_login
+```
+
+  Then the decorator class (and, if you drop `limiter:`, the `framework.rate_limiter.site_backup_login` entry and its tests) can be deleted.
+- **Container wiring:** the `SiteBackupAccessGateInterface` alias now targets `nowo_site_backup.access_gate` (`ThrottledSiteBackupAccessGate`). Code that fetched `PasswordSiteBackupAccessGate` directly bypasses the throttle; inject the interface instead.
+- **Template overrides:** `panel/login.html.twig` receives `throttled` (bool); the message is in `error` (rendered by the panel layout flash block).
+
 
 ## To 1.16.0
 

@@ -5,6 +5,8 @@ restore:
     done: 'Restauración terminada. Recargando…'
 panel:
   title: 'Copia de seguridad del sitio'
+  login:
+    too_many_attempts: 'Demasiados intentos de inicio de sesión. Vuelve a intentarlo en %minutes% minuto(s).'
 setup:
   wizard:
     title: 'Configura este sitio'

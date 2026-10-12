@@ -629,7 +629,7 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *         }>,
  *     },
  *     rate_limiter?: bool|array{ // Rate limiter configuration
- *         enabled?: bool|Param, // Default: false
+ *         enabled?: bool|Param, // Default: true
  *         limiters?: array<string, array{ // Default: []
  *             lock_factory?: scalar|Param|null, // The service ID of the lock factory used by this limiter (or null to disable locking). // Default: "auto"
  *             cache_pool?: scalar|Param|null, // The cache pool to use for storing the current limiter state. // Default: "cache.rate_limiter"
@@ -1049,12 +1049,27 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *     status_code?: int|Param, // HTTP status code while restore mode is active. // Default: 503
  *     subscriber_priority?: int|Param, // kernel.request listener priority (default 31: after router). // Default: 31
  *     process_timeout?: int|Param, // Timeout in seconds for tar / dump subprocesses (REQ-RUNTIME-001). // Default: 600
+ *     bump_time_limit?: bool|Param, // When true (v1.16+), main requests under the setup path (incl. /{locale} variants) and the backup panel path call set_time_limit(bump_time_limit_seconds ?? process_timeout) so FrankenPHP workers / short prod max_execution_time do not kill dump, restore, migrate subprocesses mid-pipe. Default false (BC). // Default: false
+ *     bump_time_limit_seconds?: int|Param, // Seconds passed to set_time_limit() when bump_time_limit is true. null = process_timeout; 0 = unlimited. // Default: null
+ *     security_guard?: array{ // Opt-in production safety guard (v1.16+): outside local_environments, refuse to serve HTTP / run console commands while the setup token, panel password hash or APP_SECRET are empty or documented placeholders.
+ *         enabled?: bool|Param, // Default: false
+ *         local_environments?: list<scalar|Param|null>,
+ *         require_setup_token?: bool|Param, // Require a non-empty setup.setup_token when the setup wizard is enabled. // Default: true
+ *         forbidden_setup_tokens?: list<scalar|Param|null>,
+ *         require_panel_password?: bool|Param, // Require a non-empty security.password_hash when the panel and password_protection are enabled (ignored with a custom access_gate). // Default: true
+ *         forbidden_password_hashes?: list<scalar|Param|null>,
+ *         check_app_secret?: bool|Param, // Default: true
+ *         app_secret?: scalar|Param|null, // Value checked as APP_SECRET. null = %env(default::APP_SECRET)%. // Default: null
+ *         forbidden_app_secrets?: list<scalar|Param|null>,
+ *         app_secret_min_length?: int|Param, // Default: 16
+ *         skip_console_commands?: list<scalar|Param|null>,
+ *     },
  *     css_framework?: "bootstrap"|"bootstrap4"|"bootstrap5"|"tailwind"|"foundation"|"custom"|"tabler"|"none"|Param, // Host CSS stack hint for setup/panel Web UI (REQ-UI-001). Twig global nowo_site_backup_css_framework. Demo default: custom (semantic nowo-ui-*). // Default: "custom"
  *     backup?: array{ // What is included in an integral backup.
  *         include_paths?: list<scalar|Param|null>,
  *         exclude_patterns?: list<scalar|Param|null>,
  *         storage_dir?: scalar|Param|null, // Directory where .tar.gz + .meta.json artifacts are stored. // Default: "%kernel.project_dir%/var/site-backup/archives"
- *         database_dump_command?: scalar|Param|null, // Shell command that writes SQL to stdout (e.g. mysqldump …). Empty = no DB dump. // Default: null
+ *         database_dump_command?: scalar|Param|null, // Shell command that writes SQL to stdout (e.g. mysqldump …, or the built-in "php bin/console nowo:site-backup:db-dump"). Empty = no DB dump. // Default: null
  *     },
  *     restore?: array{ // Safe restore options.
  *         progress_file?: scalar|Param|null, // JSON progress file used by the loading UI (keep outside overwritten paths if possible). // Default: "%kernel.project_dir%/var/site-backup/restore-progress.json"
@@ -1079,6 +1094,14 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *         password_protection?: bool|Param, // Default: true
  *         password_hash?: scalar|Param|null, // Default: null
  *         access_gate?: scalar|Param|null, // Default: null
+ *         login_throttle?: array{ // v1.17+: per-client-IP rate limit of panel password attempts (HTTP 429 + Retry-After when exceeded; reset on success). Only applies while the gate reports isProtectionEnabled(). The session id is always rotated after a successful login.
+ *             enabled?: bool|Param, // Default: true
+ *             limit?: int|Param, // Maximum failed + successful attempts per client IP within interval. // Default: 5
+ *             interval?: scalar|Param|null, // Window length, any relative date format (e.g. "15 minutes", "1 hour"). // Default: "15 minutes"
+ *             policy?: "fixed_window"|"sliding_window"|Param, // Default: "fixed_window"
+ *             limiter?: scalar|Param|null, // Optional host RateLimiterFactoryInterface service id (e.g. "limiter.site_backup_login"). When set, limit/interval/policy/cache_pool are ignored. // Default: null
+ *             cache_pool?: scalar|Param|null, // PSR-6 cache pool service id for the built-in limiter storage. null = "cache.rate_limiter", else "cache.app". // Default: null
+ *         },
  *     },
  *     storage?: array{
  *         history_file?: scalar|Param|null, // Default: "%kernel.project_dir%/var/site-backup/history.jsonl"
@@ -1103,7 +1126,11 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *         layout_template?: scalar|Param|null, // Host Twig layout for setup pages (extends pattern like CookieConsent layout_template). Must define block nowo_site_backup_content. Default uses the bundle standalone layout. // Default: null
  *         require_done_marker?: bool|Param, // When true, missing setup.done forces the wizard (fresh clones). Default false so adding the bundle does not lock existing apps. // Default: false
  *         short_circuit_when_done?: bool|Param, // When true (default), SetupNeedEvaluator skips all detectors if setup.done exists or DurableSetupDoneStoreInterface::isDone() is true. Set false if a host detector must re-open the gate after done. // Default: true
- *         reopen_when_detector_requires?: bool|Param, // When true (v1.15+), short_circuit_when_done no longer hides detectors: if setup.done / the durable store says complete but a tagged SetupNeedDetector still requires setup, setup.done and the durable store are cleared and progress is reset so the wizard can run again (SetupWizardReopener). Default false (BC). Costs one detector pass per request. // Default: false
+ *         reopen_when_detector_requires?: bool|Param, // When true (v1.15+), short_circuit_when_done no longer hides detectors: if setup.done / the durable store says complete but a tagged SetupNeedDetector still requires setup, setup.done and the durable store are cleared and progress is reset so the wizard can run again (SetupWizardReopener). Default false (BC). Costs one detector pass per request (the Doctrine detectors reuse a healthy answer for setup.worker_memo.schema_probe_ttl). // Default: false
+ *         worker_memo?: array{ // Per-worker TTL memos (v1.16+) that survive kernel.reset in FrankenPHP worker mode, so schema probes and the progress-table DDL do not run on every request.
+ *             schema_probe_ttl?: int|Param, // Seconds a positive answer (schema exists / DB reachable / tables present) from the cold-start checker and the doctrine_connect / doctrine_schema_empty detectors is reused. Negative answers are never cached. 0 = probe every time. // Default: 60
+ *             progress_ddl_ttl?: int|Param, // Seconds the Doctrine progress / step-journal "CREATE TABLE IF NOT EXISTS" is remembered across requests (a dropped table is still re-created on the first failing query). 0 = once per request (pre-1.16 behaviour). // Default: 3600
+ *         },
  *         brand_name?: scalar|Param|null, // Default: "Site Setup"
  *         setup_token?: scalar|Param|null, // Optional shared secret for /_setup (?token= or X-Setup-Token). // Default: null
  *         progress_file?: scalar|Param|null, // Default: "%kernel.project_dir%/var/site-backup/setup-progress.json"
