@@ -21,7 +21,9 @@ use Nowo\SiteBackupBundle\Setup\Step\SampleDataStep;
 use Nowo\SiteBackupBundle\Setup\Step\SchemaUpdateStep;
 use Nowo\SiteBackupBundle\Setup\Step\SqlFileStep;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupMarkerManager;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 use Symfony\Component\Filesystem\Filesystem;
 
 use const PHP_BINARY;
@@ -76,6 +78,110 @@ final class SetupStepsTest extends TestCase
         $envLocal = file_get_contents($this->dir . '/.env.local');
         self::assertIsString($envLocal);
         self::assertStringContainsString('DATABASE_URL=', $envLocal);
+    }
+
+    public function testDatabaseUrlStepSingleQuotesValueSoDotenvNeverExpandsIt(): void
+    {
+        $url  = 'mysql://app:pa$HOME$(id)\1$0@db:3306/app?serverVersion=8.0';
+        $step = new DatabaseUrlStep('db', 'DB', optional: false);
+        self::assertTrue($step->run($this->ctx, new SetupStepInput(['database_url' => $url]))->isSuccess());
+        self::assertSame("DATABASE_URL='" . $url . "'\n", file_get_contents($this->dir . '/.env.local'));
+
+        // Existing line replaced literally (no preg backreferences), other lines kept.
+        file_put_contents($this->dir . '/.env.local', "APP_ENV=prod\nDATABASE_URL=old\nOTHER=1\n");
+        self::assertTrue($step->run($this->ctx, new SetupStepInput(['database_url' => $url]))->isSuccess());
+        $env = (string) file_get_contents($this->dir . '/.env.local');
+        self::assertSame("APP_ENV=prod\nDATABASE_URL='" . $url . "'\nOTHER=1\n", $env);
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function rejectedDatabaseUrlProvider(): iterable
+    {
+        yield 'single quote breaks out' => ["mysql://u:p'\$(touch /tmp/pwn)'@db/app"];
+        yield 'newline injects a variable' => ["mysql://u:p@db/app\nAPP_SECRET=evil"];
+        yield 'carriage return' => ["mysql://u:p@db/app\rX=1"];
+        yield 'nul byte' => ["mysql://u:p@db/app\0"];
+        yield 'tab control char' => ["mysql://u:p\t@db/app"];
+    }
+
+    #[DataProvider('rejectedDatabaseUrlProvider')]
+    public function testDatabaseUrlStepRejectsQuotesAndControlCharacters(string $url): void
+    {
+        file_put_contents($this->dir . '/.env.local', "DATABASE_URL=old\n");
+        $step   = new DatabaseUrlStep('db', 'DB', optional: false);
+        $result = $step->run($this->ctx, new SetupStepInput(['database_url' => $url]));
+        self::assertFalse($result->isSuccess());
+        self::assertSame("DATABASE_URL=old\n", file_get_contents($this->dir . '/.env.local'));
+        self::assertNull($this->ctx->getAnswer('database_url_set'));
+    }
+
+    public function testSqlFileStepRejectsImportPathOutsideSiteBackupDir(): void
+    {
+        $conn = new class {
+            /** @var list<string> */
+            public array $executed = [];
+
+            public function executeStatement(string $sql): int
+            {
+                $this->executed[] = $sql;
+
+                return 1;
+            }
+        };
+        file_put_contents($this->dir . '/secret.sql', 'SELECT 1;');
+        $step = new SqlFileStep('sql', 'SQL', [], ifExists: true, connection: $conn);
+
+        foreach (['/etc/passwd', 'secret.sql', 'var/site-backup/../../secret.sql', $this->dir . '/secret.sql'] as $path) {
+            $ctx = new SetupContext($this->dir, 'full_database');
+            $ctx->setAnswer('sql_import_path', $path);
+            self::assertFalse($step->isEnabled($ctx));
+            $result = $step->run($ctx, new SetupStepInput());
+            self::assertFalse($result->isSuccess());
+            self::assertStringContainsString('var/site-backup', $result->getMessage());
+        }
+        self::assertSame([], $conn->executed);
+    }
+
+    public function testSqlFileStepErrorDoesNotEchoDumpContentsAndRestoreDumpIsDeletedAfterImport(): void
+    {
+        $this->fs->dumpFile($this->dir . '/var/site-backup/last-restore-dump.sql', "INSERT INTO users VALUES ('admin', 'secret-hash');");
+        $failing = new class {
+            public function executeStatement(string $sql): int
+            {
+                throw new RuntimeException("An exception occurred while executing a query: SQLSTATE[42000]: Syntax error near '" . $sql . "'");
+            }
+        };
+        $ctx = new SetupContext($this->dir, 'post_restore');
+        $ctx->setAnswer('sql_import_path', 'var/site-backup/last-restore-dump.sql');
+        $result = (new SqlFileStep('sql', 'SQL', [], connection: $failing))->run($ctx, new SetupStepInput());
+        self::assertFalse($result->isSuccess());
+        self::assertStringNotContainsString('secret-hash', $result->getMessage());
+        self::assertStringContainsString('SQLSTATE[42000]', $result->getMessage());
+        self::assertStringContainsString('last-restore-dump.sql', $result->getMessage());
+        self::assertFileExists($this->dir . '/var/site-backup/last-restore-dump.sql');
+
+        $noState = new class {
+            public function executeStatement(string $sql): int
+            {
+                throw new RuntimeException('boom ' . $sql);
+            }
+        };
+        $plain = (new SqlFileStep('sql', 'SQL', [], connection: $noState))->run($ctx, new SetupStepInput());
+        self::assertStringNotContainsString('secret-hash', $plain->getMessage());
+
+        $ok = new class {
+            public function executeStatement(string $sql): int
+            {
+                return 1;
+            }
+        };
+        $this->fs->dumpFile($this->dir . '/var/site-backup/full-import.sql', 'SELECT 1;');
+        $step = new SqlFileStep('sql', 'SQL', ['var/site-backup/full-import.sql'], connection: $ok);
+        self::assertTrue($step->run($ctx, new SetupStepInput())->isSuccess());
+        self::assertFileDoesNotExist($this->dir . '/var/site-backup/last-restore-dump.sql');
+        self::assertFileExists($this->dir . '/var/site-backup/full-import.sql');
     }
 
     public function testAdminUserStep(): void

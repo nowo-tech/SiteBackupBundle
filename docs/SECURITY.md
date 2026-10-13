@@ -20,8 +20,8 @@ Covers backup creation, integrity verification, restore orchestration, restore l
 ## Attack surface
 
 - Admin panel (`/_site_backup`) — create/delete/restore
-- Progress JSON endpoint (intentionally reachable during restore for the loading UI)
-- Setup wizard (`/_setup`) — only while setup is required; optional `setup_token`
+- Progress JSON endpoint (intentionally reachable during restore for the loading UI; anonymous callers get `active` / `phase` / `percent` / `message` only)
+- Setup wizard (`/_setup`, `/_setup/api/progress`, `/_setup/api/advance`) — only while setup is required; `setup_token` (**mandatory on internet-facing hosts**)
 - CLI commands (`nowo:site-backup:*`)
 - Configured `database_dump_command` and setup `console` steps (shell — operator-configured only)
 - Archive extract/apply paths
@@ -32,11 +32,18 @@ Covers backup creation, integrity verification, restore orchestration, restore l
 | --- | --- | --- |
 | Panel password guessing / session fixation | High | `security.login_throttle` per-IP rate limit (HTTP 429 + `Retry-After`) and session id rotation after login (v1.17+) |
 | Unauthorized restore/delete | High | REQ-UI-002 `access_roles` / `SiteBackupAccessCheckerInterface` (default `ROLE_ADMIN`) unless `allow_unauthenticated`; plus password gate / custom `SiteBackupAccessGateInterface` (**fail-closed** when `password_protection` is true but `password_hash` is empty); CSRF on panel POSTs (**fail-closed** if CSRF manager missing — require `symfony/security-csrf`). Password gate is **additional** to role check. `allow_unauthenticated: true` is demo/dev only |
-| Unauthorized setup / admin creation | High | Wizard only while detectors say required; optional `setup_token`; CSRF fail-closed; `AdminUserProvisionerInterface` is app-owned |
+| Unauthorized setup / admin creation | High | Wizard page and `api/advance` answer only while setup is required (`api/advance` returns 404 once completed); the profile is pinned once a run started; `setup_token` (see below); CSRF fail-closed; `AdminUserProvisionerInterface` is app-owned |
+| `.env.local` injection via DATABASE_URL | High | Value always written single-quoted (no Dotenv `$VAR` / `$(cmd)` expansion); single quotes, line breaks and control characters rejected |
+| Arbitrary file import via `sql_import_path` | High | Only existing `.sql` files under `var/site-backup/` (real path, no `../` / symlink escape); SQL errors report the SQLSTATE only, never the dump contents |
 | Path traversal on apply | High | Relative paths from archive; protected paths; never overwrite `var/site-backup/` |
 | Command injection via dump/setup cmd | High | Dump / console commands are **operator-configured** only (not from free-form HTTP input) |
-| Progress info disclosure | Low | Endpoints expose phase/percent/message only |
+| Progress info disclosure | Low | Restore `progress.json` gives the log / error / backup id only to authorised panel users; `/_setup/api/progress` needs the setup token and never returns wizard answers |
+| Archive / dump at rest | Medium | Archives (`chmod 0600`) and `var/site-backup/last-restore-dump.sql` (`0600`, deleted after the setup `sql_file` step imports it) are owner-only |
 | DoS via huge archives / long setup | Medium | `process_timeout`; ops should size storage and includes carefully |
+
+## Setup token (mandatory on internet-facing hosts)
+
+`setup.setup_token` defaults to `null`, which leaves `/_setup` and its JSON API open to anyone who reaches the host while setup is required (fresh install, after a restore, after `setup:reset`). Whoever gets there first can write `DATABASE_URL`, create the admin user or import a dump. Always set a long random `SITE_SETUP_TOKEN` on hosts reachable from the internet, and turn on `security_guard.enabled: true` so an empty or documented token fails closed.
 
 ## Secrets & cryptography
 

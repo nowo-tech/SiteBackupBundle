@@ -8,15 +8,13 @@ use Nowo\SiteBackupBundle\Setup\SetupContext;
 use Nowo\SiteBackupBundle\Setup\SetupStepInput;
 use Nowo\SiteBackupBundle\Setup\SetupStepResult;
 
-use function is_file;
 use function is_string;
-use function ltrim;
-use function rtrim;
 
 /**
  * First-class choice: guided install (create admin) vs full SQL database import.
  *
- * Answers set: bootstrap_mode = guided|full_database, optional sql_import_path.
+ * Answers set: bootstrap_mode = guided|full_database, optional sql_import_path
+ * (a `.sql` file under var/site-backup/, see {@see SqlImportPath}).
  */
 final class BootstrapModeStep extends AbstractSetupStep
 {
@@ -61,9 +59,9 @@ final class BootstrapModeStep extends AbstractSetupStep
             $path = $this->firstExistingPath($ctx);
         }
 
-        if ($path === '' || !is_file($this->absolute($ctx, $path))) {
+        if ($path === '' || SqlImportPath::resolve($ctx->getProjectDir(), $path) === null) {
             return SetupStepResult::waitingForInput(
-                'Provide a project-relative path to a full .sql dump (or place one at var/site-backup/full-import.sql).',
+                'Provide the path of a full .sql dump inside var/site-backup/ (e.g. var/site-backup/full-import.sql).',
             );
         }
 
@@ -76,20 +74,11 @@ final class BootstrapModeStep extends AbstractSetupStep
     private function firstExistingPath(SetupContext $ctx): string
     {
         foreach ($this->defaultSqlPaths as $candidate) {
-            if (is_file($this->absolute($ctx, $candidate))) {
+            if (SqlImportPath::resolve($ctx->getProjectDir(), $candidate) !== null) {
                 return $candidate;
             }
         }
 
         return '';
-    }
-
-    private function absolute(SetupContext $ctx, string $path): string
-    {
-        if ($path !== '' && $path[0] === '/') {
-            return $path;
-        }
-
-        return rtrim($ctx->getProjectDir(), '/\\') . '/' . ltrim($path, '/');
     }
 }

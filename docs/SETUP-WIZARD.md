@@ -195,7 +195,7 @@ Public setup surface (not a dashboard of cards):
 
 Templates under `@NowoSiteBackupBundle/setup/…` (REQ-TWIG-001 overridable).
 
-Progress for long steps: poll `GET /_setup/api/progress` (same pattern as restore `progress.json`).
+Progress for long steps: poll `GET /_setup/api/progress` (same pattern as restore `progress.json`). It requires the setup token (`?token=` / `X-Setup-Token`) when one is configured and never returns `answers`. `POST /_setup/api/advance` returns 404 once setup is completed; `profile` in its payload is only honoured before a run started (afterwards the stored profile is used).
 
 ## Wizard engine
 

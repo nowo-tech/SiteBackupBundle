@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **`POST /_setup/api/advance` closed after setup**: it answers 404 once setup is completed (same gate as the wizard page), so `{"profile":"minimal"}` can no longer create an extra admin and `{"profile":"full_database"}` can no longer re-import `last-restore-dump.sql`. The payload `profile` is only honoured before a run started; afterwards the stored profile is pinned. Responses no longer include `answers`.
+- **`GET /_setup/api/progress`** requires the setup token (when configured) and no longer returns `answers` (admin email, DATABASE_URL, SQL path).
+- **DATABASE_URL step**: the value is always written single-quoted to `.env.local` (Symfony Dotenv no longer expands `$VAR` / `$(cmd)` or mangles passwords containing `$` / `\`), the existing line is replaced literally (no regex backreferences), and URLs containing `'`, line breaks or control characters are rejected (percent-encode them).
+- **`sql_import_path`** (bootstrap mode / `sql_file` step) is confined to existing `.sql` files under `var/site-backup/` (real path; absolute paths elsewhere, `../` and symlink escapes are rejected). SQL import errors report the file name and SQLSTATE only, never the dump contents.
+- **Restore `progress.json`**: callers that are not authorised for the panel get `active` / `phase` / `percent` / `message` only (no log, error or backup id).
+- Backup archives are `chmod 0600`; `var/site-backup/last-restore-dump.sql` is `0600` and deleted after the setup `sql_file` step imports it.
+- Docs: `setup.setup_token` is mandatory on internet-facing hosts (SECURITY.md, CONFIGURATION.md).
+
 ## [1.18.0] - 2026-10-13
 
 ### Added

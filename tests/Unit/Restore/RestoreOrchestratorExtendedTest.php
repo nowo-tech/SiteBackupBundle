@@ -92,6 +92,7 @@ final class RestoreOrchestratorExtendedTest extends TestCase
         self::assertSame(RestoreProgress::PHASE_COMPLETED, $progress->getPhase());
         self::assertTrue($markers->isRequiredMarked());
         self::assertFileExists($this->projectDir . '/var/site-backup/last-restore-dump.sql');
+        self::assertSame(0o600, fileperms($this->projectDir . '/var/site-backup/last-restore-dump.sql') & 0o777);
         self::assertFalse($orchestrator->isRestoreActive());
     }
 

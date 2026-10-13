@@ -95,7 +95,33 @@ final class ControllersTest extends TestCase
         $unknownRequest->setSession($session);
         self::assertSame(200, $controller->index($unknownRequest)->getStatusCode());
 
-        self::assertSame(200, $controller->progress()->getStatusCode());
+        // progress.json: anonymous pollers only get status / percent / message, never the restore log.
+        $reduced = ['active', 'phase', 'percent', 'message'];
+        $anon    = $controller->progress();
+        self::assertSame(200, $anon->getStatusCode());
+        self::assertSame($reduced, array_keys((array) json_decode((string) $anon->getContent(), true)));
+        $anonRequest = Request::create('/_site_backup/progress.json');
+        $anonRequest->setSession(new Session(new MockArraySessionStorage()));
+        self::assertSame($reduced, array_keys((array) json_decode((string) $controller->progress($anonRequest)->getContent(), true)));
+
+        $authRequest = Request::create('/_site_backup/progress.json');
+        $authRequest->setSession($session);
+        $full = (array) json_decode((string) $controller->progress($authRequest)->getContent(), true);
+        self::assertArrayHasKey('log', $full);
+        self::assertArrayHasKey('backup_id', $full);
+
+        $roleLocked = new SiteBackupPanelController(
+            $manager,
+            $gate,
+            $this->createFormFactory($csrf),
+            $twig,
+            ['panel_index' => 'index', 'panel_login' => 'login', 'panel_history' => 'history'],
+            '/_site_backup',
+            $csrf,
+            null,
+            false,
+        );
+        self::assertSame($reduced, array_keys((array) json_decode((string) $roleLocked->progress($authRequest)->getContent(), true)));
 
         $historyRequest = Request::create('/history');
         $historyRequest->setSession($session);
@@ -186,10 +212,21 @@ final class ControllersTest extends TestCase
         self::assertSame(302, $controller->index($post)->getStatusCode());
 
         self::assertSame(200, $controller->done()->getStatusCode());
-        self::assertSame(200, $controller->progress()->getStatusCode());
+        // Progress API is token-gated and never leaks answers.
+        self::assertSame(403, $controller->progress()->getStatusCode());
+        self::assertSame(403, $controller->progress(Request::create('/api/progress'))->getStatusCode());
+        $progressRequest = Request::create('/api/progress');
+        $progressRequest->query->set('token', 'secret-token');
+        $progressResponse = $controller->progress($progressRequest);
+        self::assertSame(200, $progressResponse->getStatusCode());
+        $progressData = json_decode((string) $progressResponse->getContent(), true);
+        self::assertIsArray($progressData);
+        self::assertArrayNotHasKey('answers', $progressData);
+        self::assertSame('completed', $progressData['phase']);
 
+        // Setup is done: the advance API is gone even with a valid token.
         $api = Request::create('/api/advance', 'POST', [], [], [], ['CONTENT_TYPE' => 'application/json'], '{"profile":"fresh_install"}');
         $api->query->set('token', 'secret-token');
-        self::assertSame(200, $controller->advanceApi($api)->getStatusCode());
+        self::assertSame(404, $controller->advanceApi($api)->getStatusCode());
     }
 }

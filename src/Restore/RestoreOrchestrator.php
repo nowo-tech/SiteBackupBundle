@@ -132,6 +132,8 @@ final class RestoreOrchestrator
                 $targetDump = rtrim($this->projectDir, '/\\') . '/var/site-backup/last-restore-dump.sql';
                 $this->filesystem->mkdir(dirname($targetDump));
                 $this->filesystem->copy($dump, $targetDump, true);
+                // Plaintext copy of the whole DB: owner-only until SqlFileStep imports (and deletes) it.
+                $this->filesystem->chmod($targetDump, 0o600);
                 $this->appendLog('Database dump copied to var/site-backup/last-restore-dump.sql (import separately if needed).');
             }
 

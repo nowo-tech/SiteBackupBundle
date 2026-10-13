@@ -13,11 +13,10 @@ use function file_exists;
 use function file_get_contents;
 use function is_string;
 use function preg_match;
-use function preg_replace;
+use function preg_replace_callback;
 use function rtrim;
 use function sprintf;
 use function str_contains;
-use function str_replace;
 
 /**
  * Optional DATABASE_URL capture into .env.local (never commits secrets to git).
@@ -54,13 +53,20 @@ final class DatabaseUrlStep extends AbstractSetupStep
             return SetupStepResult::fail('DATABASE_URL looks invalid.');
         }
 
-        $envLocal = rtrim($ctx->getProjectDir(), '/\\') . '/.env.local';
-        $line     = 'DATABASE_URL=' . $this->quoteEnv($url) . "\n";
+        // Single quotes keep Dotenv from expanding $VAR / $(cmd); a quote or line break would escape them.
+        if (str_contains($url, "'") || preg_match('/[\x00-\x1F\x7F]/', $url) === 1) {
+            return SetupStepResult::fail('DATABASE_URL must not contain single quotes, line breaks or control characters (percent-encode them, e.g. %27).');
+        }
+
+        $envLocal   = rtrim($ctx->getProjectDir(), '/\\') . '/.env.local';
+        $assignment = 'DATABASE_URL=' . $this->quoteEnv($url);
+        $line       = $assignment . "\n";
 
         if (file_exists($envLocal)) {
             $existing = (string) file_get_contents($envLocal);
             if (str_contains($existing, 'DATABASE_URL=')) {
-                $existing = preg_replace('/^DATABASE_URL=.*$/m', 'DATABASE_URL=' . $this->quoteEnv($url), $existing) ?? $existing;
+                // Callback (not a replacement string) so `$1` / `\1` in passwords stay literal.
+                $existing = preg_replace_callback('/^DATABASE_URL=.*$/m', static fn (): string => $assignment, $existing) ?? $existing;
                 $this->filesystem->dumpFile($envLocal, $existing);
             } else {
                 $this->filesystem->appendToFile($envLocal, $line);
@@ -74,12 +80,11 @@ final class DatabaseUrlStep extends AbstractSetupStep
         return SetupStepResult::ok(sprintf('Wrote DATABASE_URL to %s', $envLocal));
     }
 
+    /**
+     * Always single-quoted: Symfony Dotenv reads single-quoted values literally (no `$` / `\` processing).
+     */
     private function quoteEnv(string $value): string
     {
-        if (preg_match('/[\s#"\']/', $value) === 1) {
-            return '"' . str_replace('"', '\\"', $value) . '"';
-        }
-
-        return $value;
+        return "'" . $value . "'";
     }
 }

@@ -42,6 +42,7 @@ Root key: `nowo_site_backup`.
 | `security.login_throttle.limiter` | `null` | Host `RateLimiterFactoryInterface` service id (e.g. `limiter.site_backup_login` from `framework.rate_limiter`). When set, `limit` / `interval` / `policy` / `cache_pool` are ignored |
 | `security.login_throttle.cache_pool` | `null` | PSR-6 pool for the built-in limiter (`nowo_site_backup.login_limiter`). `null` = `cache.rate_limiter`, else `cache.app`; none available → `LogicException` at container compile time. Use a shared pool (Redis) with several app servers |
 | `templates.*` | `@NowoSiteBackupBundle/...` | Overrideable Twig templates |
+| `setup.setup_token` | `null` | Shared secret for `/_setup` (`?token=` or `X-Setup-Token`), also required by `/_setup/api/progress` and `/_setup/api/advance`. **Mandatory on any internet-facing host**: with `null` anyone who reaches the host before setup completes can drive the wizard (DATABASE_URL, admin user, SQL import). Enforce it with `security_guard.enabled: true` |
 | `setup.path_prefix` | `/_setup` | Wizard URL prefix; drives imported setup routes + site-gate exclusions |
 | `setup.locale.in_path` | `never` | `never` \| `always` \| `both` — locale prefix on setup URLs (AuthKit-style) |
 | `setup.locale.default` | `en` | Default `{_locale}` for localized setup routes |

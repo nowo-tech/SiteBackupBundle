@@ -57,6 +57,82 @@ final class SetupWizardControllerExtendedTest extends TestCase
         self::assertSame(302, $controller->index(Request::create('/'))->getStatusCode());
     }
 
+    public function testAdvanceApiIsNotFoundOnceSetupIsCompleted(): void
+    {
+        $evaluator    = new SetupNeedEvaluator([], true);
+        $orchestrator = $this->createSetupOrchestrator([
+            'fresh_install' => ['steps' => [['type' => 'marker', 'write_done' => true]]],
+            'minimal'       => ['steps' => [['type' => 'admin_user', 'skip_if_admin_exists' => false]]],
+            'full_database' => ['steps' => [['type' => 'sql_file', 'paths' => ['var/site-backup/last-restore-dump.sql']]]],
+        ]);
+        $orchestrator->advance('fresh_install');
+
+        // setup_token left at its default (null): before the fix anyone could re-run setup with another profile.
+        $controller = new SetupWizardController(
+            $orchestrator,
+            $evaluator,
+            $this->createFormFactory(),
+            $this->createMock(Environment::class),
+            ['setup_wizard' => 'wizard', 'setup_done' => 'done', 'setup_token' => 'token'],
+            '/_setup',
+            'Brand',
+            null,
+        );
+
+        foreach (['minimal', 'full_database'] as $profile) {
+            $api      = Request::create('/api/advance', 'POST', [], [], [], ['CONTENT_TYPE' => 'application/json'], '{"profile":"' . $profile . '","admin_email":"evil@example.com","admin_password":"x"}');
+            $response = $controller->advanceApi($api);
+            self::assertSame(404, $response->getStatusCode());
+        }
+
+        $progress = $orchestrator->getProgress();
+        self::assertSame(SetupProgress::PHASE_COMPLETED, $progress->getPhase());
+        self::assertSame('fresh_install', $progress->getProfile());
+    }
+
+    public function testAdvanceApiPinsStoredProfileAndHidesAnswers(): void
+    {
+        $setupDir = $this->harnessProjectDir . '/_setup';
+        $markers  = new SetupMarkerManager($setupDir . '/required', $setupDir . '/done');
+        $markers->markRequired('fresh_install');
+        $evaluator    = new SetupNeedEvaluator([new MarkerFileDetector($markers, false, true)], true);
+        $orchestrator = $this->createSetupOrchestrator([
+            'fresh_install' => ['steps' => [['type' => 'bootstrap_mode'], ['type' => 'marker', 'write_done' => true]]],
+            'full_database' => ['steps' => [['type' => 'marker', 'write_done' => true]]],
+        ]);
+        self::assertSame(SetupProgress::PHASE_WAITING, $orchestrator->advance('fresh_install')->getPhase());
+
+        $controller = new SetupWizardController(
+            $orchestrator,
+            $evaluator,
+            $this->createFormFactory(),
+            $this->createMock(Environment::class),
+            ['setup_wizard' => 'wizard', 'setup_done' => 'done', 'setup_token' => 'token'],
+            '/_setup',
+            'Brand',
+            null,
+        );
+
+        $api      = Request::create('/api/advance', 'POST', [], [], [], ['CONTENT_TYPE' => 'application/json'], '{"profile":"full_database"}');
+        $response = $controller->advanceApi($api);
+        self::assertSame(200, $response->getStatusCode());
+        $data = json_decode((string) $response->getContent(), true);
+        self::assertIsArray($data);
+        self::assertSame('fresh_install', $data['profile']);
+        self::assertSame(SetupProgress::PHASE_WAITING, $data['phase']);
+        self::assertArrayNotHasKey('answers', $data);
+        self::assertFalse($markers->isDone());
+
+        // Before any run (idle) the payload may still choose the profile.
+        $orchestrator->resetProgress();
+        $first = json_decode((string) $controller->advanceApi(
+            Request::create('/api/advance', 'POST', [], [], [], ['CONTENT_TYPE' => 'application/json'], '{"profile":"full_database"}'),
+        )->getContent(), true);
+        self::assertIsArray($first);
+        self::assertSame('full_database', $first['profile']);
+        self::assertSame(SetupProgress::PHASE_COMPLETED, $first['phase']);
+    }
+
     public function testWizardRendersWaitingStepWithCurrentStep(): void
     {
         $setupDir = $this->harnessProjectDir . '/_setup';

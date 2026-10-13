@@ -7,12 +7,14 @@ namespace Nowo\SiteBackupBundle\Setup\Step;
 use Nowo\SiteBackupBundle\Setup\SetupContext;
 use Nowo\SiteBackupBundle\Setup\SetupStepInput;
 use Nowo\SiteBackupBundle\Setup\SetupStepResult;
+use ReflectionClass;
 use Symfony\Component\Finder\Finder;
 use Throwable;
 
 use function array_unique;
 use function array_unshift;
 use function array_values;
+use function basename;
 use function count;
 use function file_get_contents;
 use function glob;
@@ -21,10 +23,13 @@ use function is_file;
 use function is_object;
 use function is_string;
 use function ltrim;
+use function preg_match;
+use function realpath;
 use function rtrim;
 use function sprintf;
 use function str_contains;
 use function trim;
+use function unlink;
 
 /**
  * Executes SQL files. Prefer idempotent SQL in apps.
@@ -32,6 +37,9 @@ use function trim;
  */
 final class SqlFileStep extends AbstractSetupStep
 {
+    /** Copied by RestoreOrchestrator; deleted after a successful import. */
+    public const RESTORE_DUMP = 'var/site-backup/last-restore-dump.sql';
+
     /**
      * @param list<string> $paths Absolute or project-relative paths / globs
      */
@@ -56,6 +64,11 @@ final class SqlFileStep extends AbstractSetupStep
 
     public function run(SetupContext $ctx, SetupStepInput $input): SetupStepResult
     {
+        $fromAnswer = $ctx->getAnswer('sql_import_path');
+        if (is_string($fromAnswer) && $fromAnswer !== '' && SqlImportPath::resolve($ctx->getProjectDir(), $fromAnswer) === null) {
+            return SetupStepResult::fail('sql_import_path must be an existing .sql file inside var/site-backup/.');
+        }
+
         $files = $this->resolveFiles($ctx);
         if ($files === []) {
             if ($this->ifExists) {
@@ -71,7 +84,8 @@ final class SqlFileStep extends AbstractSetupStep
             );
         }
 
-        $log = [];
+        $log     = [];
+        $current = '';
         try {
             foreach ($files as $file) {
                 $sql = file_get_contents($file);
@@ -79,13 +93,34 @@ final class SqlFileStep extends AbstractSetupStep
                     $log[] = sprintf('skip empty: %s', $file);
                     continue;
                 }
+                $current = $file;
                 $this->connection->executeStatement($sql);
                 $log[] = sprintf('imported: %s', $file);
+                $this->discardRestoreDump($ctx, $file);
             }
 
             return SetupStepResult::ok(sprintf('Imported %d SQL file(s).', count($files)), $log);
         } catch (Throwable $e) {
-            return SetupStepResult::fail($e->getMessage(), $log);
+            // Driver messages quote the failing SQL (dump contents); only keep the SQLSTATE.
+            return SetupStepResult::fail($this->safeErrorMessage($current, $e), $log);
+        }
+    }
+
+    private function safeErrorMessage(string $file, Throwable $e): string
+    {
+        $state = preg_match('/SQLSTATE\[[0-9A-Z]{5}\]/', $e->getMessage(), $m) === 1 ? ' ' . $m[0] : '';
+
+        return sprintf('SQL import failed for %s (%s%s); check the database server logs.', basename($file), (new ReflectionClass($e))->getShortName(), $state);
+    }
+
+    /**
+     * The restore copy of the database dump is a plaintext copy of the whole DB: drop it once imported.
+     */
+    private function discardRestoreDump(SetupContext $ctx, string $file): void
+    {
+        $dump = realpath(rtrim($ctx->getProjectDir(), '/\\') . '/' . self::RESTORE_DUMP);
+        if ($dump !== false && realpath($file) === $dump) {
+            @unlink($dump);
         }
     }
 
@@ -97,7 +132,10 @@ final class SqlFileStep extends AbstractSetupStep
         $paths      = $this->paths;
         $fromAnswer = $ctx->getAnswer('sql_import_path');
         if (is_string($fromAnswer) && $fromAnswer !== '') {
-            array_unshift($paths, $fromAnswer);
+            $confined = SqlImportPath::resolve($ctx->getProjectDir(), $fromAnswer);
+            if ($confined !== null) {
+                array_unshift($paths, $confined);
+            }
         }
 
         $resolved = [];

@@ -118,11 +118,21 @@ final class SiteBackupPanelController
     }
 
     #[Route('/progress.json', name: 'nowo_site_backup_progress', methods: ['GET'])]
-    public function progress(): JsonResponse
+    public function progress(?Request $request = null): JsonResponse
     {
-        $progress = $this->manager->getRestoreProgress();
+        $data = $this->manager->getRestoreProgress()->toArray();
 
-        return new JsonResponse($progress->toArray());
+        // The restore page polls this anonymously: only panel users get the log / error / backup id.
+        if (!$request instanceof Request || $this->denyUnlessRoleAccess() instanceof Response || !$this->accessGate->isAuthenticated($request)) {
+            $data = [
+                'active'  => $data['active'],
+                'phase'   => $data['phase'],
+                'percent' => $data['percent'],
+                'message' => $data['message'],
+            ];
+        }
+
+        return new JsonResponse($data);
     }
 
     #[Route('/history', name: 'nowo_site_backup_history', methods: ['GET'])]

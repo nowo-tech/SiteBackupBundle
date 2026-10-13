@@ -48,6 +48,7 @@ final class BackupArchiverTest extends TestCase
         );
 
         $artifact = $archiver->create('test-label', 'phpunit');
+        self::assertSame(0o600, fileperms($artifact->getAbsolutePath()) & 0o777, 'archives must be owner-only');
         self::assertFileExists($artifact->getAbsolutePath());
         self::assertNotSame('', $artifact->getArchiveSha256());
         self::assertSame('test-label', $artifact->getLabel());

@@ -65,7 +65,7 @@ final class SetupWizardController
     {
         $pathPrefix = $this->effectivePathPrefix();
 
-        if (!$this->needEvaluator->isSetupRequired() && $this->orchestrator->getProgress()->getPhase() === SetupProgress::PHASE_COMPLETED) {
+        if ($this->isSetupClosed()) {
             return new RedirectResponse('/');
         }
 
@@ -153,15 +153,28 @@ final class SetupWizardController
         ])));
     }
 
-    public function progress(): JsonResponse
+    /**
+     * Wizard progress for polling clients. Gated by the setup token; `answers` (admin email, DATABASE_URL,
+     * SQL import path…) are never exposed.
+     */
+    public function progress(?Request $request = null): JsonResponse
     {
-        return new JsonResponse($this->orchestrator->getProgress()->toArray());
+        if (!$this->isTokenValid($request ?? new Request())) {
+            return new JsonResponse(['error' => 'forbidden'], 403);
+        }
+
+        return new JsonResponse($this->publicProgress($this->orchestrator->getProgress()));
     }
 
     public function advanceApi(Request $request): JsonResponse
     {
         if (!$this->isTokenValid($request)) {
             return new JsonResponse(['error' => 'forbidden'], 403);
+        }
+
+        // Same gate as the wizard page: once setup is done the API no longer exists (no extra admins / re-imports).
+        if ($this->isSetupClosed()) {
+            return new JsonResponse(['error' => 'not_found'], 404);
         }
 
         $payload = $request->request->all();
@@ -178,12 +191,32 @@ final class SetupWizardController
             }
         }
 
-        $progress = $this->orchestrator->advance(
-            is_string($payload['profile'] ?? null) ? $payload['profile'] : null,
-            new SetupStepInput($payload),
-        );
+        // The payload may only pick the profile before a run started; afterwards the stored profile is pinned.
+        $current = $this->orchestrator->getProgress();
+        $profile = $current->getPhase() === SetupProgress::PHASE_IDLE
+            ? (is_string($payload['profile'] ?? null) ? $payload['profile'] : null)
+            : $current->getProfile();
 
-        return new JsonResponse($progress->toArray());
+        $progress = $this->orchestrator->advance($profile, new SetupStepInput($payload));
+
+        return new JsonResponse($this->publicProgress($progress));
+    }
+
+    private function isSetupClosed(): bool
+    {
+        return !$this->needEvaluator->isSetupRequired()
+            && $this->orchestrator->getProgress()->getPhase() === SetupProgress::PHASE_COMPLETED;
+    }
+
+    /**
+     * @return array<string, mixed>
+     */
+    private function publicProgress(SetupProgress $progress): array
+    {
+        $data = $progress->toArray();
+        unset($data['answers']);
+
+        return $data;
     }
 
     private function effectivePathPrefix(): string

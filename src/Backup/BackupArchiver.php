@@ -114,6 +114,8 @@ final class BackupArchiver
             }
 
             $this->createTarGz($payloadDir, $target);
+            // Archives hold the DB dump and .env files: owner-only.
+            $this->filesystem->chmod($target, 0o600);
 
             $archiveSha = (string) hash_file('sha256', $target);
             $size       = (int) filesize($target);

@@ -14,6 +14,7 @@ use Nowo\SiteBackupBundle\Setup\Step\AbstractSetupStep;
 use Nowo\SiteBackupBundle\Setup\Step\BootstrapModeStep;
 use Nowo\SiteBackupBundle\Setup\Step\ConditionalAnswerStep;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupMarkerManager;
+use PHPUnit\Framework\Attributes\DataProvider;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Filesystem\Filesystem;
 
@@ -57,9 +58,9 @@ final class BootstrapAndConditionalStepsTest extends TestCase
         self::assertStringContainsString('guided', $again->getMessage());
     }
 
-    public function testBootstrapAcceptsAbsoluteSqlPath(): void
+    public function testBootstrapAcceptsAbsoluteSqlPathInsideSiteBackupDir(): void
     {
-        $dump = $this->dir . '/dump.sql';
+        $dump = $this->dir . '/var/site-backup/dump.sql';
         $this->fs->dumpFile($dump, 'SELECT 1;');
         $step = new BootstrapModeStep('bootstrap_mode_0', 'Choose');
         $ctx  = new SetupContext($this->dir, 'fresh_install');
@@ -69,6 +70,36 @@ final class BootstrapAndConditionalStepsTest extends TestCase
         ]));
         self::assertTrue($ok->isSuccess());
         self::assertSame($dump, $ctx->getAnswer('sql_import_path'));
+    }
+
+    /**
+     * @return iterable<string, array{string}>
+     */
+    public static function rejectedSqlPathProvider(): iterable
+    {
+        yield 'absolute outside project' => ['/etc/passwd'];
+        yield 'traversal' => ['var/site-backup/../../outside.sql'];
+        yield 'project root dump' => ['dump.sql'];
+        yield 'non sql file in backup dir' => ['var/site-backup/secrets.txt'];
+        yield 'missing file' => ['var/site-backup/missing.sql'];
+    }
+
+    #[DataProvider('rejectedSqlPathProvider')]
+    public function testBootstrapRejectsSqlPathOutsideSiteBackupDir(string $path): void
+    {
+        $this->fs->dumpFile($this->dir . '/dump.sql', 'SELECT 1;');
+        $this->fs->dumpFile($this->dir . '/../outside.sql', 'SELECT 1;');
+        $this->fs->dumpFile($this->dir . '/var/site-backup/secrets.txt', 'APP_SECRET=x');
+        $step   = new BootstrapModeStep('bootstrap_mode_0', 'Choose', []);
+        $ctx    = new SetupContext($this->dir, 'fresh_install');
+        $result = $step->run($ctx, new SetupStepInput([
+            'bootstrap_mode'  => 'full_database',
+            'sql_import_path' => $path,
+        ]));
+        self::assertTrue($result->isWaitingForInput());
+        self::assertNull($ctx->getAnswer('sql_import_path'));
+        self::assertNull($ctx->getAnswer('bootstrap_mode'));
+        $this->fs->remove($this->dir . '/../outside.sql');
     }
 
     public function testBootstrapFullDatabaseRequiresExistingDump(): void
