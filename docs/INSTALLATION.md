@@ -12,6 +12,7 @@
 ## Requirements
 
 - PHP 8.2+ (Symfony 8.x requires PHP 8.4+)
+- Symfony **7.4** or **8.x** (`^7.4 || ^8.0`; Symfony 7.0–7.3 are not supported since v1.19)
 - Symfony HttpKernel / Console components as declared in `composer.json`
 - `symfony/twig-bundle` (or `twig/twig`) to render the public restore loading page, the admin panel, and the setup wizard
 - **`symfony/security-csrf`** (or Framework CSRF) — panel and setup POSTs **fail closed** without a CSRF token manager

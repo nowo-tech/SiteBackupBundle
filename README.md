@@ -36,7 +36,7 @@ nowo_site_backup:
 
 ## Requirements
 - PHP `>=8.2` (<8.6); **Symfony 8.0** and **8.1** require **PHP 8.4+**
-- Symfony **7.4**, **8.0**, or **8.1** (minimum supported minors; also works on Symfony 7.0–7.3 via `composer.json` constraints)
+- Symfony **7.4**, **8.0**, or **8.1** (`composer.json` requires `^7.4 || ^8.0`; Symfony 7.0–7.3 are no longer installable since v1.19)
 - `tar` available on the host/container for archive create/extract
 - Twig for the restore page, panel, and setup wizard templates
 

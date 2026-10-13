@@ -7,6 +7,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Requirements:** Symfony floor raised to `^7.4 || ^8.0` for every `symfony/*` dependency (`symfony/rate-limiter` already needed `^7.3`, and the CI "7.0" cell actually installed the latest 7.x). CI matrix drops the `7.0` cell; README / INSTALLATION aligned.
+- docs/CONFIGURATION.md documents every configuration key (including setup profile step / tab keys).
+
 ### Added
 
 - `restore.stale_after_seconds` (default `null` = 2 × `process_timeout`, `0` = never): an active restore whose progress was not updated for that long is treated as abandoned. `RestoreOrchestrator::isRestoreStale()`.
