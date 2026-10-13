@@ -1,5 +1,15 @@
 # Upgrading
 
+## To 1.18.1
+
+From **1.18.0** — security - setup API closed after completion, hardened setup inputs.
+
+```bash
+composer update nowo-tech/site-backup-bundle
+```
+
+- No breaking changes. No application upgrade steps.
+
 ## To 1.18.0
 
 From **1.17.0** — no breaking configuration changes.
@@ -38,7 +48,6 @@ nowo_site_backup:
   Then the decorator class (and, if you drop `limiter:`, the `framework.rate_limiter.site_backup_login` entry and its tests) can be deleted.
 - **Container wiring:** the `SiteBackupAccessGateInterface` alias now targets `nowo_site_backup.access_gate` (`ThrottledSiteBackupAccessGate`). Code that fetched `PasswordSiteBackupAccessGate` directly bypasses the throttle; inject the interface instead.
 - **Template overrides:** `panel/login.html.twig` receives `throttled` (bool); the message is in `error` (rendered by the panel layout flash block).
-
 
 ## To 1.16.0
 
@@ -118,6 +127,7 @@ php bin/console cache:clear
 
 ## Table of contents
 
+- [To 1.18.1](#to-1181)
 - [To 1.18.0](#to-1180)
 - [To 1.15.1](#to-1151)
 - [To 1.15.0](#to-1150)

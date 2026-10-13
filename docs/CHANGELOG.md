@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.18.1] - 2026-10-13
+
 ### Security
 
 - **`POST /_setup/api/advance` closed after setup**: it answers 404 once setup is completed (same gate as the wizard page), so `{"profile":"minimal"}` can no longer create an extra admin and `{"profile":"full_database"}` can no longer re-import `last-restore-dump.sql`. The payload `profile` is only honoured before a run started; afterwards the stored profile is pinned. Responses no longer include `answers`.
@@ -505,7 +507,8 @@ First stable release of **Site Backup Bundle**.
 - Symfony `^7.0 || ^8.0` (CI / mandatory minors: **7.4**, **8.0**, **8.1**)
 - System `tar` required for archive create/extract
 
-[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.18.0...HEAD
+[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.18.1...HEAD
+[1.18.1]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.18.0...v1.18.1
 [1.18.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.17.0...v1.18.0
 [1.17.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.16.0...v1.17.0
 [1.16.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.15.1...v1.16.0
