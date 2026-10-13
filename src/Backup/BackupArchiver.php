@@ -48,9 +48,14 @@ use const PHP_VERSION;
  */
 final class BackupArchiver
 {
+    /** @var list<string> project-relative runtime state paths never packed into an archive */
+    private readonly array $runtimeStateRelativePaths;
+
     /**
      * @param list<string> $includePaths relative to project dir
      * @param list<string> $excludePatterns Finder exclude patterns
+     * @param list<string> $runtimeStatePaths restore progress / history / setup progress files (absolute or project-relative);
+     *                                        together with $storageDir they are always excluded when inside the project
      */
     public function __construct(
         private readonly string $projectDir,
@@ -60,7 +65,19 @@ final class BackupArchiver
         private readonly ?string $databaseDumpCommand,
         private readonly int $processTimeoutSeconds,
         private readonly Filesystem $filesystem = new Filesystem(),
+        array $runtimeStatePaths = [],
     ) {
+        $this->runtimeStateRelativePaths = RuntimeStatePaths::relativeTo($projectDir, [$storageDir, ...$runtimeStatePaths]);
+    }
+
+    /**
+     * Project-relative paths of the configured storage dir and runtime state files (excluded from archives).
+     *
+     * @return list<string>
+     */
+    public function getRuntimeStateRelativePaths(): array
+    {
+        return $this->runtimeStateRelativePaths;
     }
 
     public function create(?string $label = null, ?string $createdBy = null): BackupArtifact
@@ -342,6 +359,11 @@ final class BackupArchiver
 
         // Always protect backup storage from nesting into the archive
         if (str_starts_with($relative, 'var/site-backup/') || str_contains($relative, '/var/site-backup/')) {
+            return true;
+        }
+
+        // Configured storage_dir / progress / history files (may live outside var/site-backup/)
+        if (RuntimeStatePaths::matches($relative, $this->runtimeStateRelativePaths)) {
             return true;
         }
 

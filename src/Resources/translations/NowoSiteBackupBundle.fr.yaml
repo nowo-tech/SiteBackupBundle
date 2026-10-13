@@ -12,6 +12,15 @@ restore:
     finalizing: 'Finalisation'
     completed: 'Terminée'
     failed: 'Échec'
+  message:
+    preparing: 'Préparation de la restauration…'
+    validating: 'Vérification de l''intégrité de l''archive…'
+    extracting: 'Extraction de l''archive dans la zone temporaire…'
+    applying: 'Application sécurisée des fichiers…'
+    finalizing: 'Finalisation…'
+    completed: 'Restauration terminée avec succès.'
+    completed_setup_required: 'Restauration terminée. Ouvrez l''assistant d''installation pour finaliser l''initialisation de la base de données.'
+    failed: 'La restauration a échoué.'
 panel:
   title: 'Sauvegarde du site'
   nav:

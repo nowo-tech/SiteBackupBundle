@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\Tests\Unit\DependencyInjection;
 
 use LogicException;
+use Nowo\SiteBackupBundle\Backup\BackupArchiver;
 use Nowo\SiteBackupBundle\Command\DatabaseDumpCommand;
 use Nowo\SiteBackupBundle\Controller\SetupUnlocalizedLocaleRedirectController;
 use Nowo\SiteBackupBundle\Controller\SetupWizardController;
@@ -18,6 +19,8 @@ use Nowo\SiteBackupBundle\EventSubscriber\ProductionSecretsGuardSubscriber;
 use Nowo\SiteBackupBundle\EventSubscriber\SetupDbDoneRedirectSubscriber;
 use Nowo\SiteBackupBundle\EventSubscriber\UnlocalizedDefaultLocaleSubscriber;
 use Nowo\SiteBackupBundle\Exclusion\SiteBackupExclusionMatcher;
+use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
+use Nowo\SiteBackupBundle\Routing\PanelRouteLoader;
 use Nowo\SiteBackupBundle\Routing\SetupPathPrefixResolver;
 use Nowo\SiteBackupBundle\Routing\SetupRouteLoader;
 use Nowo\SiteBackupBundle\Security\AllowAllSiteBackupAccessChecker;
@@ -593,5 +596,52 @@ final class SiteBackupExtensionTest extends TestCase
         $def       = $container->getDefinition(DatabaseDumpCommand::class);
         self::assertSame('%env(default::DATABASE_URL)%', $def->getArgument('$databaseUrl'));
         self::assertSame(120, $def->getArgument('$timeoutSeconds'));
+    }
+
+    public function testPanelRouteLoaderFollowsPanelEnabled(): void
+    {
+        $enabled = $this->loadWith(['panel' => ['path_prefix' => '/ops/backup']]);
+        $loader  = $enabled->getDefinition(PanelRouteLoader::class);
+        self::assertTrue($loader->hasTag('routing.loader'));
+        self::assertSame('/ops/backup', $loader->getArgument('$pathPrefix'));
+        self::assertTrue($loader->getArgument('$enabled'));
+
+        $container = new ContainerBuilder();
+        $container->setParameter('kernel.project_dir', sys_get_temp_dir());
+        (new SiteBackupExtension())->load([['panel' => ['enabled' => false]]], $container);
+        self::assertFalse($container->getDefinition(PanelRouteLoader::class)->getArgument('$enabled'));
+    }
+
+    public function testLocaleExclusionPatternQuotesLocales(): void
+    {
+        $container = $this->loadWith(['setup' => ['locale' => ['in_path' => 'both', 'default' => 'en', 'enabled' => ['en', 'zh.Hant', 'x+y']]]]);
+
+        /** @var list<string> $patterns */
+        $patterns = $container->getDefinition(SiteBackupExclusionMatcher::class)->getArgument('$patterns');
+        $pattern  = (string) end($patterns);
+        self::assertStringContainsString('(en|zh\.Hant|x\+y)', $pattern);
+        self::assertSame(1, preg_match($pattern, '/zh.Hant/_setup/done'));
+        self::assertSame(0, preg_match($pattern, '/zhXHant/_setup/done'));
+        self::assertSame(0, preg_match($pattern, '/xxy/_setup'));
+    }
+
+    public function testRuntimeStatePathsAndRestoreStalenessAreWired(): void
+    {
+        $container = $this->loadWith([
+            'process_timeout' => 120,
+            'restore'         => ['progress_file' => '%kernel.project_dir%/state/progress.json'],
+            'storage'         => ['history_file' => '%kernel.project_dir%/state/history.jsonl'],
+            'setup'           => ['progress_file' => '%kernel.project_dir%/state/setup.json'],
+        ]);
+
+        self::assertSame(
+            ['%kernel.project_dir%/state/progress.json', '%kernel.project_dir%/state/history.jsonl', '%kernel.project_dir%/state/setup.json'],
+            $container->getDefinition(BackupArchiver::class)->getArgument('$runtimeStatePaths'),
+        );
+        self::assertSame(240, $container->getDefinition(RestoreOrchestrator::class)->getArgument('$staleAfterSeconds'));
+        self::assertArrayNotHasKey('$staleAfterSeconds', $container->getDefinition(SetupOrchestrator::class)->getArguments());
+
+        $explicit = $this->loadWith(['restore' => ['stale_after_seconds' => 0]]);
+        self::assertSame(0, $explicit->getDefinition(RestoreOrchestrator::class)->getArgument('$staleAfterSeconds'));
     }
 }

@@ -12,6 +12,15 @@ restore:
     finalizing: 'A finalizar'
     completed: 'Concluída'
     failed: 'Falhou'
+  message:
+    preparing: 'A preparar o restauro…'
+    validating: 'A verificar a integridade do arquivo…'
+    extracting: 'A extrair o arquivo para a área temporária…'
+    applying: 'A aplicar os ficheiros com segurança…'
+    finalizing: 'A finalizar…'
+    completed: 'Restauro concluído com sucesso.'
+    completed_setup_required: 'Restauro concluído. Abra o assistente de configuração para concluir a inicialização da base de dados.'
+    failed: 'O restauro falhou.'
 panel:
   title: 'Cópia de segurança do site'
   nav:

@@ -7,6 +7,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- `restore.stale_after_seconds` (default `null` = 2 × `process_timeout`, `0` = never): an active restore whose progress was not updated for that long is treated as abandoned. `RestoreOrchestrator::isRestoreStale()`.
+- `RestoreOrchestrator::MESSAGE_*` translation ids (`restore.message.*`) translated in en/es/it/fr/pt/de/nl.
+
+### Fixed
+
+- Backups no longer nest previous archives or runtime state when `backup.storage_dir`, `restore.progress_file`, `storage.history_file` or `setup.progress_file` point inside the project but outside `var/site-backup/`: those paths (resolved relative to the project dir) are excluded from archives, and restores never overwrite them (`BackupArchiver` `$runtimeStatePaths`, `RuntimeStatePaths`).
+- A worker that died mid-restore left `active: true` and the site answered 503 forever; stale progress is now ignored by the site gate, `progress.json` reports `active: false`, and a new restore may start (logging the abandoned one).
+- `panel.enabled: false` no longer leaves the panel routes registered against the removed controller (HTTP 500): `routes.yaml` imports the panel through `PanelRouteLoader` (type `nowo_site_backup_panel`), which registers no route when the panel is disabled (404).
+- Restore loading page reloads as soon as the restore is no longer active (completed, failed, cleared, abandoned), not only on `completed`.
+- Restore progress messages were English literals, so `|trans` did nothing and `default_message` was never shown: the orchestrator now writes `restore.message.*` translation ids; the loading page renders `default_message` as its lead text and the translated step below; panel `progress.json` returns the translated message.
+- Locale codes are `preg_quote`d when building the `/{locale}/_setup` exclusion regex and the setup route `_locale` requirement.
+
 ## [1.18.1] - 2026-10-13
 
 ### Security

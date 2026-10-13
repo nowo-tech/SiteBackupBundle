@@ -4,9 +4,15 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Tests\Unit\Controller;
 
+use DateTimeImmutable;
 use Nowo\SiteBackupBundle\Controller\SiteBackupPanelController;
+use Nowo\SiteBackupBundle\Model\RestoreProgress;
+use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
 use Nowo\SiteBackupBundle\Security\PasswordSiteBackupAccessGate;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessCheckerInterface;
+use Nowo\SiteBackupBundle\Service\SiteBackupManager;
+use Nowo\SiteBackupBundle\Storage\FilesystemBackupHistoryStorage;
+use Nowo\SiteBackupBundle\Storage\FilesystemRestoreProgressStorage;
 use Nowo\SiteBackupBundle\Tests\Unit\CreatesSiteBackupTestHarness;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
@@ -14,6 +20,7 @@ use Symfony\Component\HttpFoundation\Session\Session;
 use Symfony\Component\HttpFoundation\Session\Storage\MockArraySessionStorage;
 use Symfony\Component\Security\Csrf\CsrfToken;
 use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 use Twig\Environment;
 
 use const PASSWORD_DEFAULT;
@@ -59,6 +66,55 @@ final class SiteBackupPanelControllerExtendedTest extends TestCase
         $login = Request::create('/', 'POST', ['action' => 'login', 'password' => 'secret', '_csrf_token' => 'token']);
         $login->setSession($session);
         $controller->index($login);
+    }
+
+    public function testProgressJsonReportsAbandonedRestoreAsInactiveAndTranslatesTheMessage(): void
+    {
+        $storage = new FilesystemRestoreProgressStorage($this->harnessProgressFile);
+        $stale   = new DateTimeImmutable('-1 hour');
+        $storage->save(new RestoreProgress(
+            active: true,
+            phase: RestoreProgress::PHASE_APPLYING,
+            percent: 60.0,
+            message: RestoreOrchestrator::MESSAGE_APPLYING,
+            startedAt: $stale,
+            updatedAt: $stale,
+        ));
+
+        $manager = new SiteBackupManager(
+            $this->createArchiver(),
+            new RestoreOrchestrator(
+                projectDir: $this->harnessProjectDir,
+                archiver: $this->createArchiver(),
+                progressStorage: $storage,
+                protectedRelativePaths: [],
+                staleAfterSeconds: 60,
+            ),
+            new FilesystemBackupHistoryStorage($this->harnessHistoryFile),
+        );
+        $translator = $this->createMock(TranslatorInterface::class);
+        $translator->method('trans')->willReturnCallback(static fn (string $id): string => $id === RestoreOrchestrator::MESSAGE_APPLYING ? 'Aplicando los archivos de forma segura…' : $id);
+
+        $controller = new SiteBackupPanelController(
+            $manager,
+            new PasswordSiteBackupAccessGate(null, false),
+            $this->createFormFactory(),
+            $this->createMock(Environment::class),
+            ['panel_index' => 'index', 'panel_login' => 'login', 'panel_history' => 'history'],
+            '/_site_backup',
+            translator: $translator,
+        );
+
+        $data = (array) json_decode((string) $controller->progress()->getContent(), true);
+        self::assertFalse($data['active']);
+        self::assertSame('applying', $data['phase']);
+        self::assertSame('Aplicando los archivos de forma segura…', $data['message']);
+
+        // Fresh progress stays active.
+        $storage->save(new RestoreProgress(active: true, phase: RestoreProgress::PHASE_APPLYING, percent: 60.0, updatedAt: new DateTimeImmutable()));
+        $data = (array) json_decode((string) $controller->progress()->getContent(), true);
+        self::assertTrue($data['active']);
+        self::assertNull($data['message']);
     }
 
     public function testLoginFailureInvalidPasswordAndCsrf(): void

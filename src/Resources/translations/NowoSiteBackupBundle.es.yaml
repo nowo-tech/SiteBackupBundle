@@ -12,6 +12,15 @@ restore:
     finalizing: 'Finalizando'
     completed: 'Completada'
     failed: 'Fallida'
+  message:
+    preparing: 'Preparando la restauración…'
+    validating: 'Verificando la integridad del archivo…'
+    extracting: 'Extrayendo el archivo a la zona temporal…'
+    applying: 'Aplicando los archivos de forma segura…'
+    finalizing: 'Finalizando…'
+    completed: 'Restauración completada correctamente.'
+    completed_setup_required: 'Restauración completada. Abre el asistente de instalación para terminar de preparar la base de datos.'
+    failed: 'La restauración ha fallado.'
 panel:
   title: 'Copia de seguridad del sitio'
   nav:

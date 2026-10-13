@@ -1,5 +1,12 @@
 # Upgrading
 
+## Unreleased
+
+- **Restore progress messages are translation ids.** `RestoreProgress::getMessage()` now returns ids such as `restore.message.applying` (domain `NowoSiteBackupBundle`) instead of English sentences. Translate them (`|trans({}, 'NowoSiteBackupBundle')`) if you render the progress yourself; the panel `progress.json` already returns the translated text. Custom `restore/page.html.twig` overrides: `defaultMessage` is now meant as the lead text and `progress.message` as the current step.
+- **Abandoned restores expire.** With the default `restore.stale_after_seconds: null`, a restore whose progress is not updated for 2 × `process_timeout` seconds stops blocking the site and new restores. Set `0` to keep the previous behaviour, or a larger value if a single step (e.g. hashing a very large archive) can run longer without progress updates.
+- **Runtime state is never archived or restored.** If you relied on archives containing a custom `storage_dir`, `restore.progress_file`, `storage.history_file` or `setup.progress_file` inside the project, those paths are now skipped on backup and on restore.
+- **Panel routes come from a loader.** Keep importing `@NowoSiteBackupBundle/Resources/config/routes.yaml`; the `nowo_site_backup_panel` entry is now `type: nowo_site_backup_panel`. Route names and paths are unchanged. If you imported `SiteBackupPanelController.php` yourself with `type: attribute`, switch to the bundle `routes.yaml` (or `resource: . / type: nowo_site_backup_panel`) so `panel.enabled: false` yields 404s.
+
 ## To 1.18.1
 
 From **1.18.0** — security - setup API closed after completion, hardened setup inputs.

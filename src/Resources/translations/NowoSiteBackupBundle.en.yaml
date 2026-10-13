@@ -12,6 +12,15 @@ restore:
     finalizing: 'Finalizing'
     completed: 'Completed'
     failed: 'Failed'
+  message:
+    preparing: 'Preparing restore…'
+    validating: 'Verifying archive integrity…'
+    extracting: 'Extracting archive to staging…'
+    applying: 'Applying files safely…'
+    finalizing: 'Finalizing…'
+    completed: 'Restore completed successfully.'
+    completed_setup_required: 'Restore completed. Open the setup wizard to finish the database bootstrap.'
+    failed: 'Restore failed.'
 panel:
   title: 'Site Backup'
   nav:

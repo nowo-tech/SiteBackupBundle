@@ -12,6 +12,15 @@ restore:
     finalizing: 'Abschluss'
     completed: 'Abgeschlossen'
     failed: 'Fehlgeschlagen'
+  message:
+    preparing: 'Wiederherstellung wird vorbereitet…'
+    validating: 'Archivintegrität wird geprüft…'
+    extracting: 'Archiv wird in den Zwischenbereich entpackt…'
+    applying: 'Dateien werden sicher übernommen…'
+    finalizing: 'Wird abgeschlossen…'
+    completed: 'Wiederherstellung erfolgreich abgeschlossen.'
+    completed_setup_required: 'Wiederherstellung abgeschlossen. Öffnen Sie den Einrichtungsassistenten, um die Datenbankeinrichtung abzuschließen.'
+    failed: 'Wiederherstellung fehlgeschlagen.'
 panel:
   title: 'Website-Backup'
   nav:

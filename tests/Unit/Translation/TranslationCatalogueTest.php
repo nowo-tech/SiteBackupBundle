@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Tests\Unit\Translation;
 
+use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
 use PHPUnit\Framework\TestCase;
 use RecursiveDirectoryIterator;
 use RecursiveIteratorIterator;
+use ReflectionClass;
 use Symfony\Component\Yaml\Yaml;
 
 use function array_diff;
@@ -19,6 +21,7 @@ use function is_array;
 use function preg_match_all;
 use function sprintf;
 use function str_ends_with;
+use function str_starts_with;
 
 /**
  * v1.18 (spec 006): every literal key the templates / controllers translate in domain NowoSiteBackupBundle
@@ -71,6 +74,32 @@ final class TranslationCatalogueTest extends TestCase
                 }
             }
             self::assertSame([], $missing, sprintf("%s misses:\n%s", $locale, implode("\n", $missing)));
+        }
+    }
+
+    /**
+     * v1.19: restore progress messages are translation ids, translated (not English copies) in every locale.
+     */
+    public function testRestoreProgressMessagesAreTranslatedInEveryLocale(): void
+    {
+        $keys = [];
+        foreach ((new ReflectionClass(RestoreOrchestrator::class))->getReflectionConstants() as $constant) {
+            if (str_starts_with($constant->getName(), 'MESSAGE_')) {
+                $keys[] = (string) $constant->getValue();
+            }
+        }
+        self::assertCount(8, $keys);
+
+        $english = $this->catalogue('en');
+        foreach (self::LOCALES as $locale) {
+            $catalogue = $this->catalogue($locale);
+            foreach ($keys as $key) {
+                self::assertArrayHasKey($key, $catalogue, sprintf('%s misses %s', $locale, $key));
+                self::assertNotSame($key, $catalogue[$key]);
+                if ($locale !== 'en') {
+                    self::assertNotSame($english[$key], $catalogue[$key], sprintf('%s.%s is an English copy', $locale, $key));
+                }
+            }
         }
     }
 

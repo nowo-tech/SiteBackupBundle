@@ -7,6 +7,7 @@ namespace Nowo\SiteBackupBundle\Tests\Unit\Twig;
 use Nowo\SiteBackupBundle\Controller\SetupWizardController;
 use Nowo\SiteBackupBundle\Controller\SiteBackupPanelController;
 use Nowo\SiteBackupBundle\Model\RestoreProgress;
+use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessGateInterface;
 use Nowo\SiteBackupBundle\Setup\Detector\MarkerFileDetector;
 use Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator;
@@ -342,6 +343,32 @@ final class TranslatedTemplatesRenderTest extends TestCase
         self::assertStringContainsString('<html lang="fr">', $html);
         self::assertStringContainsString('<div class="phase" data-phase="extracting">Extraction</div>', $html);
         self::assertStringContainsString('Restauration du site', $html);
+    }
+
+    public function testRestorePageShowsDefaultMessageAndTranslatedStepAndReloadsWhenInactive(): void
+    {
+        $twig = $this->createTwig($this->createManager(), 'es');
+        $html = $twig->render('@NowoSiteBackupBundle/restore/page.html.twig', [
+            'progress'       => new RestoreProgress(true, RestoreProgress::PHASE_VALIDATING, 10.0, RestoreOrchestrator::MESSAGE_VALIDATING),
+            'progressUrl'    => '/_site_backup/progress.json',
+            'defaultMessage' => 'restore.page.message',
+        ]);
+
+        // default_message (config) is rendered, the step message is a translated id, not an English literal.
+        self::assertStringContainsString('Restaurando este sitio desde una copia verificada', $html);
+        self::assertStringContainsString('Verificando la integridad del archivo…', $html);
+        self::assertStringNotContainsString('restore.message.', $html);
+        // Reloads on any inactive state (completed, failed, cleared, abandoned), not only "completed".
+        self::assertStringContainsString('data.active === false', $html);
+        self::assertStringNotContainsString("data.phase === 'completed'", $html);
+
+        $html = $twig->render('@NowoSiteBackupBundle/restore/page.html.twig', [
+            'progress'       => new RestoreProgress(true, RestoreProgress::PHASE_PREPARING, 1.0),
+            'progressUrl'    => '/_site_backup/progress.json',
+            'defaultMessage' => 'Custom literal maintenance text',
+        ]);
+        self::assertStringContainsString('Custom literal maintenance text', $html);
+        self::assertStringNotContainsString('data-step', $html);
     }
 
     public function testAccessDeniedIsTranslated(): void

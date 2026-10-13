@@ -9,6 +9,7 @@ use Nowo\SiteBackupBundle\EventSubscriber\RestoreRequestSubscriber;
 use Nowo\SiteBackupBundle\EventSubscriber\SetupRequestSubscriber;
 use Nowo\SiteBackupBundle\Exclusion\SiteBackupExclusionMatcher;
 use Nowo\SiteBackupBundle\Model\RestoreProgress;
+use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
 use Nowo\SiteBackupBundle\Setup\Detector\MarkerFileDetector;
 use Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupMarkerManager;
@@ -160,6 +161,51 @@ final class EventSubscribersTest extends TestCase
         $jsonEvent   = new RequestEvent($this->createMock(HttpKernelInterface::class), $jsonRequest, HttpKernelInterface::MAIN_REQUEST);
         $subscriber->onKernelRequest($jsonEvent);
         self::assertStringContainsString('restoring', (string) $jsonEvent->getResponse()?->getContent());
+    }
+
+    public function testRestoreRequestSubscriberTranslatesProgressMessageIdsAndDefaultMessage(): void
+    {
+        $storage = new FilesystemRestoreProgressStorage($this->harnessProgressFile);
+        $storage->save(new RestoreProgress(active: true, phase: RestoreProgress::PHASE_APPLYING, percent: 60.0, message: RestoreOrchestrator::MESSAGE_APPLYING));
+
+        $translator = $this->createMock(TranslatorInterface::class);
+        $translator->method('trans')->willReturnCallback(static fn (string $id): string => match ($id) {
+            'custom.public'                       => 'Back in a minute',
+            RestoreOrchestrator::MESSAGE_APPLYING => 'Applying files safely…',
+            default                               => $id,
+        });
+
+        $subscriber = new RestoreRequestSubscriber(
+            enabled: true,
+            manager: $this->createManager(),
+            exclusionMatcher: new SiteBackupExclusionMatcher([], [], [], [], []),
+            twig: null,
+            template: 'restore.html.twig',
+            defaultMessage: 'custom.public',
+            translator: $translator,
+        );
+
+        $event = new RequestEvent($this->createMock(HttpKernelInterface::class), Request::create('/page'), HttpKernelInterface::MAIN_REQUEST);
+        $subscriber->onKernelRequest($event);
+        $html = (string) $event->getResponse()?->getContent();
+        self::assertStringContainsString('<p>Back in a minute</p><p>Applying files safely…</p>', $html);
+
+        $json = new RequestEvent(
+            $this->createMock(HttpKernelInterface::class),
+            Request::create('/page', 'GET', [], [], [], ['HTTP_ACCEPT' => 'application/json']),
+            HttpKernelInterface::MAIN_REQUEST,
+        );
+        $subscriber->onKernelRequest($json);
+        self::assertSame('Applying files safely…', json_decode((string) $json->getResponse()?->getContent(), true)['message'] ?? null);
+
+        // Without a step message the JSON falls back to default_message.
+        $storage->save(new RestoreProgress(active: true, phase: RestoreProgress::PHASE_APPLYING, percent: 60.0, message: ''));
+        $subscriber->onKernelRequest($json = new RequestEvent(
+            $this->createMock(HttpKernelInterface::class),
+            Request::create('/page', 'GET', [], [], [], ['HTTP_ACCEPT' => 'application/json']),
+            HttpKernelInterface::MAIN_REQUEST,
+        ));
+        self::assertSame('Back in a minute', json_decode((string) $json->getResponse()?->getContent(), true)['message'] ?? null);
     }
 
     public function testRestoreRequestSubscriberFallbackHtmlWithoutTwig(): void

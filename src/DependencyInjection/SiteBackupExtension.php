@@ -20,6 +20,7 @@ use Nowo\SiteBackupBundle\EventSubscriber\SetupRequestSubscriber;
 use Nowo\SiteBackupBundle\EventSubscriber\UnlocalizedDefaultLocaleSubscriber;
 use Nowo\SiteBackupBundle\Exclusion\SiteBackupExclusionMatcher;
 use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
+use Nowo\SiteBackupBundle\Routing\PanelRouteLoader;
 use Nowo\SiteBackupBundle\Routing\SetupPathPrefixResolver;
 use Nowo\SiteBackupBundle\Routing\SetupRouteLoader;
 use Nowo\SiteBackupBundle\Security\AllowAllSiteBackupAccessChecker;
@@ -76,6 +77,7 @@ use Symfony\Component\RateLimiter\Storage\CacheStorage;
 use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
 
 use function array_key_exists;
+use function array_map;
 use function array_values;
 use function in_array;
 use function is_array;
@@ -339,7 +341,32 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$includePaths', array_values($backup['include_paths'] ?? []))
             ->setArgument('$excludePatterns', array_values($backup['exclude_patterns'] ?? []))
             ->setArgument('$databaseDumpCommand', is_string($dump) && $dump !== '' ? $dump : null)
-            ->setArgument('$processTimeoutSeconds', (int) $config['process_timeout']);
+            ->setArgument('$processTimeoutSeconds', (int) $config['process_timeout'])
+            ->setArgument('$runtimeStatePaths', $this->runtimeStatePaths($config));
+    }
+
+    /**
+     * Bundle runtime state files that must never be archived nor overwritten by a restore
+     * (storage_dir is added by the archiver itself).
+     *
+     * @param array<string, mixed> $config
+     *
+     * @return list<string>
+     */
+    private function runtimeStatePaths(array $config): array
+    {
+        $paths = [];
+        foreach ([
+            $config['restore']['progress_file'] ?? null,
+            $config['storage']['history_file'] ?? null,
+            $config['setup']['progress_file'] ?? null,
+        ] as $path) {
+            if (is_string($path) && $path !== '') {
+                $paths[] = $path;
+            }
+        }
+
+        return $paths;
     }
 
     /**
@@ -356,7 +383,21 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$setupMarkers', new Reference(SetupMarkerManager::class))
             ->setArgument('$triggerSetupAfterRestore', (bool) ($setup['trigger_after_restore'] ?? true))
             ->setArgument('$postRestoreSetupProfile', (string) ($setup['post_restore_profile'] ?? 'post_restore'))
-            ->setArgument('$workerRestartSignal', new Reference(WorkerRestartSignal::class));
+            ->setArgument('$workerRestartSignal', new Reference(WorkerRestartSignal::class))
+            ->setArgument('$staleAfterSeconds', $this->restoreStaleAfterSeconds($config));
+    }
+
+    /**
+     * @param array<string, mixed> $config
+     */
+    private function restoreStaleAfterSeconds(array $config): int
+    {
+        $configured = $config['restore']['stale_after_seconds'] ?? null;
+        if (is_int($configured)) {
+            return $configured;
+        }
+
+        return 2 * (int) $config['process_timeout'];
     }
 
     /**
@@ -383,8 +424,9 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
         $localeInPath  = (string) ($localeConfig['in_path'] ?? 'never');
         $localeEnabled = array_values($localeConfig['enabled'] ?? ['en']);
         if ($localeInPath !== 'never' && $localeEnabled !== []) {
-            $escapedPrefix = preg_quote($setupPrefix, '#');
-            $localePattern = '#^/(' . implode('|', $localeEnabled) . ')' . $escapedPrefix . '(/|$|\\?)#';
+            $escapedPrefix  = preg_quote($setupPrefix, '#');
+            $escapedLocales = array_map(static fn (mixed $locale): string => preg_quote((string) $locale, '#'), $localeEnabled);
+            $localePattern  = '#^/(' . implode('|', $escapedLocales) . ')' . $escapedPrefix . '(/|$|\\?)#';
             if (!in_array($localePattern, $patterns, true)) {
                 $patterns[] = $localePattern;
             }
@@ -560,6 +602,13 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
      */
     private function configurePanel(ContainerBuilder $container, array $config): void
     {
+        // v1.19+: panel routes are imported through this loader so panel.enabled: false yields 404s (no routes)
+        // instead of routes pointing at the removed controller service (500).
+        $container->register(PanelRouteLoader::class, PanelRouteLoader::class)
+            ->setArgument('$pathPrefix', (string) ($config['panel']['path_prefix'] ?? '/_site_backup'))
+            ->setArgument('$enabled', (bool) $config['panel']['enabled'] && $container->hasDefinition(SiteBackupPanelController::class))
+            ->addTag('routing.loader');
+
         if (!$container->hasDefinition(SiteBackupPanelController::class)) {
             return;
         }

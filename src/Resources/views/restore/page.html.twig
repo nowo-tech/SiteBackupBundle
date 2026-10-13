@@ -62,6 +62,7 @@
             color: var(--muted);
         }
         .phase { color: var(--accent); text-transform: uppercase; letter-spacing: .06em; font-size: .75rem; font-weight: 700; }
+        .step { margin-top: -.5rem; font-size: .95rem; }
         .err { color: var(--err); margin-top: 1rem; }
         .ok { color: var(--ok); }
         .spinner {
@@ -79,7 +80,11 @@
     {% endif %}
     <div class="phase" data-phase="{{ progress.phase }}">{{ ('restore.phase.' ~ progress.phase)|trans({}, 'NowoSiteBackupBundle') }}</div>
     <h1>{{ 'restore.page.title'|trans({}, 'NowoSiteBackupBundle') }}</h1>
-    <p>{{ (progress.message|default(defaultMessage))|trans({}, 'NowoSiteBackupBundle') }}</p>
+    {# default_message (config) is the public explanation; progress.message is the current step (translation id). #}
+    <p>{{ defaultMessage|trans({}, 'NowoSiteBackupBundle') }}</p>
+    {% if progress.message %}
+        <p class="step" data-step>{{ progress.message|trans({}, 'NowoSiteBackupBundle') }}</p>
+    {% endif %}
     <div class="bar" aria-hidden="true"><span></span></div>
     <div class="meta">
         <span>{{ progress.percent|number_format(0) }}%</span>
@@ -99,7 +104,8 @@
     fetch(url, { headers: { 'Accept': 'application/json' }, credentials: 'same-origin' })
       .then(function (r) { return r.json(); })
       .then(function (data) {
-        if (data.phase === 'completed') {
+        // completed, failed, cleared (idle) or abandoned: the site is served again, reload to leave this page.
+        if (data && data.active === false) {
           setTimeout(function () { window.location.reload(); }, 1500);
         }
       })

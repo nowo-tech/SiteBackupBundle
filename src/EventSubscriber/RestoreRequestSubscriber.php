@@ -156,10 +156,13 @@ final class RestoreRequestSubscriber
         }
 
         $message = htmlspecialchars(
-            $this->resolveMessage($progress),
+            $this->trans($this->defaultMessage),
             ENT_QUOTES | ENT_SUBSTITUTE,
             'UTF-8',
         );
+        $step = $progress->getMessage() !== null && $progress->getMessage() !== ''
+            ? '<p>' . htmlspecialchars($this->trans($progress->getMessage()), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</p>'
+            : '';
         $title = htmlspecialchars(
             $this->trans('restore.page.title'),
             ENT_QUOTES | ENT_SUBSTITUTE,
@@ -169,14 +172,16 @@ final class RestoreRequestSubscriber
 
         return '<!DOCTYPE html><html><head><meta charset="utf-8"><meta http-equiv="refresh" content="5">'
             . '<title>' . $title . '</title></head><body>'
-            . '<h1>' . $title . '</h1><p>' . $message . '</p>'
+            . '<h1>' . $title . '</h1><p>' . $message . '</p>' . $step
             . '<p><progress max="100" value="' . $percent . '"></progress> ' . $percent . '%</p>'
             . '</body></html>';
     }
 
     private function resolveMessage(RestoreProgress $progress): string
     {
-        return $this->trans($progress->getMessage() ?? $this->defaultMessage);
+        $message = $progress->getMessage();
+
+        return $this->trans($message !== null && $message !== '' ? $message : $this->defaultMessage);
     }
 
     private function trans(string $id): string

@@ -1,7 +1,7 @@
+# v1.19+: panel routes come from a loader so panel.enabled: false registers no routes (404 instead of 500).
 nowo_site_backup_panel:
-    resource: ../../Controller/SiteBackupPanelController.php
-    type: attribute
-    prefix: '%nowo.site_backup.panel.path_prefix%'
+    resource: .
+    type: nowo_site_backup_panel
 
 nowo_site_backup_setup:
     resource: .

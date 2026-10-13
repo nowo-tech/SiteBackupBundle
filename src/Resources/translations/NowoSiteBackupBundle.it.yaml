@@ -12,6 +12,15 @@ restore:
     finalizing: 'Finalizzazione'
     completed: 'Completato'
     failed: 'Non riuscito'
+  message:
+    preparing: 'Preparazione del ripristino…'
+    validating: 'Verifica dell''integrità dell''archivio…'
+    extracting: 'Estrazione dell''archivio nell''area temporanea…'
+    applying: 'Applicazione sicura dei file…'
+    finalizing: 'Finalizzazione…'
+    completed: 'Ripristino completato correttamente.'
+    completed_setup_required: 'Ripristino completato. Apri la procedura guidata di configurazione per completare l''inizializzazione del database.'
+    failed: 'Ripristino non riuscito.'
 panel:
   title: 'Backup del sito'
   nav:

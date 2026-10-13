@@ -28,6 +28,7 @@ use function array_merge;
 use function ceil;
 use function implode;
 use function is_numeric;
+use function is_string;
 use function max;
 use function method_exists;
 use function strtr;
@@ -121,6 +122,12 @@ final class SiteBackupPanelController
     public function progress(?Request $request = null): JsonResponse
     {
         $data = $this->manager->getRestoreProgress()->toArray();
+        // v1.19+: an abandoned (stale) restore reports active=false so the loading page reloads into the site.
+        $data['active'] = $this->manager->isRestoreActive();
+        // v1.19+: progress messages are translation ids; serve the human text.
+        if (is_string($data['message'] ?? null) && $data['message'] !== '' && $this->translator instanceof TranslatorInterface) {
+            $data['message'] = $this->translator->trans($data['message'], [], 'NowoSiteBackupBundle');
+        }
 
         // The restore page polls this anonymously: only panel users get the log / error / backup id.
         if (!$request instanceof Request || $this->denyUnlessRoleAccess() instanceof Response || !$this->accessGate->isAuthenticated($request)) {

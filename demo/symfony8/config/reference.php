@@ -1045,7 +1045,7 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  * }
  * @psalm-type NowoSiteBackupConfig = array{ // Nowo Site Backup Bundle configuration.
  *     enabled?: bool|Param, // Master switch: when false the restore loading page is never shown. // Default: true
- *     default_message?: scalar|Param|null, // Translation id (domain NowoSiteBackupBundle) or literal for the public restore loading page. Default: restore.page.message. // Default: "restore.page.message"
+ *     default_message?: scalar|Param|null, // Translation id (domain NowoSiteBackupBundle) or literal for the public restore loading page, rendered as its lead text above the current step (v1.19+). Default: restore.page.message. // Default: "restore.page.message"
  *     status_code?: int|Param, // HTTP status code while restore mode is active. // Default: 503
  *     subscriber_priority?: int|Param, // kernel.request listener priority (default 31: after router). // Default: 31
  *     process_timeout?: int|Param, // Timeout in seconds for tar / dump subprocesses (REQ-RUNTIME-001). // Default: 600
@@ -1074,6 +1074,7 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *     restore?: array{ // Safe restore options.
  *         progress_file?: scalar|Param|null, // JSON progress file used by the loading UI (keep outside overwritten paths if possible). // Default: "%kernel.project_dir%/var/site-backup/restore-progress.json"
  *         protected_paths?: list<scalar|Param|null>,
+ *         stale_after_seconds?: int|Param, // v1.19+: an active restore whose progress was not updated for this many seconds is treated as abandoned (dead worker / killed process): the loading page stops being served and a new restore may start. null = 2 × process_timeout; 0 = never (pre-1.19 behaviour). // Default: null
  *     },
  *     panel?: array{
  *         enabled?: bool|Param, // Default: true

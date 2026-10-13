@@ -12,6 +12,15 @@ restore:
     finalizing: 'Afronden'
     completed: 'Voltooid'
     failed: 'Mislukt'
+  message:
+    preparing: 'Herstel wordt voorbereid…'
+    validating: 'Integriteit van het archief wordt gecontroleerd…'
+    extracting: 'Archief wordt uitgepakt naar de tijdelijke map…'
+    applying: 'Bestanden worden veilig toegepast…'
+    finalizing: 'Bezig met afronden…'
+    completed: 'Herstel succesvol voltooid.'
+    completed_setup_required: 'Herstel voltooid. Open de installatiewizard om de database-initialisatie af te ronden.'
+    failed: 'Herstel mislukt.'
 panel:
   title: 'Siteback-up'
   nav:

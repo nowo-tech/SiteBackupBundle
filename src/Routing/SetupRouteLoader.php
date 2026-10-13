@@ -13,6 +13,11 @@ use Symfony\Component\Config\Loader\Loader;
 use Symfony\Component\Routing\Route;
 use Symfony\Component\Routing\RouteCollection;
 
+use function array_map;
+use function implode;
+use function preg_quote;
+use function rtrim;
+
 /**
  * Registers setup wizard routes with optional locale-in-path support.
  */
@@ -136,7 +141,7 @@ final class SetupRouteLoader extends Loader
         return new Route(
             '/{_locale}' . $path,
             ['_locale' => $this->defaultLocale] + $defaults,
-            ['_locale' => implode('|', $this->enabledLocales)],
+            ['_locale' => implode('|', array_map(static fn (string $locale): string => preg_quote($locale), $this->enabledLocales))],
             [],
             '',
             [],
