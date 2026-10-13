@@ -7,6 +7,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.19.0] - 2026-10-13
+
 ### Changed
 
 - **Requirements:** Symfony floor raised to `^7.4 || ^8.0` for every `symfony/*` dependency (`symfony/rate-limiter` already needed `^7.3`, and the CI "7.0" cell actually installed the latest 7.x). CI matrix drops the `7.0` cell; README / INSTALLATION aligned.
@@ -526,7 +528,8 @@ First stable release of **Site Backup Bundle**.
 - Symfony `^7.0 || ^8.0` (CI / mandatory minors: **7.4**, **8.0**, **8.1**)
 - System `tar` required for archive create/extract
 
-[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.18.1...HEAD
+[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.19.0...HEAD
+[1.19.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.18.1...v1.19.0
 [1.18.1]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.18.0...v1.18.1
 [1.18.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.17.0...v1.18.0
 [1.17.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.16.0...v1.17.0

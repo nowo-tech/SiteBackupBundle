@@ -2,6 +2,14 @@
 
 ## Unreleased
 
+## To 1.19.0
+
+From **1.18.1** — runtime state never archived/restored, abandoned restores expire, disabled panel 404, translated progress, Symfony >=7.4.
+
+```bash
+composer update nowo-tech/site-backup-bundle
+```
+
 - **Symfony 7.4+ required.** `composer.json` now requires `^7.4 || ^8.0` (Symfony 7.0–7.3 are no longer installable). Upgrade the host to Symfony 7.4 LTS or 8.x first.
 - **Restore progress messages are translation ids.** `RestoreProgress::getMessage()` now returns ids such as `restore.message.applying` (domain `NowoSiteBackupBundle`) instead of English sentences. Translate them (`|trans({}, 'NowoSiteBackupBundle')`) if you render the progress yourself; the panel `progress.json` already returns the translated text. Custom `restore/page.html.twig` overrides: `defaultMessage` is now meant as the lead text and `progress.message` as the current step.
 - **Abandoned restores expire.** With the default `restore.stale_after_seconds: null`, a restore whose progress is not updated for 2 × `process_timeout` seconds stops blocking the site and new restores. Set `0` to keep the previous behaviour, or a larger value if a single step (e.g. hashing a very large archive) can run longer without progress updates.
@@ -139,6 +147,7 @@ php bin/console cache:clear
 
 ## Table of contents
 
+- [To 1.19.0](#to-1190)
 - [To 1.18.1](#to-1181)
 - [To 1.18.0](#to-1180)
 - [To 1.15.1](#to-1151)
