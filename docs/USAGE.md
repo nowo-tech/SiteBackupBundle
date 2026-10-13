@@ -10,6 +10,7 @@
 - [Setup wizard](#setup-wizard)
 - [Twig helpers](#twig-helpers)
 - [Template overrides (REQ-TWIG-001)](#template-overrides-req-twig-001)
+  - [Translations, theming and chrome blocks (v1.18+)](#translations-theming-and-chrome-blocks-v118)
 - [Built-in database dumper](#built-in-database-dumper)
 - [Database import note](#database-import-note)
 
@@ -166,6 +167,46 @@ Place overrides under `templates/bundles/NowoSiteBackupBundle/` with the **same 
 | `setup/token.html.twig` | Optional setup token gate |
 
 For setup tabs, put domain logic in YAML `checker` / `runner`; keep Twig in the bundle or in a thin override of a **partial** — see [SETUP-WIZARD.md](SETUP-WIZARD.md).
+
+### Translations, theming and chrome blocks (v1.18+)
+
+**Translations.** Every user-facing string of the panel (login, dashboard, history, flash / error messages, 403), the setup screens (wizard, token gate, done, page titles, form labels) and the restore page (phase label) goes through the `NowoSiteBackupBundle` domain, shipped in `en`, `es`, `fr`, `it`, `pt`, `de`, `nl`. `<html lang>` follows the request locale. Override wording with `translations/NowoSiteBackupBundle.<locale>.yaml` in the host (e.g. `panel.login.heading`, `setup.token.lead`) instead of forking templates. Controller messages fall back to English when no translator service exists.
+
+**Theming with `--nowo-ui-*` tokens.** The standalone panel / setup layouts and `setup/_styles.html.twig` only read the UiKit tokens (`--nowo-ui-primary`, `--nowo-ui-primary-contrast`, `--nowo-ui-surface`, `--nowo-ui-surface-muted`, `--nowo-ui-border`, `--nowo-ui-border-strong`, `--nowo-ui-text`, `--nowo-ui-muted`, `--nowo-ui-danger`, `--nowo-ui-danger-bg`, `--nowo-ui-success-bg`, `--nowo-ui-success-text`, `--nowo-ui-radius`) with inline fallbacks. The setup layout's default dark palette is a token block (`nowo_site_backup_theme_tokens`); override it with your tokens (or empty it to inherit the host / `nowo-ui.css` values):
+
+```twig
+{# templates/setup/site_backup_setup.html.twig — set as setup.layout_template #}
+{% extends '@NowoSiteBackupBundle/setup/layout.html.twig' %}
+{% block nowo_site_backup_theme_tokens %}
+    <style nonce="{{ app.request.attributes.get('csp_nonce') }}">
+        :root { --nowo-ui-primary: #0f766e; --nowo-ui-primary-contrast: #fff; --nowo-ui-surface: #fff; --nowo-ui-surface-muted: #f5f5f4; --nowo-ui-text: #1c1917; --nowo-ui-muted: #57534e; --nowo-ui-border: #e7e5e4; }
+    </style>
+{% endblock %}
+{% block nowo_site_backup_logo %}<img src="{{ asset('logo.svg') }}" alt="" width="20" height="20"> {% endblock %}
+```
+
+A host shell that does **not** extend the bundle layouts can still reuse the bundle component CSS and messages: `{% include '@NowoSiteBackupBundle/setup/_styles.html.twig' %}` (wizard forms, steps, progress bar, token form) and `{% include '@NowoSiteBackupBundle/panel/_flashes.html.twig' %}` (panel `error` / `success`, e.g. "Invalid password.", throttle message).
+
+**Panel markup config.** `panel.row_actions_display` (`text` | `icon` | `icon_text` | `kit`) renders archive actions as UiKit `nowo-ui-action` buttons with icons; `panel.extra_classes` appends host classes to cards / tables / buttons / inputs. Buttons, inputs, tables, flashes and empty states use the UiKit macros for `css_framework`.
+
+**Chrome blocks** (override in a template that `extends` the bundle one, and point `templates.*` at it — no copy of the markup):
+
+| Template | Blocks |
+| --- | --- |
+| `panel/layout.html.twig` | `nowo_site_backup_html_lang`, `nowo_site_backup_html_class`, `nowo_site_backup_body_class`, `nowo_site_backup_panel_styles`, `nowo_site_backup_panel_brand`, `nowo_site_backup_panel_nav` (+ existing `nowo_ui_*`) |
+| `panel/login.html.twig` | `nowo_site_backup_login_eyebrow`, `_heading`, `_intro`, `_notice`, `_form`, `_after` |
+| `panel/index.html.twig` | `nowo_site_backup_create_section`, `_restore_section`, `_archives_section`, `_row_actions` (per row, `b`), `_logout`, `_confirm_script` |
+| `panel/history.html.twig` | `nowo_site_backup_history_heading`, `nowo_site_backup_history_row` (per row, `h`) |
+| `setup/layout.html.twig` | `nowo_site_backup_theme_tokens`, `nowo_site_backup_styles`, `nowo_site_backup_brand`, `nowo_site_backup_logo`, `nowo_site_backup_html_lang`, `nowo_site_backup_html_class`, `nowo_site_backup_body_class` |
+| `setup/token.html.twig` | `nowo_site_backup_token_art`, `_title`, `_lead`, `_form` (`tokenForm`, GET `?token=`), `_howto` |
+
+Example — branded panel login without a fork (`templates.panel_login: 'site_backup/login.html.twig'`):
+
+```twig
+{% extends '@NowoSiteBackupBundle/panel/login.html.twig' %}
+{% block nowo_site_backup_login_eyebrow %}<p class="eyebrow">Ops</p>{% endblock %}
+{% block nowo_site_backup_login_intro %}<p>{{ 'site_backup.login_intro'|trans }}</p>{% endblock %}
+```
 
 
 ## Built-in database dumper

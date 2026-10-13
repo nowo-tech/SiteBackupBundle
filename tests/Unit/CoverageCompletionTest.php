@@ -839,10 +839,12 @@ final class CoverageCompletionTest extends TestCase
     public function testPanelFormTypesBuild(): void
     {
         $factory = Forms::createFormFactoryBuilder()->getFormFactory();
-        $action  = $factory->create(PanelActionType::class, null, ['action' => 'verify', 'backup_id' => 'id-1']);
+        $action  = $factory->create(PanelActionType::class, null, ['panel_action' => 'verify', 'backup_id' => 'id-1']);
         self::assertTrue($action->has('backup_id'));
+        self::assertSame('verify', $action->get('action')->getData());
+        self::assertSame('', $action->createView()->vars['action'], 'panel_action must not leak into the <form action> URL');
 
-        $emptyAction = $factory->create(PanelActionType::class, null, ['action' => 'create', 'backup_id' => '']);
+        $emptyAction = $factory->create(PanelActionType::class, null, ['panel_action' => 'create', 'backup_id' => '']);
         self::assertFalse($emptyAction->has('backup_id'));
 
         $login = $factory->create(PanelLoginType::class);

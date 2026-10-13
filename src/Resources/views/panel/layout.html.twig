@@ -1,53 +1,67 @@
 {# Default standalone panel chrome (REQ-UI-001).
    Host apps: set panel.layout_template to the project layout / bridge that defines
-   nowo_ui_content (or nowo_site_backup_panel_content). #}
+   nowo_ui_content (or nowo_site_backup_panel_content).
+   v1.18+: colours come from the UiKit --nowo-ui-* tokens (fallbacks inline), so a host only remaps tokens.
+   Chrome blocks: nowo_site_backup_html_lang, nowo_site_backup_html_class, nowo_site_backup_body_class,
+   nowo_site_backup_panel_styles, nowo_site_backup_panel_brand, nowo_site_backup_panel_nav. #}
 {% set _csp_nonce = app is defined and app and app.request ? app.request.attributes.get('csp_nonce')|default('') : '' %}
 <!DOCTYPE html>
-<html lang="en" class="nowo-ui-root nowo-site-backup-panel nowo-ui-css-{{ nowo_site_backup_css_framework|default('custom') }}" data-css-framework="{{ nowo_site_backup_css_framework|default('custom') }}">
+<html lang="{% block nowo_site_backup_html_lang %}{{ app is defined and app and app.request ? app.request.locale|default('en') : 'en' }}{% endblock %}" class="nowo-ui-root nowo-site-backup-panel nowo-ui-css-{{ nowo_site_backup_css_framework|default('custom') }}{% block nowo_site_backup_html_class %}{% endblock %}" data-css-framework="{{ nowo_site_backup_css_framework|default('custom') }}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
-    <title>{% block nowo_ui_document_title %}{% block title %}Site Backup{% endblock %}{% endblock %}</title>
+    <title>{% block nowo_ui_document_title %}{% block title %}{{ 'panel.title'|trans({}, 'NowoSiteBackupBundle') }}{% endblock %}{% endblock %}</title>
     {# Demo root layout: no parent() (full HTML). Pages do not reopen stylesheets/javascripts. #}
     {% block stylesheets %}
         {% block nowo_ui_styles %}
             <link href="{{ asset('css/nowo-ui.css', 'nowo_ui_kit') }}" rel="stylesheet">
-            <style{% if _csp_nonce %} nonce="{{ _csp_nonce }}"{% endif %}>
-                .nowo-site-backup-panel body,
-                .nowo-ui-body { font-family: system-ui, sans-serif; margin: 0; background: #f8fafc; color: #0f172a; }
-                .nowo-ui-header { background: #0f172a; color: #fff; padding: 1rem 1.5rem; display: flex; gap: 1rem; align-items: center; }
-                .nowo-ui-header a { color: #93c5fd; text-decoration: none; }
-                .nowo-ui-main { max-width: 960px; margin: 1.5rem auto; padding: 0 1rem; }
-                .nowo-ui-flash { padding: .75rem 1rem; border-radius: 8px; margin-bottom: 1rem; }
-                .nowo-ui-flash--ok { background: #dcfce7; }
-                .nowo-ui-flash--err { background: #fee2e2; }
-                .nowo-ui-table { width: 100%; border-collapse: collapse; background: #fff; }
-                .nowo-ui-table th,
-                .nowo-ui-table td { border-bottom: 1px solid #e2e8f0; padding: .65rem .5rem; text-align: left; font-size: .92rem; }
-                .nowo-ui-form--inline { display: inline; }
-                .nowo-ui-btn,
-                .nowo-site-backup-panel button,
-                .nowo-site-backup-panel .btn { background: #2563eb; color: #fff; border: 0; border-radius: 8px; padding: .45rem .8rem; cursor: pointer; }
-                .nowo-ui-btn--danger,
-                .nowo-site-backup-panel button.danger { background: #dc2626; }
-                .nowo-ui-card,
-                .nowo-site-backup-panel .card { background: #fff; border: 1px solid #e2e8f0; border-radius: 12px; padding: 1rem; margin-bottom: 1rem; }
-            </style>
+            {% block nowo_site_backup_panel_styles %}
+                <style{% if _csp_nonce %} nonce="{{ _csp_nonce }}"{% endif %}>
+                    .nowo-site-backup-panel body,
+                    .nowo-ui-body { font-family: system-ui, sans-serif; margin: 0; background: var(--nowo-ui-surface-muted, #f8fafc); color: var(--nowo-ui-text, #0f172a); }
+                    .nowo-ui-header { background: var(--nowo-sbb-header-bg, var(--nowo-ui-text, #0f172a)); color: var(--nowo-sbb-header-text, var(--nowo-ui-surface, #fff)); padding: 1rem 1.5rem; display: flex; gap: 1rem; align-items: center; }
+                    .nowo-ui-header a { color: var(--nowo-sbb-header-link, color-mix(in srgb, var(--nowo-ui-primary, #2563eb) 45%, #fff)); text-decoration: none; }
+                    .nowo-sbb-brand { display: inline-flex; gap: .5rem; align-items: center; }
+                    .nowo-ui-main { max-width: 960px; margin: 1.5rem auto; padding: 0 1rem; }
+                    .nowo-ui-flash { padding: .75rem 1rem; border-radius: var(--nowo-ui-radius, 8px); margin-bottom: 1rem; }
+                    .nowo-ui-flash--ok,
+                    .nowo-ui-flash--success { background: var(--nowo-ui-success-bg, #dcfce7); color: var(--nowo-ui-success-text, #065f46); }
+                    .nowo-ui-flash--err,
+                    .nowo-ui-flash--error { background: var(--nowo-ui-danger-bg, #fee2e2); color: var(--nowo-ui-danger-text, #b91c1c); }
+                    .nowo-ui-table { width: 100%; border-collapse: collapse; background: var(--nowo-ui-surface, #fff); }
+                    .nowo-ui-table th,
+                    .nowo-ui-table td { border-bottom: 1px solid var(--nowo-ui-border, #e2e8f0); padding: .65rem .5rem; text-align: left; font-size: .92rem; }
+                    .nowo-ui-form--inline { display: inline; }
+                    .nowo-ui-btn,
+                    .nowo-site-backup-panel button,
+                    .nowo-site-backup-panel .btn { background: var(--nowo-ui-primary, #2563eb); color: var(--nowo-ui-primary-contrast, #fff); border: 0; border-radius: var(--nowo-ui-radius, 8px); padding: .45rem .8rem; cursor: pointer; }
+                    .nowo-site-backup-panel .nowo-ui-btn--secondary { background: var(--nowo-ui-surface, #fff); color: var(--nowo-ui-text, #0f172a); border: 1px solid var(--nowo-ui-border-strong, #cbd5e1); }
+                    .nowo-ui-btn--danger,
+                    .nowo-site-backup-panel button.danger { background: var(--nowo-ui-danger, #dc2626); color: var(--nowo-ui-primary-contrast, #fff); }
+                    .nowo-ui-card,
+                    .nowo-site-backup-panel .card { background: var(--nowo-ui-surface, #fff); color: var(--nowo-ui-text, #0f172a); border: 1px solid var(--nowo-ui-border, #e2e8f0); border-radius: calc(var(--nowo-ui-radius, 6px) * 2); padding: 1rem; margin-bottom: 1rem; }
+                    .nowo-site-backup-panel .nowo-ui-muted,
+                    .nowo-site-backup-panel .nowo-ui-empty { color: var(--nowo-ui-muted, #64748b); }
+                    .nowo-site-backup-panel .nowo-ui-row-actions { display: inline-flex; flex-wrap: wrap; gap: .25rem; }
+                    .nowo-site-backup-panel .visually-hidden { position: absolute; width: 1px; height: 1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; }
+                </style>
+            {% endblock %}
         {% endblock %}
     {% endblock %}
 </head>
-<body class="nowo-ui-body">
+<body class="nowo-ui-body{% block nowo_site_backup_body_class %}{% endblock %}">
 {% block nowo_ui_header %}
 <header class="nowo-ui-header">
-    <strong>Site Backup</strong>
-    <a href="{{ pathPrefix }}">Panel</a>
-    <a href="{{ pathPrefix }}/history">History</a>
+    {% block nowo_site_backup_panel_brand %}<strong class="nowo-sbb-brand">{{ 'panel.title'|trans({}, 'NowoSiteBackupBundle') }}</strong>{% endblock %}
+    {% block nowo_site_backup_panel_nav %}
+        <a href="{{ pathPrefix }}">{{ 'panel.nav.panel'|trans({}, 'NowoSiteBackupBundle') }}</a>
+        <a href="{{ pathPrefix }}/history">{{ 'panel.nav.history'|trans({}, 'NowoSiteBackupBundle') }}</a>
+    {% endblock %}
 </header>
 {% endblock %}
 <main class="nowo-ui-main">
     {% block nowo_ui_flashes %}
-        {% if error is defined and error %}<div class="nowo-ui-flash nowo-ui-flash--err flash err">{{ error }}</div>{% endif %}
-        {% if success is defined and success %}<div class="nowo-ui-flash nowo-ui-flash--ok flash ok">{{ success }}</div>{% endif %}
+        {{ include('@NowoSiteBackupBundle/panel/_flashes.html.twig') }}
     {% endblock %}
     {% block nowo_ui_content %}
         {% block nowo_site_backup_panel_content %}

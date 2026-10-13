@@ -90,9 +90,18 @@ final class SiteBackupPanelControllerThrottleTest extends TestCase
     public function testThrottledLoginRendersTranslated429WithRetryAfter(): void
     {
         $translator = $this->createMock(TranslatorInterface::class);
-        $translator->expects(self::once())->method('trans')
-            ->with('panel.login.too_many_attempts', self::callback(static fn (array $p): bool => (int) $p['%minutes%'] >= 1 && (int) $p['%minutes%'] <= 15), 'NowoSiteBackupBundle')
-            ->willReturn('translated-too-many');
+        $translator->expects(self::exactly(2))->method('trans')
+            ->willReturnCallback(static function (string $id, array $parameters, ?string $domain): string {
+                self::assertSame('NowoSiteBackupBundle', $domain);
+                if ($id === 'panel.login.invalid_password') {
+                    return 'translated-invalid';
+                }
+                self::assertSame('panel.login.too_many_attempts', $id);
+                self::assertGreaterThanOrEqual(1, (int) $parameters['%minutes%']);
+                self::assertLessThanOrEqual(15, (int) $parameters['%minutes%']);
+
+                return 'translated-too-many';
+            });
 
         $controller = $this->controller($this->throttledGate(), $translator);
 
@@ -105,6 +114,7 @@ final class SiteBackupPanelControllerThrottleTest extends TestCase
         self::assertGreaterThanOrEqual(1, $retryAfter);
         self::assertLessThanOrEqual(900, $retryAfter);
 
+        self::assertSame('translated-invalid', $this->rendered[0]['error']);
         $context = $this->rendered[1];
         self::assertSame('translated-too-many', $context['error']);
         self::assertTrue($context['throttled']);

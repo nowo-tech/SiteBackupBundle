@@ -24,6 +24,9 @@ final class Configuration implements ConfigurationInterface
     /** @var list<string> */
     public const CSS_FRAMEWORKS = ['bootstrap', 'bootstrap4', 'bootstrap5', 'tailwind', 'foundation', 'custom', 'tabler', 'none'];
 
+    /** @var list<string> */
+    public const ROW_ACTIONS_DISPLAYS = ['text', 'icon', 'icon_text', 'kit'];
+
     public function getConfigTreeBuilder(): TreeBuilder
     {
         $treeBuilder = new TreeBuilder(self::ALIAS);
@@ -163,6 +166,21 @@ final class Configuration implements ConfigurationInterface
                         ->scalarNode('layout_template')
                             ->info('Host Twig layout for panel pages (global nowo_site_backup_panel_layout_template). Must define block nowo_ui_content / nowo_site_backup_panel_content. Default: bundle standalone panel layout.')
                             ->defaultNull()
+                        ->end()
+                        ->enumNode('row_actions_display')
+                            ->info('v1.18+: archive row actions (Verify / Restore / Delete) as text buttons (default, pre-1.18 markup), icon-only, icon + text, or "kit" to follow the UiKit global nowo_ui_kit_row_actions_display. Twig global nowo_site_backup_row_actions_display.')
+                            ->values(self::ROW_ACTIONS_DISPLAYS)
+                            ->defaultValue('text')
+                        ->end()
+                        ->arrayNode('extra_classes')
+                            ->info('v1.18+: extra CSS classes appended to panel markup (Twig global nowo_site_backup_panel_classes), so hosts do not fork templates only to add classes.')
+                            ->addDefaultsIfNotSet()
+                            ->children()
+                                ->scalarNode('card')->defaultValue('')->end()
+                                ->scalarNode('table')->defaultValue('')->end()
+                                ->scalarNode('button')->defaultValue('')->end()
+                                ->scalarNode('input')->defaultValue('')->end()
+                            ->end()
                         ->end()
                     ->end()
                 ->end()

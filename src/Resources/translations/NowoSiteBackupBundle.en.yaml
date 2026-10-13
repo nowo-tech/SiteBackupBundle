@@ -3,11 +3,75 @@ restore:
     title: 'Restoring site'
     message: 'Restoring this site from a verified backup. Please wait…'
     done: 'Restore finished. Reloading…'
+  phase:
+    idle: 'Idle'
+    preparing: 'Preparing'
+    validating: 'Validating'
+    extracting: 'Extracting'
+    applying: 'Applying'
+    finalizing: 'Finalizing'
+    completed: 'Completed'
+    failed: 'Failed'
 panel:
   title: 'Site Backup'
+  nav:
+    panel: 'Panel'
+    history: 'History'
   login:
+    page_title: 'Login - Site Backup'
+    heading: 'Site Backup panel'
+    misconfigured: 'Password protection is enabled but %option% is not set. Configure a hash (see %command%) before using the panel.'
+    unprotected: 'Password protection is disabled. The panel is open to whoever can reach this URL - enable a hash in production.'
+    password: 'Password'
+    submit: 'Sign in'
+    invalid_password: 'Invalid password.'
     too_many_attempts: 'Too many login attempts. Try again in %minutes% minute(s).'
+  index:
+    page_title: 'Site Backup panel'
+    create_title: 'Create backup'
+    label: 'Label'
+    label_placeholder: 'pre-deploy'
+    create_submit: 'Create integral backup'
+    restore_title: 'Restore progress'
+    phase: 'Phase'
+    clear_status: 'Clear status'
+    archives: 'Archives'
+    empty: 'No backups yet.'
+    col_id: 'ID'
+    col_created: 'Created'
+    col_size: 'Size'
+    col_label: 'Label'
+    col_actions: 'Actions'
+    verify: 'Verify'
+    restore: 'Restore'
+    delete: 'Delete'
+    restore_confirm: 'Restore this backup now? Visitors will see the loading page.'
+    delete_confirm: 'Delete backup?'
+    logout: 'Logout'
+  history:
+    page_title: 'History — Site Backup'
+    title: 'History'
+    col_when: 'When'
+    col_action: 'Action'
+    col_backup: 'Backup'
+    col_actor: 'Actor'
+    col_message: 'Message'
+    empty: 'No history.'
+  flash:
+    created: 'Backup created: %id%'
+    deleted: 'Backup deleted: %id%'
+    verify_ok: 'Integrity OK for %id%'
+    verify_failed: 'Integrity FAILED: %errors%'
+    restored: 'Restore finished for %id%'
+    restore_cleared: 'Restore status cleared.'
+  error:
+    invalid_csrf: 'Invalid CSRF token.'
+    access_denied: 'Access denied.'
 setup:
+  page_title:
+    wizard: '%brand% - Setup'
+    token: '%brand% — Setup token required'
+    done: '%brand% — Ready'
   wizard:
     title: 'Set up this site'
     subtitle: 'We will create the database, apply schema, and prepare an admin account.'
@@ -39,6 +103,8 @@ setup:
     needs_input: 'Waiting for input'
     blocked: 'Blocked'
   admin:
+    email: 'Email'
+    password: 'Password'
     create: 'Create admin'
   sample:
     prompt: 'Load sample / demo data?'
@@ -47,6 +113,9 @@ setup:
   database:
     save: 'Save DATABASE_URL'
     skip: 'Skip (use existing env)'
+  error:
+    invalid_csrf: 'Invalid CSRF token.'
+    invalid_request: 'Invalid setup request.'
   reason:
     heading: 'Setup is required'
     db_connection: 'The database is not reachable with the current DATABASE_URL (missing, wrong, or the DB service is down).'
@@ -60,6 +129,14 @@ setup:
   token:
     title: 'Setup token required'
     body: 'Open %path% with the configured setup.setup_token.'
+    lead: 'This setup wizard is protected. Paste the setup token to continue.'
+    field_label: 'Setup token'
+    field_placeholder: 'Paste the setup token'
+    submit: 'Continue'
+    howto: 'Where do I find the token?'
+    step_env: 'The token is the value of setup.setup_token in the bundle configuration (usually an environment variable).'
+    step_url: 'Open %path% with that value.'
+    step_header: 'Or send it in the X-Setup-Token HTTP header.'
   done:
     title: 'Setup complete'
     body: 'The site is ready. You can sign in with the admin account you created.'

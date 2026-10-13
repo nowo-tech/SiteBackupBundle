@@ -17,6 +17,7 @@
 /.php-cs-fixer.cache
 /.phpunit.cache
 /.phpunit.result.cache
+/.twig-cs-fixer.cache
 
 # Archives / compressed
 *.zip

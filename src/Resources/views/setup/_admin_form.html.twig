@@ -1,10 +1,10 @@
 {{ form_start(form) }}
     <div>
-        {{ form_label(form.email, 'Email') }}
+        {{ form_label(form.email, 'setup.admin.email'|trans({}, 'NowoSiteBackupBundle')) }}
         {{ form_widget(form.email, {attr: {autocomplete: 'username'}}) }}
     </div>
     <div>
-        {{ form_label(form.password, 'Password') }}
+        {{ form_label(form.password, 'setup.admin.password'|trans({}, 'NowoSiteBackupBundle')) }}
         {{ form_widget(form.password, {attr: {autocomplete: 'new-password'}}) }}
     </div>
     <div class="actions">

@@ -16,7 +16,7 @@ final class PanelActionType extends AbstractSiteBackupFormType
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
         $builder->add('action', HiddenType::class, [
-            'data' => $options['action'],
+            'data' => $options['panel_action'],
         ]);
 
         if (is_string($options['backup_id']) && $options['backup_id'] !== '') {
@@ -30,11 +30,13 @@ final class PanelActionType extends AbstractSiteBackupFormType
     {
         parent::configureOptions($resolver);
 
+        // v1.18: the hidden field value lives in `panel_action`. Before 1.18 it reused Symfony's `action`
+        // option, which also became the <form action="…"> URL (e.g. action="verify") and posted outside the panel.
         $resolver->setDefaults([
-            'action'    => '',
-            'backup_id' => null,
+            'panel_action' => '',
+            'backup_id'    => null,
         ]);
-        $resolver->setAllowedTypes('action', 'string');
+        $resolver->setAllowedTypes('panel_action', 'string');
         $resolver->setAllowedTypes('backup_id', ['null', 'string']);
     }
 

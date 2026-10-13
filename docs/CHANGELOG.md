@@ -7,6 +7,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.18.0] - 2026-10-13
+
+### Added
+
+- **Translated panel, setup and restore screens** (spec 006): every user-facing string goes through the `NowoSiteBackupBundle` domain in all 7 locales (`en`, `es`, `fr`, `it`, `pt`, `de`, `nl`) — panel login (heading, notices, label, button, "Invalid password."), dashboard (sections, columns, actions, confirms, logout, phase label), history, flash / error messages (`panel.flash.*`, `panel.error.*`, 403 "Access denied."), setup page titles (`setup.page_title.*`), admin form labels, setup controller errors (`setup.error.*`), token gate and restore phase (`restore.phase.*`). 69 new keys; `<html lang>` follows the request locale. `SetupWizardController` takes an optional `$translator` (last argument, wired to `translator`); both controllers fall back to English without one.
+- **Setup token gate with a paste form**: `setup/token.html.twig` renders `tokenForm` (`Form\Setup\SetupTokenType`, GET, field `token`, no CSRF) plus a collapsible how-to (`setup.setup_token`, `?token=…`, `X-Setup-Token`). Templates without `tokenForm` keep the text-only page.
+- **`--nowo-ui-*` token theming**: panel layout CSS, the new `setup/_styles.html.twig` partial and the setup layout read UiKit tokens with inline fallbacks; the setup dark palette is the overridable block `nowo_site_backup_theme_tokens`. Legacy `--nowo-sbb-*` variables are aliases of the tokens.
+- **Chrome blocks** so hosts stop forking pages: panel layout (`nowo_site_backup_html_lang`, `_html_class`, `_body_class`, `_panel_styles`, `_panel_brand`, `_panel_nav`), login (`nowo_site_backup_login_eyebrow`, `_heading`, `_intro`, `_notice`, `_form`, `_after`), index (`nowo_site_backup_create_section`, `_restore_section`, `_archives_section`, `_row_actions`, `_logout`, `_confirm_script`), history (`nowo_site_backup_history_heading`, `_history_row`), setup layout (`nowo_site_backup_theme_tokens`, `nowo_site_backup_logo`, lang / class blocks), token (`nowo_site_backup_token_art`, `_title`, `_lead`, `_form`, `_howto`).
+- **`panel.row_actions_display`** (`text` default \| `icon` \| `icon_text` \| `kit`) and **`panel.extra_classes`** (`card`, `table`, `button`, `input`); Twig globals `nowo_site_backup_row_actions_display` / `nowo_site_backup_panel_classes`.
+- Reusable partials for host shells: `panel/_flashes.html.twig` (panel `error` / `success`) and `setup/_styles.html.twig`.
+- Tests: functional render tests with real Twig + Form + Translation bridges (`tests/Unit/Twig/TranslatedTemplatesRenderTest.php`), catalogue test (deep key parity + every literal key used by templates / controllers exists).
+
+### Changed
+
+- Panel templates use the UiKit macros for `css_framework` (`ui.btn`, `ui.input`, `ui.table_wrap`, `ui.table`, `ui.flash`, `ui.empty`, `ui.row_actions`, `ui.action`); legacy classes (`nowo-ui-btn`, `card`, `inline`, `danger`, `nowo-ui-flash--err`, …) are kept. Tables are wrapped in `nowo-ui-table-wrap`; "Clear status" / "Logout" use the secondary button style.
+- `.scripts/validate-translations.php` (`make validate-translations`) checks deep key parity, not only top-level sections.
+- Translations: replaced English copies in `fr`, `it`, `pt`, `de`, `nl` (bootstrap, reasons, token) and outdated `db_connection_hint` / `db_connection_form` texts.
+- **`nowo-tech/ui-kit-bundle` constraint `^1.6`** (row-action kinds / icons used by the panel).
+
+### Fixed
+
+- **Panel row / logout / clear forms posted to the wrong URL**: `PanelActionType` used Symfony's reserved `action` option for the hidden field value, so `<form action="verify">` (also `restore`, `delete`, `logout`, `clear_restore`) was rendered and the browser posted outside the panel. The value is now the `panel_action` option; forms post back to the panel URL.
+
 ## [1.17.0] - 2026-10-12
 
 ### Added
@@ -472,7 +495,9 @@ First stable release of **Site Backup Bundle**.
 - Symfony `^7.0 || ^8.0` (CI / mandatory minors: **7.4**, **8.0**, **8.1**)
 - System `tar` required for archive create/extract
 
-[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.16.0...HEAD
+[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.18.0...HEAD
+[1.18.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.17.0...v1.18.0
+[1.17.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.16.0...v1.17.0
 [1.16.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.15.1...v1.16.0
 [1.15.1]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.15.0...v1.15.1
 [1.15.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.14.3...v1.15.0

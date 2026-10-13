@@ -48,5 +48,22 @@ final class SiteBackupExtensionTest extends TestCase
     {
         $globals = (new SiteBackupExtension($this->createManager()))->getGlobals();
         self::assertSame('custom', $globals[SiteBackupExtension::GLOBAL_CSS_FRAMEWORK]);
+        self::assertSame('text', $globals[SiteBackupExtension::GLOBAL_ROW_ACTIONS_DISPLAY]);
+        self::assertSame(['card' => '', 'table' => '', 'button' => '', 'input' => ''], $globals[SiteBackupExtension::GLOBAL_PANEL_CLASSES]);
+    }
+
+    public function testPanelChromeGlobalsAreNormalised(): void
+    {
+        $globals = (new SiteBackupExtension(
+            $this->createManager(),
+            rowActionsDisplay: 'icon_text',
+            panelClasses: ['table' => '  data-table ', 'button' => null, 'extra' => 'x'],
+        ))->getGlobals();
+
+        self::assertSame('icon_text', $globals[SiteBackupExtension::GLOBAL_ROW_ACTIONS_DISPLAY]);
+        self::assertSame(
+            ['card' => '', 'table' => 'data-table', 'button' => '', 'input' => '', 'extra' => 'x'],
+            $globals[SiteBackupExtension::GLOBAL_PANEL_CLASSES],
+        );
     }
 }

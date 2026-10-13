@@ -30,7 +30,7 @@ use function implode;
 use function is_numeric;
 use function max;
 use function method_exists;
-use function sprintf;
+use function strtr;
 
 final class SiteBackupPanelController
 {
@@ -72,11 +72,11 @@ final class SiteBackupPanelController
             $submittedForm   = $this->createSubmittedPanelForm($request, $submittedAction);
 
             if (!$this->csrfTokenManager instanceof CsrfTokenManagerInterface) {
-                $error = 'Invalid CSRF token.';
+                $error = $this->invalidCsrfMessage();
             } else {
                 $submittedForm->handleRequest($request);
                 if (!$submittedForm->isSubmitted() || !$submittedForm->isValid()) {
-                    $error = 'Invalid CSRF token.';
+                    $error = $this->invalidCsrfMessage();
                 } else {
                     try {
                         $success = match ($submittedAction) {
@@ -150,18 +150,18 @@ final class SiteBackupPanelController
 
         if ($request->isMethod('POST') && $request->request->getString('action') === 'login') {
             if (!$this->csrfTokenManager instanceof CsrfTokenManagerInterface) {
-                $error = 'Invalid CSRF token.';
+                $error = $this->invalidCsrfMessage();
             } else {
                 $loginForm->handleRequest($request);
                 if (!$loginForm->isSubmitted() || !$loginForm->isValid()) {
-                    $error = 'Invalid CSRF token.';
+                    $error = $this->invalidCsrfMessage();
                 } else {
                     try {
                         if ($this->accessGate->authenticate($request, $request->request->getString('password'))) {
                             return new RedirectResponse($this->pathPrefix);
                         }
 
-                        $error = 'Invalid password.';
+                        $error = $this->message('panel.login.invalid_password', 'Invalid password.');
                     } catch (TooManyRequestsHttpException $e) {
                         // Login throttle (security.login_throttle): friendly 429, never a 500 / raw error page.
                         $retryAfter = $this->retryAfterSeconds($e);
@@ -199,11 +199,27 @@ final class SiteBackupPanelController
     private function tooManyAttemptsMessage(int $retryAfter): string
     {
         $minutes = (string) max(1, (int) ceil($retryAfter / 60));
+
+        return $this->message('panel.login.too_many_attempts', 'Too many login attempts. Try again in %minutes% minute(s).', ['%minutes%' => $minutes]);
+    }
+
+    private function invalidCsrfMessage(): string
+    {
+        return $this->message('panel.error.invalid_csrf', 'Invalid CSRF token.');
+    }
+
+    /**
+     * Translated user-facing message (domain NowoSiteBackupBundle); English fallback without a translator (v1.18+).
+     *
+     * @param array<string, string> $parameters
+     */
+    private function message(string $id, string $fallback, array $parameters = []): string
+    {
         if (!$this->translator instanceof TranslatorInterface) {
-            return sprintf('Too many login attempts. Try again in %s minute(s).', $minutes);
+            return strtr($fallback, $parameters);
         }
 
-        return $this->translator->trans('panel.login.too_many_attempts', ['%minutes%' => $minutes], 'NowoSiteBackupBundle');
+        return $this->translator->trans($id, $parameters, 'NowoSiteBackupBundle');
     }
 
     private function handleCreate(Request $request): string
@@ -211,7 +227,7 @@ final class SiteBackupPanelController
         $label    = $request->request->getString('label');
         $artifact = $this->manager->createBackup($label !== '' ? $label : null, 'panel');
 
-        return 'Backup created: ' . $artifact->getId();
+        return $this->message('panel.flash.created', 'Backup created: %id%', ['%id%' => $artifact->getId()]);
     }
 
     private function handleDelete(Request $request): string
@@ -219,7 +235,7 @@ final class SiteBackupPanelController
         $id = $request->request->getString('backup_id');
         $this->manager->deleteBackup($id, 'panel');
 
-        return 'Backup deleted: ' . $id;
+        return $this->message('panel.flash.deleted', 'Backup deleted: %id%', ['%id%' => $id]);
     }
 
     private function handleVerify(Request $request): string
@@ -228,8 +244,8 @@ final class SiteBackupPanelController
         $result = $this->manager->verifyBackup($id);
 
         return $result['ok']
-            ? 'Integrity OK for ' . $id
-            : 'Integrity FAILED: ' . implode('; ', $result['errors']);
+            ? $this->message('panel.flash.verify_ok', 'Integrity OK for %id%', ['%id%' => $id])
+            : $this->message('panel.flash.verify_failed', 'Integrity FAILED: %errors%', ['%errors%' => implode('; ', $result['errors'])]);
     }
 
     private function handleRestore(Request $request): string
@@ -237,7 +253,7 @@ final class SiteBackupPanelController
         $id = $request->request->getString('backup_id');
         $this->manager->restore($id, 'panel');
 
-        return 'Restore finished for ' . $id;
+        return $this->message('panel.flash.restored', 'Restore finished for %id%', ['%id%' => $id]);
     }
 
     private function clearRestore(): string
@@ -245,7 +261,7 @@ final class SiteBackupPanelController
         // @igor-ignore - HTTP handler delegates to services; no controller worker state.
         $this->manager->clearRestoreStatus();
 
-        return 'Restore status cleared.';
+        return $this->message('panel.flash.restore_cleared', 'Restore status cleared.');
     }
 
     private function denyUnlessRoleAccess(): ?Response
@@ -255,7 +271,7 @@ final class SiteBackupPanelController
         }
 
         if (!$this->accessChecker instanceof SiteBackupAccessCheckerInterface || !$this->accessChecker->canAccess(null)) {
-            return new Response('Access denied.', Response::HTTP_FORBIDDEN);
+            return new Response($this->message('panel.error.access_denied', 'Access denied.'), Response::HTTP_FORBIDDEN);
         }
 
         return null;
@@ -307,8 +323,8 @@ final class SiteBackupPanelController
     private function createPanelActionForm(string $action, ?string $backupId = null): FormInterface
     {
         return $this->formFactory->createNamed('', PanelActionType::class, null, $this->formOptions([
-            'action'    => $action,
-            'backup_id' => $backupId,
+            'panel_action' => $action,
+            'backup_id'    => $backupId,
         ]));
     }
 

@@ -1,7 +1,7 @@
 {% extends nowo_site_backup_setup_layout_template %}
 
-{% block nowo_ui_document_title %}{{ brandName }} - Setup{% endblock %}
-{% block nowo_site_backup_title %}{{ brandName }} - Setup{% endblock %}
+{% block nowo_ui_document_title %}{{ 'setup.page_title.wizard'|trans({'%brand%': brandName}, 'NowoSiteBackupBundle') }}{% endblock %}
+{% block nowo_site_backup_title %}{{ 'setup.page_title.wizard'|trans({'%brand%': brandName}, 'NowoSiteBackupBundle') }}{% endblock %}
 
 {% block nowo_site_backup_content %}
     <h1>{{ 'setup.wizard.title'|trans({}, 'NowoSiteBackupBundle') }}</h1>

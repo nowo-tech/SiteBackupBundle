@@ -1,16 +1,28 @@
 {% extends nowo_site_backup_panel_layout_template %}
 {% import '@NowoUiKitBundle/macros/ui.html.twig' as ui %}
 {% set _sbb_fw = nowo_site_backup_css_framework|default('custom') %}
+{% set _sbb_classes = nowo_site_backup_panel_classes|default({}) %}
+{# v1.18+ chrome blocks: nowo_site_backup_history_heading, nowo_site_backup_history_row (per entry; `h` = entry). #}
 
-{% block nowo_ui_document_title %}History — Site Backup{% endblock %}
+{% block nowo_ui_document_title %}{{ 'panel.history.page_title'|trans({}, 'NowoSiteBackupBundle') }}{% endblock %}
 
 {% block nowo_site_backup_panel_content %}
-<section class="nowo-ui-card card">
-    <h2>History</h2>
-    <table class="{{ ui.table(_sbb_fw) }} nowo-ui-table">
-        <thead><tr><th>When</th><th>Action</th><th>Backup</th><th>Actor</th><th>Message</th></tr></thead>
+<section class="nowo-ui-card card{{ _sbb_classes.card|default('') ? ' ' ~ _sbb_classes.card }}">
+    <h2>{% block nowo_site_backup_history_heading %}{{ 'panel.history.title'|trans({}, 'NowoSiteBackupBundle') }}{% endblock %}</h2>
+    <div class="{{ ui.table_wrap(_sbb_fw) }}">
+    <table class="{{ ui.table(_sbb_fw) }} nowo-ui-table{{ _sbb_classes.table|default('') ? ' ' ~ _sbb_classes.table }}">
+        <thead>
+        <tr>
+            <th>{{ 'panel.history.col_when'|trans({}, 'NowoSiteBackupBundle') }}</th>
+            <th>{{ 'panel.history.col_action'|trans({}, 'NowoSiteBackupBundle') }}</th>
+            <th>{{ 'panel.history.col_backup'|trans({}, 'NowoSiteBackupBundle') }}</th>
+            <th>{{ 'panel.history.col_actor'|trans({}, 'NowoSiteBackupBundle') }}</th>
+            <th>{{ 'panel.history.col_message'|trans({}, 'NowoSiteBackupBundle') }}</th>
+        </tr>
+        </thead>
         <tbody>
         {% for h in history %}
+            {% block nowo_site_backup_history_row %}
             <tr>
                 <td>{{ h.occurredAt|date('Y-m-d H:i:s') }}</td>
                 <td>{{ h.action }}</td>
@@ -18,10 +30,12 @@
                 <td>{{ h.actor }}</td>
                 <td>{{ h.message }}</td>
             </tr>
+            {% endblock %}
         {% else %}
-            <tr><td colspan="5" class="{{ ui.empty(_sbb_fw) }}">No history.</td></tr>
+            <tr><td colspan="5" class="{{ ui.empty(_sbb_fw) }}">{{ 'panel.history.empty'|trans({}, 'NowoSiteBackupBundle') }}</td></tr>
         {% endfor %}
         </tbody>
     </table>
+    </div>
 </section>
 {% endblock %}

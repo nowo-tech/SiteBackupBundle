@@ -68,6 +68,27 @@ final class ConfigurationTest extends TestCase
         self::assertSame('bootstrap5', $config['css_framework']);
     }
 
+    public function testPanelChromeDefaultsAndOverrides(): void
+    {
+        $config = (new Processor())->processConfiguration(new Configuration(), [[]]);
+        self::assertSame('text', $config['panel']['row_actions_display']);
+        self::assertSame(['card' => '', 'table' => '', 'button' => '', 'input' => ''], $config['panel']['extra_classes']);
+
+        $config = (new Processor())->processConfiguration(new Configuration(), [[
+            'panel' => ['row_actions_display' => 'kit', 'extra_classes' => ['table' => 'data-table']],
+        ]]);
+        self::assertSame('kit', $config['panel']['row_actions_display']);
+        self::assertSame('data-table', $config['panel']['extra_classes']['table']);
+    }
+
+    public function testInvalidRowActionsDisplayRejected(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+        (new Processor())->processConfiguration(new Configuration(), [[
+            'panel' => ['row_actions_display' => 'emoji'],
+        ]]);
+    }
+
     public function testInvalidCssFrameworkRejected(): void
     {
         $this->expectException(InvalidConfigurationException::class);

@@ -10,6 +10,27 @@ use Symfony\Component\Yaml\Yaml;
 
 require dirname(__DIR__) . '/vendor/autoload.php';
 
+/**
+ * @param array<mixed> $tree
+ *
+ * @return array<string, mixed>
+ */
+function flattenKeys(array $tree, string $prefix = ''): array
+{
+    $flat = [];
+    foreach ($tree as $key => $value) {
+        $id = $prefix . $key;
+        if (is_array($value)) {
+            $flat += flattenKeys($value, $id . '.');
+
+            continue;
+        }
+        $flat[$id] = $value;
+    }
+
+    return $flat;
+}
+
 $requiredLocales = ['en', 'es', 'it', 'fr', 'pt', 'de', 'nl'];
 $domain          = 'NowoSiteBackupBundle';
 $dir             = dirname(__DIR__) . '/src/Resources/translations';
@@ -26,7 +47,8 @@ foreach ($requiredLocales as $locale) {
         fwrite(STDERR, "Invalid YAML (not a map): {$file}\n");
         exit(1);
     }
-    $catalogues[$locale] = array_keys($parsed);
+    // Deep parity (v1.18+): compare flattened dot keys, not only top-level sections.
+    $catalogues[$locale] = array_keys(flattenKeys($parsed));
     sort($catalogues[$locale]);
 }
 

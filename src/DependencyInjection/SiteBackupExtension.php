@@ -550,7 +550,9 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$manager', new Reference(SiteBackupManager::class))
             ->setArgument('$setupLayoutTemplate', $setupLayout)
             ->setArgument('$panelLayoutTemplate', $panelLayout)
-            ->setArgument('$cssFramework', (string) $config['css_framework']);
+            ->setArgument('$cssFramework', (string) $config['css_framework'])
+            ->setArgument('$rowActionsDisplay', (string) ($config['panel']['row_actions_display'] ?? 'text'))
+            ->setArgument('$panelClasses', $config['panel']['extra_classes'] ?? []);
     }
 
     /**
@@ -863,6 +865,7 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$setupToken', is_string($token) && $token !== '' ? $token : null)
             ->setArgument('$csrfTokenManager', new Reference(CsrfTokenManagerInterface::class, ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
             ->setArgument('$pathPrefixResolver', new Reference(SetupPathPrefixResolver::class))
+            ->setArgument('$translator', new Reference('translator', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
             ->setPublic(true);
     }
 

@@ -27,6 +27,8 @@ Root key: `nowo_site_backup`.
 | `panel.path_prefix` | `/_site_backup` | Auto-excluded from loading page; drives imported panel routes |
 | `panel.layout_template` | `null` (bundle `panel/layout.html.twig`) | Host Twig shell; Twig global `nowo_site_backup_panel_layout_template`; blocks `nowo_ui_content` / `nowo_site_backup_panel_content` |
 | `templates.panel_layout` | `@NowoSiteBackupBundle/panel/layout.html.twig` | Same as `panel.layout_template` when set |
+| `panel.row_actions_display` | `text` | v1.18+: archive row actions (Verify / Restore / Delete): `text` (pre-1.18 markup), `icon`, `icon_text`, or `kit` (follow UiKit `row_actions_display`, global `nowo_ui_kit_row_actions_display`). Twig global `nowo_site_backup_row_actions_display` |
+| `panel.extra_classes.card` / `.table` / `.button` / `.input` | `''` | v1.18+: classes appended to panel cards, tables, buttons and inputs (login, index, history). Twig global `nowo_site_backup_panel_classes` |
 | `security.access_roles` | `[ROLE_ADMIN]` | REQ-UI-002: at least one role grants panel access when `allow_unauthenticated` is false |
 | `security.access_checker` | `null` | Optional service id implementing `SiteBackupAccessCheckerInterface` |
 | `security.allow_unauthenticated` | `false` | DEV/DEMO only: skip Symfony role check (password gate may still apply). Requires SecurityBundle when `false` and panel is enabled |

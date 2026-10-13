@@ -1,7 +1,7 @@
 {# CSP: inline script/style tags carry the request attribute csp_nonce when present (nowo-tech kit convention). #}
 {% set _csp_nonce = app is defined and app and app.request ? app.request.attributes.get('csp_nonce')|default('') : '' %}
 <!DOCTYPE html>
-<html lang="en">
+<html lang="{{ app is defined and app and app.request ? app.request.locale|default('en') : 'en' }}">
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
@@ -77,7 +77,7 @@
     {% if progress.phase != 'completed' and progress.phase != 'failed' %}
         <div class="spinner" aria-hidden="true"></div>
     {% endif %}
-    <div class="phase">{{ progress.phase }}</div>
+    <div class="phase" data-phase="{{ progress.phase }}">{{ ('restore.phase.' ~ progress.phase)|trans({}, 'NowoSiteBackupBundle') }}</div>
     <h1>{{ 'restore.page.title'|trans({}, 'NowoSiteBackupBundle') }}</h1>
     <p>{{ (progress.message|default(defaultMessage))|trans({}, 'NowoSiteBackupBundle') }}</p>
     <div class="bar" aria-hidden="true"><span></span></div>

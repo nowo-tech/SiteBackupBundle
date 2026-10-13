@@ -1,5 +1,20 @@
 # Upgrading
 
+## To 1.18.0
+
+From **1.17.0** — no breaking configuration changes.
+
+```bash
+composer update nowo-tech/site-backup-bundle   # requires nowo-tech/ui-kit-bundle ^1.6
+php bin/console cache:clear
+```
+
+- **Translations:** panel, setup and restore screens are now fully translated (domain `NowoSiteBackupBundle`, 7 locales). Visible English text now follows the request locale. Controller messages (`error` / `success` template variables) are translated before rendering; tests asserting English strings with a non-English locale must be updated.
+- **Fix — panel forms:** before 1.18 the Verify / Restore / Delete / Logout / Clear status forms rendered `<form action="verify">` etc. (Symfony's `action` option reused for the hidden field) and posted outside the panel. If you build `PanelActionType` yourself, rename the option `action` to `panel_action`. Template forks that rebuilt these forms (e.g. with another form helper) only to work around this can be removed.
+- **Theming:** the bundle layouts read `--nowo-ui-*` tokens. If you restyled the setup screen by setting `--nowo-sbb-*` on `:root`, set the matching `--nowo-ui-*` tokens instead (override block `nowo_site_backup_theme_tokens`) or set `--nowo-sbb-*` on `.nowo-site-backup-setup`. Minor default shifts: panel radius / danger / success colours now come from `nowo-ui.css`; panel tables are wrapped in `<div class="nowo-ui-table-wrap">`; "Clear status" / "Logout" are secondary buttons; row actions carry `nowo-ui-action` classes.
+- **Delete forks:** with the new blocks, `panel.row_actions_display`, `panel.extra_classes` and the `_flashes` / `_styles` partials, copies of `panel/login`, `panel/index`, `panel/history` and `setup/token` can usually be deleted or shrunk to an `{% extends '@NowoSiteBackupBundle/…' %}` with a few blocks — see [USAGE.md](USAGE.md#translations-theming-and-chrome-blocks-v118).
+- **Host panel shells** (`panel.layout_template`) that do not extend the bundle layout should `{% include '@NowoSiteBackupBundle/panel/_flashes.html.twig' %}` so login errors ("Invalid password.", throttle) and action results are visible.
+
 ## To 1.17.0
 
 From **1.16.0** — no breaking configuration changes. The panel login throttle is **on by default**.
@@ -103,6 +118,7 @@ php bin/console cache:clear
 
 ## Table of contents
 
+- [To 1.18.0](#to-1180)
 - [To 1.15.1](#to-1151)
 - [To 1.15.0](#to-1150)
 - [From 1.13.8 to 1.14.0](#from-1138-to-1140)

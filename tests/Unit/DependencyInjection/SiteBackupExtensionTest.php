@@ -193,6 +193,25 @@ final class SiteBackupExtensionTest extends TestCase
         self::assertSame([['cache_pool' => 'cache.redis']], $container->getDefinition(SiteBackupExtension::LOGIN_LIMITER_STORAGE_ID)->getTag(LoginThrottleStoragePass::TAG));
     }
 
+    public function testPanelChromeAndTranslatorWiring(): void
+    {
+        $container = new ContainerBuilder();
+        $container->setParameter('kernel.project_dir', sys_get_temp_dir());
+
+        (new SiteBackupExtension())->load([[
+            'security' => ['allow_unauthenticated' => true],
+            'panel'    => ['row_actions_display' => 'icon', 'extra_classes' => ['table' => 'data-table']],
+        ]], $container);
+
+        $twig = $container->getDefinition(\Nowo\SiteBackupBundle\Twig\SiteBackupExtension::class);
+        self::assertSame('icon', $twig->getArgument('$rowActionsDisplay'));
+        self::assertEquals(['card' => '', 'table' => 'data-table', 'button' => '', 'input' => ''], $twig->getArgument('$panelClasses'));
+
+        $translator = $container->getDefinition(SetupWizardController::class)->getArgument('$translator');
+        self::assertInstanceOf(Reference::class, $translator);
+        self::assertSame('translator', (string) $translator);
+    }
+
     public function testGetAlias(): void
     {
         self::assertSame(Configuration::ALIAS, (new SiteBackupExtension())->getAlias());

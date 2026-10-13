@@ -11,6 +11,7 @@ use Nowo\SiteBackupBundle\Form\Setup\ContinueType;
 use Nowo\SiteBackupBundle\Form\Setup\DatabaseUrlType;
 use Nowo\SiteBackupBundle\Form\Setup\ResetType;
 use Nowo\SiteBackupBundle\Form\Setup\SampleDataType;
+use Nowo\SiteBackupBundle\Form\Setup\SetupTokenType;
 use Nowo\SiteBackupBundle\Model\SetupProgress;
 use Nowo\SiteBackupBundle\Routing\SetupPathPrefixResolver;
 use Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator;
@@ -25,6 +26,7 @@ use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
+use Symfony\Contracts\Translation\TranslatorInterface;
 use Twig\Environment;
 
 use function array_merge;
@@ -55,6 +57,7 @@ final class SetupWizardController
         private readonly ?string $setupToken,
         private readonly ?CsrfTokenManagerInterface $csrfTokenManager = null,
         private readonly ?SetupPathPrefixResolver $pathPrefixResolver = null,
+        private readonly ?TranslatorInterface $translator = null,
     ) {
     }
 
@@ -70,6 +73,7 @@ final class SetupWizardController
             return new Response($this->twig->render($this->templates['setup_token'], $this->setupViewVars([
                 'pathPrefix' => $pathPrefix,
                 'brandName'  => $this->brandName,
+                'tokenForm'  => $this->formFactory->createNamed('', SetupTokenType::class, null, ['action' => $pathPrefix])->createView(),
             ])), 403);
         }
 
@@ -83,9 +87,9 @@ final class SetupWizardController
 
         if ($request->isMethod('POST')) {
             if (!$this->csrfTokenManager instanceof CsrfTokenManagerInterface) {
-                $error = 'Invalid CSRF token.';
+                $error = $this->message('setup.error.invalid_csrf', 'Invalid CSRF token.');
             } elseif (!$wizardForm instanceof FormInterface) {
-                $error = 'Invalid setup request.';
+                $error = $this->message('setup.error.invalid_request', 'Invalid setup request.');
             } else {
                 $wizardForm->handleRequest($request);
                 if (!$wizardForm->isSubmitted()) {
@@ -93,7 +97,7 @@ final class SetupWizardController
                 }
 
                 if (!$wizardForm->isSubmitted() || !$wizardForm->isValid()) {
-                    $error = 'Invalid CSRF token.';
+                    $error = $this->message('setup.error.invalid_csrf', 'Invalid CSRF token.');
                 } else {
                     $postedProfile = $request->request->getString('profile');
                     if ($postedProfile !== '') {
@@ -288,6 +292,16 @@ final class SetupWizardController
     private function formOptions(array $options = []): array
     {
         return array_merge(['csrf_protection' => $this->csrfTokenManager instanceof CsrfTokenManagerInterface], $options);
+    }
+
+    /**
+     * Translated user-facing message (domain NowoSiteBackupBundle); English fallback without a translator (v1.18+).
+     */
+    private function message(string $id, string $fallback): string
+    {
+        return $this->translator instanceof TranslatorInterface
+            ? $this->translator->trans($id, [], 'NowoSiteBackupBundle')
+            : $fallback;
     }
 
     /**

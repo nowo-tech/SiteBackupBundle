@@ -1079,6 +1079,13 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *         enabled?: bool|Param, // Default: true
  *         path_prefix?: scalar|Param|null, // Default: "/_site_backup"
  *         layout_template?: scalar|Param|null, // Host Twig layout for panel pages (global nowo_site_backup_panel_layout_template). Must define block nowo_ui_content / nowo_site_backup_panel_content. Default: bundle standalone panel layout. // Default: null
+ *         row_actions_display?: "text"|"icon"|"icon_text"|"kit"|Param, // v1.18+: archive row actions (Verify / Restore / Delete) as text buttons (default, pre-1.18 markup), icon-only, icon + text, or "kit" to follow the UiKit global nowo_ui_kit_row_actions_display. Twig global nowo_site_backup_row_actions_display. // Default: "text"
+ *         extra_classes?: array{ // v1.18+: extra CSS classes appended to panel markup (Twig global nowo_site_backup_panel_classes), so hosts do not fork templates only to add classes.
+ *             card?: scalar|Param|null, // Default: ""
+ *             table?: scalar|Param|null, // Default: ""
+ *             button?: scalar|Param|null, // Default: ""
+ *             input?: scalar|Param|null, // Default: ""
+ *         },
  *     },
  *     exclusions?: array{
  *         paths?: list<scalar|Param|null>,
