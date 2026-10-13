@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.19.1] - 2026-10-13](#1191---2026-10-13)
 - [[1.19.0] - 2026-10-13](#1190---2026-10-13)
 - [[1.18.1] - 2026-10-13](#1181---2026-10-13)
 - [[1.18.0] - 2026-10-13](#1180---2026-10-13)
@@ -48,6 +49,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [[1.0.0] - 2026-07-26](#100---2026-07-26)
 
 ## [Unreleased]
+
+## [1.19.1] - 2026-10-13
 
 ### Fixed
 
@@ -574,7 +577,8 @@ First stable release of **Site Backup Bundle**.
 - Symfony `^7.0 || ^8.0` (CI / mandatory minors: **7.4**, **8.0**, **8.1**)
 - System `tar` required for archive create/extract
 
-[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.19.0...HEAD
+[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.19.1...HEAD
+[1.19.1]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.19.0...v1.19.1
 [1.19.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.18.1...v1.19.0
 [1.18.1]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.18.0...v1.18.1
 [1.18.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.17.0...v1.18.0

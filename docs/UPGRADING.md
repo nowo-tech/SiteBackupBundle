@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.19.1](#to-1191)
 - [To 1.19.0](#to-1190)
 - [To 1.18.1](#to-1181)
 - [To 1.18.0](#to-1180)
@@ -93,6 +94,14 @@
   - [Breaking changes](#breaking-changes-1)
 
 ## Unreleased
+
+## To 1.19.1
+
+From **1.19.0** — restore progress heartbeats during hashing, extraction and apply.
+
+```bash
+composer update nowo-tech/site-backup-bundle
+```
 
 - **Restore heartbeats.** A running restore now refreshes its progress `updated_at` during archive hashing, extraction and file apply (at most every 5 s, or every third of `restore.stale_after_seconds` when smaller). `stale_after_seconds` therefore measures time since the last heartbeat, so a long but healthy restore is no longer treated as abandoned; there is no need to raise it for very large archives. No configuration change required. Custom `RestoreProgressStorageInterface` implementations receive more `save()` calls during a restore.
 
