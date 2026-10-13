@@ -8,7 +8,11 @@ From **1.18.0** — security - setup API closed after completion, hardened setup
 composer update nowo-tech/site-backup-bundle
 ```
 
-- No breaking changes. No application upgrade steps.
+- **Set `setup.setup_token` on every internet-facing host.**
+- `/_setup/api/advance` returns 404 once setup is completed and ignores the payload `profile` after a run has started; `/_setup/api/progress` now requires the setup token. Neither API returns `answers` anymore.
+- `sql_import_path` must be a `.sql` file inside `var/site-backup/`.
+- `DATABASE_URL` is always written single-quoted to `.env.local`; URLs containing `'` or control characters are rejected (percent-encode them, e.g. `%27`).
+- Anonymous/unauthorised `progress.json` responses only contain `active`, `phase`, `percent` and `message`. Archives and the restore dump are written with mode 0600, and `last-restore-dump.sql` is deleted after the setup `sql_file` step imports it.
 
 ## To 1.18.0
 
