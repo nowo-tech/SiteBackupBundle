@@ -8,7 +8,6 @@ use Nowo\SiteBackupBundle\Controller\SiteBackupPanelController;
 use Symfony\Component\Config\Loader\Loader;
 use Symfony\Component\Routing\RouteCollection;
 
-use function dirname;
 use function rtrim;
 
 /**
@@ -33,8 +32,9 @@ final class PanelRouteLoader extends Loader
             return new RouteCollection();
         }
 
-        $imported   = $this->import(dirname(__DIR__) . '/Controller/SiteBackupPanelController.php', 'attribute');
+        $imported   = $this->import(__DIR__ . '/../Controller/SiteBackupPanelController.php', 'attribute');
         $collection = $imported instanceof RouteCollection ? $imported : new RouteCollection();
+        // @igor-ignore - Fresh collection returned by import() for this call; not an injected shared service.
         $collection->addPrefix(rtrim($this->pathPrefix, '/'));
 
         return $collection;

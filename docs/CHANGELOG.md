@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.19.2] - 2026-10-13](#1192---2026-10-13)
 - [[1.19.1] - 2026-10-13](#1191---2026-10-13)
 - [[1.19.0] - 2026-10-13](#1190---2026-10-13)
 - [[1.18.1] - 2026-10-13](#1181---2026-10-13)
@@ -49,6 +50,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [[1.0.0] - 2026-07-26](#100---2026-07-26)
 
 ## [Unreleased]
+
+## [1.19.2] - 2026-10-13
+
+### Fixed
+
+- `SetupRouteLoader` threw `SiteBackup setup routes already loaded.` when the router was rebuilt in the same process (FrankenPHP worker, `bin/console` / dev server `--watch` reloading the route cache), because the loader service remembered its first `load()` call. The loader is now stateless: every call returns a fresh, identical collection of setup routes.
+- `RestoreOrchestrator` kept its heartbeat throttle timestamp across restores in a long-lived worker. It now implements `ResetInterface` and starts each restore with a fresh throttle. `DoctrineDbalSetupProgressStorage::reset()` also resets its step journal's schema memo.
+
+### Changed
+
+- `PanelRouteLoader`: behaviour-neutral Rector rewrite (`__DIR__ . '/../…'` path) and an Igor note on the locally imported collection.
+
+### Dependencies
+
+- Dev lock refreshed by `composer-sync` (`nowo-tech/ui-kit-bundle` 1.16.0, `nowo-tech/phpstan-frankenphp` 1.3.0).
 
 ## [1.19.1] - 2026-10-13
 

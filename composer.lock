@@ -8,27 +8,27 @@
     "packages": [
         {
             "name": "nowo-tech/ui-kit-bundle",
-            "version": "v1.12.0",
+            "version": "v1.16.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nowo-tech/UiKitBundle.git",
-                "reference": "8cd1a2b9312e4eab218bebe32bdd68476893eda3"
+                "reference": "ff8c0dbfe5bb90abee80f6c7b39e1810fa28a951"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nowo-tech/UiKitBundle/zipball/8cd1a2b9312e4eab218bebe32bdd68476893eda3",
-                "reference": "8cd1a2b9312e4eab218bebe32bdd68476893eda3",
+                "url": "https://api.github.com/repos/nowo-tech/UiKitBundle/zipball/ff8c0dbfe5bb90abee80f6c7b39e1810fa28a951",
+                "reference": "ff8c0dbfe5bb90abee80f6c7b39e1810fa28a951",
                 "shasum": ""
             },
             "require": {
                 "php": ">=8.2 <8.6",
-                "symfony/asset": "^6.0 || ^7.0 || ^8.0",
-                "symfony/config": "^6.0 || ^7.0 || ^8.0",
-                "symfony/dependency-injection": "^6.0 || ^7.0 || ^8.0",
-                "symfony/framework-bundle": "^6.0 || ^7.0 || ^8.0",
-                "symfony/http-kernel": "^6.0 || ^7.0 || ^8.0",
-                "symfony/translation": "^6.0 || ^7.0 || ^8.0",
-                "symfony/twig-bundle": "^6.0 || ^7.0 || ^8.0",
+                "symfony/asset": "^7.4 || ^8.0",
+                "symfony/config": "^7.4 || ^8.0",
+                "symfony/dependency-injection": "^7.4 || ^8.0",
+                "symfony/framework-bundle": "^7.4 || ^8.0",
+                "symfony/http-kernel": "^7.4 || ^8.0",
+                "symfony/translation": "^7.4 || ^8.0",
+                "symfony/twig-bundle": "^7.4 || ^8.0",
                 "twig/extra-bundle": "^3.12",
                 "twig/string-extra": "^3.12",
                 "twig/twig": "^3.8"
@@ -43,13 +43,17 @@
                 "phpstan/phpstan-symfony": "^2.0",
                 "phpunit/phpunit": "^10.5 || ^11.0",
                 "rector/rector": "^2.0",
-                "symfony/http-client": "^6.0 || ^7.0 || ^8.0",
-                "symfony/yaml": "^6.0 || ^7.0 || ^8.0",
+                "symfony/form": "^7.4 || ^8.0",
+                "symfony/http-client": "^7.4 || ^8.0",
+                "symfony/validator": "^7.4 || ^8.0",
+                "symfony/yaml": "^7.4 || ^8.0",
                 "vincentlanglet/twig-cs-fixer": "^3.0"
             },
             "suggest": {
+                "symfony/form": "For the optional AppearanceType / AppearancePaletteType forms (appearance SPI)",
                 "symfony/http-client": "For the optional release_check feature (GitHub release-version dialog)",
-                "symfony/ux-icons": "For icon_set: ux_icon in row actions and icons"
+                "symfony/ux-icons": "For icon_set: ux_icon in row actions and icons",
+                "symfony/validator": "Colour validation in the optional appearance forms"
             },
             "type": "symfony-bundle",
             "autoload": {
@@ -91,7 +95,7 @@
                 "issues": "https://github.com/nowo-tech/UiKitBundle/issues",
                 "source": "https://github.com/nowo-tech/UiKitBundle"
             },
-            "time": "2026-10-12T17:50:22+00:00"
+            "time": "2026-10-13T15:04:31+00:00"
         },
         {
             "name": "psr/cache",
@@ -4795,16 +4799,16 @@
         },
         {
             "name": "nowo-tech/phpstan-frankenphp",
-            "version": "v1.2.3",
+            "version": "v1.3.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nowo-tech/PhpStanFrankenPhp.git",
-                "reference": "cf8648f0b6990c56e522415b3b42e0763f6d0aea"
+                "reference": "8ad8c62f3c5decfd92332f70d599b6dad1e68820"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nowo-tech/PhpStanFrankenPhp/zipball/cf8648f0b6990c56e522415b3b42e0763f6d0aea",
-                "reference": "cf8648f0b6990c56e522415b3b42e0763f6d0aea",
+                "url": "https://api.github.com/repos/nowo-tech/PhpStanFrankenPhp/zipball/8ad8c62f3c5decfd92332f70d599b6dad1e68820",
+                "reference": "8ad8c62f3c5decfd92332f70d599b6dad1e68820",
                 "shasum": ""
             },
             "require": {
@@ -4878,7 +4882,7 @@
                     "type": "github"
                 }
             ],
-            "time": "2026-10-07T19:41:20+00:00"
+            "time": "2026-10-13T10:11:25+00:00"
         },
         {
             "name": "phar-io/manifest",

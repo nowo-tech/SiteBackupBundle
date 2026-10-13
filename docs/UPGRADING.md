@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.19.2](#to-1192)
 - [To 1.19.1](#to-1191)
 - [To 1.19.0](#to-1190)
 - [To 1.18.1](#to-1181)
@@ -94,6 +95,16 @@
   - [Breaking changes](#breaking-changes-1)
 
 ## Unreleased
+
+## To 1.19.2
+
+From **1.19.1** — setup route loader can load again in the same process.
+
+```bash
+composer update nowo-tech/site-backup-bundle
+```
+
+- **Setup routes in worker / watch mode.** Rebuilding the router in the same process (FrankenPHP worker, dev `--watch`) no longer fails with `SiteBackup setup routes already loaded.` No configuration change required. Code that relied on the `RuntimeException` from a second `SetupRouteLoader::load()` call must drop that expectation.
 
 ## To 1.19.1
 

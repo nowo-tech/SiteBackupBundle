@@ -137,6 +137,7 @@ final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInte
     public function reset(): void
     {
         $this->schemaEnsured = false;
+        $this->stepJournal?->reset();
     }
 
     /**

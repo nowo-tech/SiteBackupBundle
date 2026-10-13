@@ -1,6 +1,6 @@
 # Release
 
-Current stable target: **v1.14.0**.
+Current stable target: **v1.19.2**.
 
 ## Checklist
 

@@ -8,7 +8,6 @@ use Nowo\SiteBackupBundle\Controller\SetupUnlocalizedLocaleRedirectController;
 use Nowo\SiteBackupBundle\Controller\SetupWizardController;
 use Nowo\SiteBackupBundle\Routing\SetupRouteLoader;
 use PHPUnit\Framework\TestCase;
-use RuntimeException;
 
 final class SetupRouteLoaderTest extends TestCase
 {
@@ -110,13 +109,16 @@ final class SetupRouteLoaderTest extends TestCase
         self::assertArrayNotHasKey('_site_backup_canonical_route', $unlocalized->getDefaults());
     }
 
-    public function testCannotLoadTwice(): void
+    public function testCanLoadAgainInTheSameProcess(): void
     {
-        $loader = new SetupRouteLoader('/_setup', 'never', 'en', ['en']);
-        $loader->load('.');
+        // A worker (FrankenPHP, dev `--watch`) may rebuild the router with the same loader instance.
+        $loader = new SetupRouteLoader('/_setup', 'both', 'en', ['en', 'es']);
+        $first  = $loader->load('.');
+        $second = $loader->load('.');
 
-        $this->expectException(RuntimeException::class);
-        $loader->load('.');
+        self::assertNotSame($first, $second);
+        self::assertSame(array_keys($first->all()), array_keys($second->all()));
+        self::assertEquals($first->all(), $second->all());
     }
 
     public function testMethods(): void

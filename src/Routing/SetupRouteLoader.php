@@ -8,7 +8,6 @@ use Nowo\SiteBackupBundle\Controller\SetupUnlocalizedLocaleRedirectController;
 use Nowo\SiteBackupBundle\Controller\SetupWizardController;
 use Nowo\SiteBackupBundle\Enum\LocaleInPathMode;
 use Nowo\SiteBackupBundle\Enum\UnlocalizedLocaleMode;
-use RuntimeException;
 use Symfony\Component\Config\Loader\Loader;
 use Symfony\Component\Routing\Route;
 use Symfony\Component\Routing\RouteCollection;
@@ -24,8 +23,6 @@ use function rtrim;
 final class SetupRouteLoader extends Loader
 {
     public const UNLOCALIZED_ROUTE_SUFFIX = '_unlocalized';
-
-    private bool $loaded = false;
 
     private readonly LocaleInPathMode $localeInPathMode;
 
@@ -48,13 +45,9 @@ final class SetupRouteLoader extends Loader
 
     public function load(mixed $resource, ?string $type = null): RouteCollection
     {
-        if ($this->loaded) {
-            throw new RuntimeException('SiteBackup setup routes already loaded.');
-        }
-
-        // @igor-ignore - Route loader builds routes at compile/cache warm; not per-request mutation.
-        $this->loaded = true;
-        $collection   = new RouteCollection();
+        // Stateless: the router may load this resource again in the same process (FrankenPHP worker /
+        // dev `--watch` rebuilding the router cache), so every call returns the same fresh collection.
+        $collection = new RouteCollection();
 
         if (!$this->enabled) {
             return $collection;

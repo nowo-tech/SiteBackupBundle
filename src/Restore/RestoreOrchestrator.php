@@ -16,6 +16,7 @@ use Nowo\SiteBackupBundle\Worker\WorkerRestartSignal;
 use RuntimeException;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Finder\Finder;
+use Symfony\Contracts\Service\ResetInterface;
 use Throwable;
 
 use function array_slice;
@@ -48,7 +49,7 @@ use function sys_get_temp_dir;
  * Once files were applied, {@see WorkerRestartSignal} is raised: long-lived workers keep
  * serving the code / config they booted with until they are restarted.
  */
-final class RestoreOrchestrator
+final class RestoreOrchestrator implements ResetInterface
 {
     /**
      * Progress messages are translation ids (domain NowoSiteBackupBundle), translated by the loading page,
@@ -173,10 +174,21 @@ final class RestoreOrchestrator
     }
 
     /**
+     * Forgets the heartbeat throttle between requests / restores (FrankenPHP worker).
+     */
+    public function reset(): void
+    {
+        $this->lastProgressWriteAt = null;
+    }
+
+    /**
      * Runs a full restore synchronously (CLI / worker). Panel may also call this.
      */
     public function restore(BackupArtifact $artifact, ?string $actor = null): RestoreProgress
     {
+        // A long-lived worker may run several restores: the heartbeat throttle starts fresh for each.
+        $this->reset();
+
         if ($this->isRestoreActive()) {
             throw new RuntimeException('A restore is already in progress.');
         }

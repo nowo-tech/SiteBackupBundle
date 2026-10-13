@@ -10,6 +10,7 @@ use Nowo\SiteBackupBundle\Model\RestoreProgress;
 use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
 use Nowo\SiteBackupBundle\Storage\RestoreProgressStorageInterface;
 use PHPUnit\Framework\TestCase;
+use ReflectionProperty;
 use Symfony\Component\Filesystem\Filesystem;
 
 use function file_put_contents;
@@ -123,6 +124,25 @@ final class RestoreHeartbeatTest extends TestCase
         self::assertSame(2, $storage->countPhase(RestoreProgress::PHASE_VALIDATING));
         self::assertSame(2, $storage->countPhase(RestoreProgress::PHASE_EXTRACTING));
         self::assertSame(2, $storage->countPhase(RestoreProgress::PHASE_APPLYING));
+    }
+
+    public function testResetForgetsTheHeartbeatThrottle(): void
+    {
+        $artifact     = $this->archiver()->create('reset');
+        $orchestrator = new RestoreOrchestrator(
+            projectDir: $this->projectDir,
+            archiver: $this->archiver(),
+            progressStorage: new RecordingRestoreProgressStorage(),
+            protectedRelativePaths: [],
+            staleAfterSeconds: 0,
+        );
+        $lastWrite = new ReflectionProperty(RestoreOrchestrator::class, 'lastProgressWriteAt');
+
+        $orchestrator->restore($artifact);
+        self::assertNotNull($lastWrite->getValue($orchestrator));
+
+        $orchestrator->reset();
+        self::assertNull($lastWrite->getValue($orchestrator));
     }
 
     public function testArchiverCallsTheHeartbeatWhileHashingAndExtracting(): void
