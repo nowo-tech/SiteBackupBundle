@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Restore;
 
+use Closure;
 use DateTimeImmutable;
 use Nowo\SiteBackupBundle\Backup\BackupArchiver;
 use Nowo\SiteBackupBundle\Backup\RuntimeStatePaths;
@@ -21,9 +22,13 @@ use function array_slice;
 use function count;
 use function dirname;
 use function implode;
+use function intdiv;
 use function is_dir;
 use function is_file;
 use function is_string;
+use function iterator_count;
+use function ltrim;
+use function max;
 use function min;
 use function rtrim;
 use function sprintf;
@@ -32,7 +37,6 @@ use function str_starts_with;
 use function strlen;
 use function substr;
 use function sys_get_temp_dir;
-use function time;
 
 /**
  * Safe restore: validate → extract to staging → apply under restore mode → finalize.
@@ -60,10 +64,21 @@ final class RestoreOrchestrator
     public const MESSAGE_FAILED                   = 'restore.message.failed';
 
     /**
+     * Upper bound between two progress heartbeats while a long step (archive hashing, tar extraction,
+     * file apply) runs. Lowered automatically to a third of stale_after_seconds when that is smaller.
+     */
+    public const HEARTBEAT_INTERVAL_SECONDS = 5;
+
+    /** Clock timestamp of the last progress write of the running restore (heartbeat throttling). */
+    private ?int $lastProgressWriteAt = null;
+
+    /**
      * @param list<string> $protectedRelativePaths never overwritten during apply
      * @param int|null $staleAfterSeconds an "active" restore whose progress was not updated for this long is
      *                                    considered abandoned (dead worker / killed process): the loading page
-     *                                    stops being served and a new restore may start. null or 0 = never stale
+     *                                    stops being served and a new restore may start. null or 0 = never stale.
+     *                                    Long steps write heartbeats, so this measures time since the last heartbeat
+     * @param (Closure(): DateTimeImmutable)|null $clock current time source (tests); null = system clock
      */
     public function __construct(
         private readonly string $projectDir,
@@ -76,6 +91,7 @@ final class RestoreOrchestrator
         private readonly Filesystem $filesystem = new Filesystem(),
         private readonly ?WorkerRestartSignal $workerRestartSignal = null,
         private readonly ?int $staleAfterSeconds = null,
+        private readonly ?Closure $clock = null,
     ) {
     }
 
@@ -119,7 +135,41 @@ final class RestoreOrchestrator
             return false;
         }
 
-        return (time() - $last->getTimestamp()) > $this->staleAfterSeconds;
+        return ($this->now()->getTimestamp() - $last->getTimestamp()) > $this->staleAfterSeconds;
+    }
+
+    private function now(): DateTimeImmutable
+    {
+        return $this->clock instanceof Closure ? ($this->clock)() : new DateTimeImmutable();
+    }
+
+    private function heartbeatIntervalSeconds(): int
+    {
+        if ($this->staleAfterSeconds === null || $this->staleAfterSeconds <= 0) {
+            return self::HEARTBEAT_INTERVAL_SECONDS;
+        }
+
+        return max(1, min(self::HEARTBEAT_INTERVAL_SECONDS, intdiv($this->staleAfterSeconds, 3)));
+    }
+
+    /**
+     * Refreshes the progress updatedAt (at most once per heartbeat interval) so a long-running step is not
+     * mistaken for an abandoned restore by {@see isRestoreStale()}.
+     */
+    private function heartbeat(): void
+    {
+        $now = $this->now();
+        if ($this->lastProgressWriteAt !== null && ($now->getTimestamp() - $this->lastProgressWriteAt) < $this->heartbeatIntervalSeconds()) {
+            return;
+        }
+
+        $this->save($this->progressStorage->load()->with(updatedAt: $now), $now);
+    }
+
+    private function save(RestoreProgress $progress, ?DateTimeImmutable $at = null): void
+    {
+        $this->progressStorage->save($progress);
+        $this->lastProgressWriteAt = ($at ?? $progress->getUpdatedAt() ?? $this->now())->getTimestamp();
     }
 
     /**
@@ -142,13 +192,13 @@ final class RestoreOrchestrator
             ));
         }
 
-        $now        = new DateTimeImmutable();
+        $now        = $this->now();
         $startedLog = 'Restore started for backup ' . $artifact->getId();
         if (is_string($actor) && $actor !== '') {
             $startedLog .= ' (actor=' . $actor . ')';
         }
         $initialLog[] = $this->logLine($startedLog);
-        $this->writeProgress(new RestoreProgress(
+        $this->save(new RestoreProgress(
             active: true,
             phase: RestoreProgress::PHASE_PREPARING,
             percent: 1.0,
@@ -161,10 +211,11 @@ final class RestoreOrchestrator
 
         $staging      = sys_get_temp_dir() . '/nowo-site-backup-restore-' . $artifact->getId();
         $filesTouched = false;
+        $heartbeat    = $this->heartbeat(...);
 
         try {
             $this->advance(RestoreProgress::PHASE_VALIDATING, 10.0, self::MESSAGE_VALIDATING);
-            $integrity = $this->archiver->verifyIntegrity($artifact);
+            $integrity = $this->archiver->verifyIntegrity($artifact, $heartbeat);
             if (!$integrity['ok']) {
                 throw new RuntimeException('Integrity check failed: ' . implode('; ', $integrity['errors']));
             }
@@ -174,7 +225,7 @@ final class RestoreOrchestrator
             $this->filesystem->mkdir($staging);
 
             $this->advance(RestoreProgress::PHASE_EXTRACTING, 35.0, self::MESSAGE_EXTRACTING);
-            $this->archiver->extractTo($artifact, $staging);
+            $this->archiver->extractTo($artifact, $staging, $heartbeat);
             $this->appendLog('Extracted to staging.');
 
             $this->advance(RestoreProgress::PHASE_APPLYING, 55.0, self::MESSAGE_APPLYING);
@@ -197,7 +248,7 @@ final class RestoreOrchestrator
                 $this->appendLog('Database dump copied to var/site-backup/last-restore-dump.sql (import separately if needed).');
             }
 
-            $finished = new DateTimeImmutable();
+            $finished = $this->now();
             $message  = self::MESSAGE_COMPLETED;
             if ($this->triggerSetupAfterRestore && $this->setupMarkers instanceof SetupMarkerManager) {
                 $this->setupMarkers->markRequired($this->postRestoreSetupProfile);
@@ -213,15 +264,15 @@ final class RestoreOrchestrator
                 updatedAt: $finished,
                 finishedAt: $finished,
             );
-            $this->progressStorage->save($progress);
+            $this->save($progress);
 
             return $progress;
         } catch (Throwable $e) {
-            $failed   = new DateTimeImmutable();
+            $failed   = $this->now();
             $progress = $this->progressStorage->load();
             $log      = $progress->getLog();
             $log[]    = $this->logLine('ERROR: ' . $e->getMessage());
-            $this->progressStorage->save($progress->with(
+            $this->save($progress->with(
                 active: false,
                 phase: RestoreProgress::PHASE_FAILED,
                 message: self::MESSAGE_FAILED,
@@ -282,6 +333,7 @@ final class RestoreOrchestrator
             $this->filesystem->copy($full, $tmp, true);
             $this->filesystem->rename($tmp, $dest, true);
             ++$applied;
+            $this->heartbeat();
 
             if ($total > 0 && $i % 25 === 0) {
                 $pct = 55.0 + (35.0 * ($i / $total));
@@ -314,12 +366,12 @@ final class RestoreOrchestrator
     private function advance(string $phase, float $percent, string $message): void
     {
         $progress = $this->progressStorage->load();
-        $this->progressStorage->save($progress->with(
+        $this->save($progress->with(
             active: true,
             phase: $phase,
             percent: $percent,
             message: $message,
-            updatedAt: new DateTimeImmutable(),
+            updatedAt: $this->now(),
         ));
     }
 
@@ -328,19 +380,14 @@ final class RestoreOrchestrator
         $progress = $this->progressStorage->load();
         $log      = $progress->getLog();
         $log[]    = $this->logLine($message);
-        $this->progressStorage->save($progress->with(
+        $this->save($progress->with(
             log: array_slice($log, -200),
-            updatedAt: new DateTimeImmutable(),
+            updatedAt: $this->now(),
         ));
-    }
-
-    private function writeProgress(RestoreProgress $progress): void
-    {
-        $this->progressStorage->save($progress);
     }
 
     private function logLine(string $message): string
     {
-        return (new DateTimeImmutable())->format('H:i:s') . ' ' . $message;
+        return $this->now()->format('H:i:s') . ' ' . $message;
     }
 }

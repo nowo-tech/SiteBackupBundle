@@ -94,6 +94,8 @@
 
 ## Unreleased
 
+- **Restore heartbeats.** A running restore now refreshes its progress `updated_at` during archive hashing, extraction and file apply (at most every 5 s, or every third of `restore.stale_after_seconds` when smaller). `stale_after_seconds` therefore measures time since the last heartbeat, so a long but healthy restore is no longer treated as abandoned; there is no need to raise it for very large archives. No configuration change required. Custom `RestoreProgressStorageInterface` implementations receive more `save()` calls during a restore.
+
 ## To 1.19.0
 
 From **1.18.1** — runtime state never archived/restored, abandoned restores expire, disabled panel 404, translated progress, Symfony >=7.4.

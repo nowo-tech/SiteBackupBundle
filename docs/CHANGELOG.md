@@ -49,6 +49,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- A very large restore still running could be judged abandoned by `restore.stale_after_seconds` (default 2 × `process_timeout`), because archive hashing, tar extraction and file apply wrote no progress: a second restore could then start on top of it. These steps now write progress heartbeats (refresh `updated_at`) at most every 5 s, or every third of `stale_after_seconds` when that is smaller, so staleness is measured from the last heartbeat. `BackupArchiver::verifyIntegrity()` / `extractTo()` accept an optional heartbeat callable (archive hashed in 8 MiB chunks, tar polled while running); `RestoreOrchestrator` accepts an optional `clock` closure.
+
 ## [1.19.0] - 2026-10-13
 
 ### Changed

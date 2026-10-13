@@ -15,12 +15,19 @@ use Symfony\Component\Process\Process;
 use function bin2hex;
 use function dirname;
 use function escapeshellarg;
+use function fclose;
+use function feof;
 use function file_exists;
 use function file_get_contents;
 use function file_put_contents;
 use function filesize;
 use function fnmatch;
+use function fopen;
+use function fread;
 use function hash_file;
+use function hash_final;
+use function hash_init;
+use function hash_update;
 use function is_dir;
 use function is_file;
 use function is_readable;
@@ -36,6 +43,7 @@ use function str_starts_with;
 use function strlen;
 use function substr;
 use function sys_get_temp_dir;
+use function usleep;
 
 use const DATE_ATOM;
 use const JSON_PRETTY_PRINT;
@@ -48,6 +56,9 @@ use const PHP_VERSION;
  */
 final class BackupArchiver
 {
+    private const HASH_CHUNK_BYTES          = 8 * 1024 * 1024;
+    private const EXTRACT_POLL_MICROSECONDS = 200_000;
+
     /** @var list<string> project-relative runtime state paths never packed into an archive */
     private readonly array $runtimeStateRelativePaths;
 
@@ -216,16 +227,20 @@ final class BackupArchiver
     /**
      * Verifies archive SHA-256 and every MANIFEST entry after extract to a temp dir.
      *
+     * @param (callable(): void)|null $heartbeat called regularly while hashing and extracting (each hashed chunk,
+     *                                           each manifest file, every poll of the running tar process) so a caller
+     *                                           can record liveness during long steps
+     *
      * @return array{ok: bool, errors: list<string>, checksums: array<string, string>}
      */
-    public function verifyIntegrity(BackupArtifact $artifact): array
+    public function verifyIntegrity(BackupArtifact $artifact, ?callable $heartbeat = null): array
     {
         $errors = [];
         if (!is_file($artifact->getAbsolutePath())) {
             return ['ok' => false, 'errors' => ['Archive file missing.'], 'checksums' => []];
         }
 
-        $actualSha = (string) hash_file('sha256', $artifact->getAbsolutePath());
+        $actualSha = $this->hashFile($artifact->getAbsolutePath(), $heartbeat);
         if ($actualSha !== $artifact->getArchiveSha256()) {
             $errors[] = sprintf('Archive SHA-256 mismatch (expected %s, got %s).', $artifact->getArchiveSha256(), $actualSha);
         }
@@ -234,7 +249,7 @@ final class BackupArchiver
         $this->filesystem->mkdir($extractDir);
 
         try {
-            $this->extractTarGz($artifact->getAbsolutePath(), $extractDir);
+            $this->extractTarGz($artifact->getAbsolutePath(), $extractDir, $heartbeat);
             $manifestFile = $extractDir . '/MANIFEST.json';
             if (!is_file($manifestFile)) {
                 $errors[] = 'MANIFEST.json missing inside archive.';
@@ -258,7 +273,7 @@ final class BackupArchiver
                     $errors[] = 'Missing file from manifest: ' . $relative;
                     continue;
                 }
-                $got = (string) hash_file('sha256', $path);
+                $got = $this->hashFile($path, $heartbeat);
                 if ($got !== $expected) {
                     $errors[] = sprintf('Checksum mismatch for %s', $relative);
                 }
@@ -270,10 +285,40 @@ final class BackupArchiver
         }
     }
 
-    public function extractTo(BackupArtifact $artifact, string $destinationDir): void
+    /**
+     * @param (callable(): void)|null $heartbeat called while tar is running (see verifyIntegrity())
+     */
+    public function extractTo(BackupArtifact $artifact, string $destinationDir, ?callable $heartbeat = null): void
     {
         $this->filesystem->mkdir($destinationDir);
-        $this->extractTarGz($artifact->getAbsolutePath(), $destinationDir);
+        $this->extractTarGz($artifact->getAbsolutePath(), $destinationDir, $heartbeat);
+    }
+
+    /**
+     * Streaming SHA-256 so a heartbeat can run between chunks of a very large archive.
+     *
+     * @param (callable(): void)|null $heartbeat
+     */
+    private function hashFile(string $path, ?callable $heartbeat): string
+    {
+        $handle = @fopen($path, 'r');
+        if ($handle === false) {
+            return '';
+        }
+
+        try {
+            $context = hash_init('sha256');
+            while (!feof($handle)) {
+                hash_update($context, (string) fread($handle, self::HASH_CHUNK_BYTES));
+                if ($heartbeat !== null) {
+                    $heartbeat();
+                }
+            }
+
+            return hash_final($context);
+        } finally {
+            fclose($handle);
+        }
     }
 
     /**
@@ -406,11 +451,25 @@ final class BackupArchiver
         }
     }
 
-    private function extractTarGz(string $archive, string $destination): void
+    /**
+     * @param (callable(): void)|null $heartbeat called before start and on every poll while tar runs
+     */
+    private function extractTarGz(string $archive, string $destination, ?callable $heartbeat = null): void
     {
         $process = new Process(['tar', '-xzf', $archive, '-C', $destination]);
         $process->setTimeout($this->processTimeoutSeconds);
-        $process->run();
+        if ($heartbeat === null) {
+            $process->run();
+        } else {
+            $heartbeat();
+            $process->start();
+            while ($process->isRunning()) {
+                $process->checkTimeout();
+                $heartbeat();
+                usleep(self::EXTRACT_POLL_MICROSECONDS);
+            }
+            $process->wait();
+        }
         if (!$process->isSuccessful()) {
             throw new RuntimeException('tar extract failed: ' . $process->getErrorOutput());
         }
