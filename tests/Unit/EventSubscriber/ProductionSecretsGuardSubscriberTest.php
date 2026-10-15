@@ -22,6 +22,9 @@ final class ProductionSecretsGuardSubscriberTest extends TestCase
 {
     private const SAFE_SECRET = 'a3f1c0de9b8e7d6c5b4a39281706f5e4';
 
+    /** bcrypt-shaped (60 chars) so password_get_info() recognises it. */
+    private const VALID_HASH = '$2y$12$abcdefghijklmnopqrstuuabcdefghijklmnopqrstuvwxyz01234';
+
     /**
      * @param array<string, mixed> $overrides
      */
@@ -34,7 +37,7 @@ final class ProductionSecretsGuardSubscriberTest extends TestCase
             'setupToken'              => 'random-setup-token',
             'forbiddenSetupTokens'    => ['app-local-setup'],
             'checkPanelPassword'      => true,
-            'panelPasswordHash'       => '$2y$12$realhash',
+            'panelPasswordHash'       => self::VALID_HASH,
             'forbiddenPasswordHashes' => ['$2y$12$localhash'],
             'checkAppSecret'          => true,
             'appSecret'               => self::SAFE_SECRET,
@@ -78,6 +81,12 @@ final class ProductionSecretsGuardSubscriberTest extends TestCase
         yield 'placeholder secret' => [['appSecret' => 'ChangeMe'], 'placeholder'];
         yield 'short secret' => [['appSecret' => 'short-secret'], 'at least 16'];
         yield 'staging is not local' => [['environment' => 'staging', 'setupToken' => ''], 'setup_token'];
+        yield 'hash cut by compose' => [['panelPasswordHash' => '$2y$13'], 'not a valid password hash'];
+        yield 'extra secret placeholder' => [['extraSecrets' => [self::extra('!ChangeMe!')]], 'placeholder'];
+        yield 'extra secret too short' => [['extraSecrets' => [self::extra('short')]], 'at least 32'];
+        yield 'required extra secret empty' => [['extraSecrets' => [self::extra('', required: true)]], 'MERCURE_JWT_SECRET must be set'];
+        yield 'redis dsn without password' => [['dsnCredentials' => [self::dsn('redis://redis:6379')]], 'must carry a password'];
+        yield 'amqp default credentials' => [['dsnCredentials' => [self::dsn('amqp://guest:guest@rabbit:5672/%2f')]], 'default credentials (guest)'];
     }
 
     /**
@@ -89,6 +98,44 @@ final class ProductionSecretsGuardSubscriberTest extends TestCase
         $this->expectException(RuntimeException::class);
         $this->expectExceptionMessage($message);
         $this->guard($overrides)->assertSafe();
+    }
+
+    public function testExtraSecretsAndDsnsPassWhenSafeOrNotApplicable(): void
+    {
+        $this->guard([
+            'extraSecrets'   => [self::extra(''), self::extra(str_repeat('s', 32))],
+            'dsnCredentials' => [
+                self::dsn(''),
+                self::dsn('doctrine://default'),
+                self::dsn('redis://:secret@redis:6379'),
+                self::dsn('redis://redis:6379?dbindex=1&auth=secret'),
+                self::dsn('redis://redis:6379', fallback: 'from-redis-password'),
+                self::dsn('amqp://app:unique-pass@rabbit:5672/%2f'),
+            ],
+        ])->assertSafe();
+        $this->addToAssertionCount(1);
+    }
+
+    public function testHashShapeCheckCanBeDisabled(): void
+    {
+        $this->guard(['panelPasswordHash' => 'legacy-custom-hash', 'checkPasswordHashShape' => false])->assertSafe();
+        $this->addToAssertionCount(1);
+    }
+
+    /**
+     * @return array{label: string, value: string|null, min_length: int, forbidden: list<string>, required: bool}
+     */
+    private static function extra(string $value, bool $required = false): array
+    {
+        return ['label' => 'MERCURE_JWT_SECRET', 'value' => $value, 'min_length' => 32, 'forbidden' => ['!ChangeMe!'], 'required' => $required];
+    }
+
+    /**
+     * @return array{label: string, value: string|null, schemes: list<string>, forbidden_credentials: list<string>, password_fallback: string|null}
+     */
+    private static function dsn(string $value, ?string $fallback = null): array
+    {
+        return ['label' => 'MESSENGER_TRANSPORT_DSN', 'value' => $value, 'schemes' => ['redis', 'rediss', 'amqp', 'amqps'], 'forbidden_credentials' => ['guest:guest'], 'password_fallback' => $fallback];
     }
 
     public function testDisabledChecksAreIgnored(): void

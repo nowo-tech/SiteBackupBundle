@@ -51,6 +51,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Production guard: hash shape, extra secrets, DSN credentials.** `security_guard.check_password_hash_shape` (default `true`) refuses a panel `password_hash` that `password_get_info()` does not recognise — typically a bcrypt hash cut by Docker Compose `$` interpolation, which used to lock the panel silently. `security_guard.extra_secrets` checks more app secrets (min length, documented placeholders, optional `required`); `security_guard.dsn_credentials` requires a password (userinfo, `?auth=` or `password_fallback`) and refuses documented default credentials (`guest:guest`, …) in Redis / AMQP DSNs. Apps can drop their host copies of these checks (Nowo REQ-SETUP-004 / REQ-ENV-007).
+
 ## [1.19.2] - 2026-10-13
 
 ### Fixed

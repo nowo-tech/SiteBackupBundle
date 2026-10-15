@@ -590,6 +590,24 @@ final class SiteBackupExtensionTest extends TestCase
         self::assertSame('explicit', $def->getArgument('$appSecret'));
     }
 
+    public function testSecurityGuardExtraChecksAreWired(): void
+    {
+        $def = $this->loadWith(['security_guard' => ['enabled' => true]])->getDefinition(ProductionSecretsGuardSubscriber::class);
+        self::assertTrue($def->getArgument('$checkPasswordHashShape'));
+        self::assertSame([], $def->getArgument('$extraSecrets'));
+        self::assertSame([], $def->getArgument('$dsnCredentials'));
+
+        $def = $this->loadWith(['security_guard' => [
+            'enabled'                   => true,
+            'check_password_hash_shape' => false,
+            'extra_secrets'             => [['label' => 'MERCURE_JWT_SECRET', 'value' => '%env(default::MERCURE_JWT_SECRET)%', 'min_length' => 32, 'forbidden' => ['!ChangeMe!']]],
+            'dsn_credentials'           => [['label' => 'REDIS_URL', 'value' => '%env(REDIS_URL)%', 'schemes' => ['redis'], 'password_fallback' => '%env(default::REDIS_PASSWORD)%']],
+        ]])->getDefinition(ProductionSecretsGuardSubscriber::class);
+        self::assertFalse($def->getArgument('$checkPasswordHashShape'));
+        self::assertSame([['label' => 'MERCURE_JWT_SECRET', 'value' => '%env(default::MERCURE_JWT_SECRET)%', 'min_length' => 32, 'forbidden' => ['!ChangeMe!'], 'required' => false]], $def->getArgument('$extraSecrets'));
+        self::assertSame([['label' => 'REDIS_URL', 'value' => '%env(REDIS_URL)%', 'schemes' => ['redis'], 'password_fallback' => '%env(default::REDIS_PASSWORD)%', 'forbidden_credentials' => ['guest:guest']]], $def->getArgument('$dsnCredentials'));
+    }
+
     public function testDatabaseDumpCommandWired(): void
     {
         $container = $this->loadWith(['process_timeout' => 120]);

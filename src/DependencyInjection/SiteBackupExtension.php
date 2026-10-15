@@ -284,6 +284,9 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$forbiddenAppSecrets', array_values($guard['forbidden_app_secrets']))
             ->setArgument('$appSecretMinLength', (int) $guard['app_secret_min_length'])
             ->setArgument('$skipConsoleCommands', array_values($guard['skip_console_commands']))
+            ->setArgument('$checkPasswordHashShape', (bool) ($guard['check_password_hash_shape'] ?? true))
+            ->setArgument('$extraSecrets', array_values($guard['extra_secrets'] ?? []))
+            ->setArgument('$dsnCredentials', array_values($guard['dsn_credentials'] ?? []))
             ->addTag('kernel.event_subscriber');
     }
 
