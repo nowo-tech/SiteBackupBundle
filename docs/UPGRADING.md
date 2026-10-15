@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.20.0](#to-1200)
 - [To 1.19.2](#to-1192)
 - [To 1.19.1](#to-1191)
 - [To 1.19.0](#to-1190)
@@ -95,6 +96,8 @@
   - [Breaking changes](#breaking-changes-1)
 
 ## Unreleased
+
+## To 1.20.0
 
 - With `security_guard.enabled: true`, the panel `password_hash` must now be a real password hash (`password_get_info()`); set `security_guard.check_password_hash_shape: false` only if you use a custom hash format. A hash cut by Compose interpolation now fails at boot — single-quote it in the env file (`SITE_BACKUP_PASSWORD_HASH='$2y$…'`).
 - Optional: move host secret / DSN checks into `security_guard.extra_secrets` and `security_guard.dsn_credentials` (see CONFIGURATION.md).
