@@ -15,6 +15,9 @@
 #     ref exists; otherwise HEAD
 set -eu
 
+
+# Claude trailers: audited from the baseline on (REQ-GIT-001).
+sh "$(dirname "$0")/check-no-claude-coauthor.sh" "${1:-HEAD}"
 ZERO_SHA='0000000000000000000000000000000000000000'
 
 resolve_auto_range() {
