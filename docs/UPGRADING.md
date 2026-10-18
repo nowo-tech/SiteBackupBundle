@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.21.0](#to-1210)
   - [Template contract](#template-contract)
   - [Configuration](#configuration)
 - [To 1.20.0](#to-1200)
@@ -98,6 +99,14 @@
   - [Breaking changes](#breaking-changes-1)
 
 ## Unreleased
+
+## To 1.21.0
+
+From **1.20.0**:
+
+```bash
+composer update nowo-tech/site-backup-bundle
+```
 
 The panel and setup pages move to the UiKit 2.1 page contract (REQ-UI-003). Steps:
 
