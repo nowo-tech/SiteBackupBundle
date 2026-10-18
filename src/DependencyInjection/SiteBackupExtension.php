@@ -62,6 +62,7 @@ use Nowo\SiteBackupBundle\Storage\FilesystemBackupHistoryStorage;
 use Nowo\SiteBackupBundle\Storage\FilesystemRestoreProgressStorage;
 use Nowo\SiteBackupBundle\Storage\RestoreProgressStorageInterface;
 use Nowo\SiteBackupBundle\Twig\SiteBackupExtension as SiteBackupTwigExtension;
+use Nowo\SiteBackupBundle\View\SiteBackupView;
 use Nowo\SiteBackupBundle\Worker\WorkerRestartSignal;
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\Argument\TaggedIteratorArgument;
@@ -83,6 +84,8 @@ use function in_array;
 use function is_array;
 use function is_int;
 use function is_string;
+use function trigger_deprecation;
+use function trim;
 
 final class SiteBackupExtension extends Extension implements PrependExtensionInterface
 {
@@ -100,9 +103,22 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
     }
 
     /**
-     * When UiKit is installed, seed nowo_ui_kit.css_framework / icon_set from
-     * root css_framework so kit macros resolve the same stack.
-     * Does not override keys the host already set under nowo_ui_kit.
+     * 1.x panel.extra_classes key => UiKit theme slots of the NowoSiteBackupBundle exception (classes appended to the
+     * framework defaults, as in 1.x).
+     *
+     * @var array<string, list<string>>
+     */
+    public const EXTRA_CLASS_SLOTS = [
+        'card'   => ['card'],
+        'table'  => ['table'],
+        'input'  => ['input'],
+        'button' => ['btn_primary', 'btn_secondary', 'action'],
+    ];
+
+    /**
+     * When UiKit is installed: seed nowo_ui_kit.css_framework / icon_set from the deprecated root css_framework when
+     * the host set it (and not the UiKit keys), and bridge the deprecated panel.extra_classes into
+     * nowo_ui_kit.theme.bundles.NowoSiteBackupBundle.classes (REQ-UI-003). Prepended: the host's own UiKit config wins.
      */
     private function prependUiKitDefaults(ContainerBuilder $container): void
     {
@@ -124,25 +140,50 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             }
         }
 
-        if ($hostHasCssFramework && $hostHasIconSet) {
-            return;
-        }
-
         $config   = $this->processConfiguration(new Configuration(), $container->getExtensionConfig(Configuration::ALIAS));
         $defaults = [];
 
-        if (!$hostHasCssFramework) {
-            $fw                        = (string) ($config['css_framework'] ?? 'custom');
-            $defaults['css_framework'] = $fw === 'bootstrap' ? 'bootstrap5' : $fw;
+        $fw = $config['css_framework'] ?? null;
+        if (is_string($fw)) {
+            $fw = $fw === 'bootstrap' ? 'bootstrap5' : $fw;
+            if (!$hostHasCssFramework) {
+                $defaults['css_framework'] = $fw;
+            }
+            if (!$hostHasIconSet) {
+                $defaults['icon_set'] = $fw === 'tabler' ? 'tabler-icons' : 'bootstrap-icons';
+            }
         }
-        if (!$hostHasIconSet) {
-            $fw                   = (string) ($defaults['css_framework'] ?? $config['css_framework'] ?? 'custom');
-            $defaults['icon_set'] = $fw === 'tabler' ? 'tabler-icons' : 'bootstrap-icons';
+
+        $classes = self::themeBridge(is_array($config['panel']['extra_classes'] ?? null) ? $config['panel']['extra_classes'] : []);
+        if ($classes !== []) {
+            trigger_deprecation('nowo-tech/site-backup-bundle', '1.21', 'nowo_site_backup.panel.extra_classes is deprecated, use nowo_ui_kit.theme.bundles.NowoSiteBackupBundle.classes.');
+            $defaults['theme'] = ['bundles' => [SiteBackupView::BUNDLE => ['classes' => $classes]]];
         }
 
         if ($defaults !== []) {
             $container->prependExtensionConfig('nowo_ui_kit', $defaults);
         }
+    }
+
+    /**
+     * @param array<array-key, mixed> $extraClasses panel.extra_classes
+     *
+     * @return array<string, string> UiKit slot => classes
+     */
+    public static function themeBridge(array $extraClasses): array
+    {
+        $classes = [];
+        foreach (self::EXTRA_CLASS_SLOTS as $key => $slots) {
+            $value = $extraClasses[$key] ?? null;
+            if (!is_string($value) || trim($value) === '') {
+                continue;
+            }
+            foreach ($slots as $slot) {
+                $classes[$slot] = trim(($classes[$slot] ?? '') . ' ' . trim($value));
+            }
+        }
+
+        return $classes;
     }
 
     public function load(array $configs, ContainerBuilder $container): void
@@ -168,17 +209,11 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
         $container->setParameter('nowo.site_backup.setup.locale.enabled', $locale['enabled'] ?? ['en']);
         $container->setParameter('nowo.site_backup.setup.locale.unlocalized', $locale['unlocalized'] ?? 'redirect');
 
-        $setupLayout = $config['setup']['layout_template'] ?? null;
-        if (is_string($setupLayout) && $setupLayout !== '') {
-            $config['templates']['setup_layout'] = $setupLayout;
-        }
-
-        $panelLayout = $config['panel']['layout_template'] ?? null;
-        if (is_string($panelLayout) && $panelLayout !== '') {
-            $config['templates']['panel_layout'] = $panelLayout;
-        }
+        // REQ-UI-003: resolved page templates (web_ui.templates over the defaults; 1.x templates.* mapped by Configuration).
+        $config['templates'] = $config['web_ui']['templates'] + SiteBackupView::TEMPLATES;
 
         $container->setParameter('nowo.site_backup.templates', $config['templates']);
+        $container->setParameter('nowo.site_backup.web_ui', $config['web_ui']);
         $container->setParameter('nowo.site_backup.setup', $config['setup']);
         $container->setParameter('nowo.site_backup.panel', $config['panel']);
         $container->setParameter('nowo.site_backup.security', $config['security']);
@@ -200,6 +235,7 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
         $this->registerAccessChecker($container, $config['security']);
         $this->configureManager($container);
         $this->configureSubscriber($container, $config);
+        $this->configureView($container, $config);
         $this->configureTwigGlobals($container, $config);
         $this->configurePanel($container, $config);
         $this->configureSetup($container, $config);
@@ -586,18 +622,37 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             return;
         }
 
-        /** @var array<string, string> $templates */
-        $templates   = $config['templates'];
-        $setupLayout = $templates['setup_layout'] ?? '@NowoSiteBackupBundle/setup/layout.html.twig';
-        $panelLayout = $templates['panel_layout'] ?? '@NowoSiteBackupBundle/panel/layout.html.twig';
+        // Deprecated 1.x globals (removed in 2.0): pages use the UiKit layouts (nowo_ui_layout) through the view models.
+        $setupLayout = $config['web_ui']['guest_layout_template'] ?? null;
+        $panelLayout = $config['web_ui']['layout_template'] ?? null;
+        $display     = $config['panel']['row_actions_display'] ?? null;
 
         $container->getDefinition(SiteBackupTwigExtension::class)
             ->setArgument('$manager', new Reference(SiteBackupManager::class))
-            ->setArgument('$setupLayoutTemplate', $setupLayout)
-            ->setArgument('$panelLayoutTemplate', $panelLayout)
-            ->setArgument('$cssFramework', (string) $config['css_framework'])
-            ->setArgument('$rowActionsDisplay', (string) ($config['panel']['row_actions_display'] ?? 'text'))
+            ->setArgument('$setupLayoutTemplate', is_string($setupLayout) ? $setupLayout : SiteBackupView::UI_KIT_GUEST_LAYOUT)
+            ->setArgument('$panelLayoutTemplate', is_string($panelLayout) ? $panelLayout : '@NowoUiKit/layout/admin.html.twig')
+            ->setArgument('$cssFramework', (string) ($config['css_framework'] ?? 'custom'))
+            ->setArgument('$rowActionsDisplay', is_string($display) ? $display : 'kit')
             ->setArgument('$panelClasses', $config['panel']['extra_classes'] ?? []);
+    }
+
+    /**
+     * Page renderer shared by the panel and setup controllers (REQ-UI-003) + UiKit area-nav provider (site_backup).
+     *
+     * @param array<string, mixed> $config
+     */
+    private function configureView(ContainerBuilder $container, array $config): void
+    {
+        $display = $config['panel']['row_actions_display'] ?? null;
+
+        $container->register(SiteBackupView::class, SiteBackupView::class)
+            ->setArgument('$twig', new Reference('twig'))
+            ->setArgument('$pathPrefix', (string) $config['web_ui']['path_prefix'])
+            ->setArgument('$layoutTemplate', $config['web_ui']['layout_template'])
+            ->setArgument('$guestLayoutTemplate', $config['web_ui']['guest_layout_template'])
+            ->setArgument('$templates', $config['templates'])
+            ->setArgument('$rowActionsDisplay', in_array($display, SiteBackupView::ROW_ACTIONS_DISPLAYS, true) ? $display : null)
+            ->addTag('nowo_ui_kit.area_nav_provider');
     }
 
     /**
@@ -632,6 +687,7 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$accessChecker', new Reference(SiteBackupAccessCheckerInterface::class))
             ->setArgument('$allowUnauthenticated', (bool) $config['security']['allow_unauthenticated'])
             ->setArgument('$translator', new Reference('translator', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
+            ->setArgument('$view', new Reference(SiteBackupView::class))
             ->setPublic(true);
     }
 
@@ -918,6 +974,7 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$csrfTokenManager', new Reference(CsrfTokenManagerInterface::class, ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
             ->setArgument('$pathPrefixResolver', new Reference(SetupPathPrefixResolver::class))
             ->setArgument('$translator', new Reference('translator', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
+            ->setArgument('$view', new Reference(SiteBackupView::class))
             ->setPublic(true);
     }
 

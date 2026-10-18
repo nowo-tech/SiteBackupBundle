@@ -1,0 +1,34 @@
+{#
+  BC bridge (deprecated since 1.21, removed in 2.0): wraps a 1.x panel layout (web_ui.layout_template, formerly
+  panel.layout_template) that renders block nowo_site_backup_panel_content instead of the UiKit canonical blocks.
+  SiteBackupView selects it when the configured layout has no nowo_ui_content block. Variable:
+  nowo_site_backup_legacy.panel (the wrapped layout). Adds the UiKit stylesheet and scripts to the 1.x
+  stylesheets / javascripts blocks.
+#}
+{% extends nowo_site_backup_legacy.panel %}
+{% set _sbb_nonce = app is defined and app and app.request ? app.request.attributes.get('csp_nonce')|default('') : '' %}
+
+{% block stylesheets %}
+    {{ parent() }}
+    <link rel="stylesheet" href="{{ asset('css/nowo-ui.css', 'nowo_ui_kit') }}">
+    {% block nowo_ui_head %}{% endblock %}
+    {% block nowo_ui_styles %}{% endblock %}
+{% endblock %}
+
+{% block nowo_site_backup_panel_content %}
+    {% block nowo_ui_navigation %}{% endblock %}
+    <div class="{{ nowo_ui_class('content', nowo_ui_bundle|default(null)) }}"{% if nowo_ui_bundle|default(null) %} data-nowo-ui-bundle="{{ nowo_ui_bundle }}"{% endif %}>
+        {% block nowo_ui_page_header %}{% endblock %}
+        {% block nowo_ui_flashes %}{{ include(nowo_ui_partial('flashes', nowo_ui_bundle|default(null)), {bundle: nowo_ui_bundle|default(null)}) }}{% endblock %}
+        {% block nowo_ui_content %}{% endblock %}
+    </div>
+    {% block nowo_ui_modals %}{% endblock %}
+{% endblock %}
+
+{% block javascripts %}
+    {{ parent() }}
+    {% for _script in ['nowo-ui-confirm', 'nowo-ui-dialog'] %}
+        <script src="{{ asset('js/' ~ _script ~ '.js', 'nowo_ui_kit') }}" defer{% if _sbb_nonce %} nonce="{{ _sbb_nonce }}"{% endif %}></script>
+    {% endfor %}
+    {% block nowo_ui_scripts %}{% endblock %}
+{% endblock %}

@@ -26,6 +26,7 @@ panel:
   nav:
     panel: 'Pannello'
     history: 'Cronologia'
+    label: 'Sezioni di Site Backup'
   login:
     page_title: 'Accesso - Backup del sito'
     heading: 'Pannello di backup'
@@ -35,6 +36,7 @@ panel:
     submit: 'Accedi'
     invalid_password: 'Password non valida.'
     too_many_attempts: 'Troppi tentativi di accesso. Riprova tra %minutes% minuto/i.'
+    intro: 'Inserisci la password del pannello per gestire i backup.'
   index:
     page_title: 'Pannello di backup'
     create_title: 'Crea backup'
@@ -57,6 +59,7 @@ panel:
     restore_confirm: 'Ripristinare ora questo backup? I visitatori vedranno la pagina di caricamento.'
     delete_confirm: 'Eliminare il backup?'
     logout: 'Esci'
+    empty_hint: 'Crea il primo backup integrale di questo sito.'
   history:
     page_title: 'Cronologia — Backup del sito'
     title: 'Cronologia'
@@ -66,6 +69,7 @@ panel:
     col_actor: 'Autore'
     col_message: 'Messaggio'
     empty: 'Nessuna cronologia.'
+    intro: 'Backup creati, eliminati e ripristinati, dal più recente.'
   flash:
     created: 'Backup creato: %id%'
     deleted: 'Backup eliminato: %id%'
@@ -76,6 +80,15 @@ panel:
   error:
     invalid_csrf: 'Token CSRF non valido.'
     access_denied: 'Accesso negato.'
+    backup_not_found: 'Backup non trovato.'
+  create:
+    intro: 'Archivia i percorsi configurati e il dump del database in un .tar.gz con checksum.'
+  confirm:
+    restore_title: 'Ripristinare il backup %id%?'
+    restore_expected: 'Digita l’id del backup %value% per confermare'
+    delete_message: 'Il backup %id% (archivio e checksum) viene rimosso dalla directory di archiviazione. L’operazione non può essere annullata.'
+    restore_page_title: 'Ripristina backup'
+    delete_page_title: 'Elimina backup'
 setup:
   page_title:
     wizard: '%brand% - Configurazione'
@@ -87,6 +100,7 @@ setup:
     continue: 'Continua'
     retry: 'Riprova'
     running: 'Esecuzione del passaggio successivo…'
+    progress: 'Avanzamento della configurazione'
   bootstrap:
     prompt: 'Scegli come inizializzare questo sito'
     guided: 'Configurazione guidata (crea amministratore)'
@@ -122,6 +136,7 @@ setup:
   database:
     save: 'Salva DATABASE_URL'
     skip: 'Salta (usa env esistente)'
+    field_label: 'DATABASE_URL'
   error:
     invalid_csrf: 'Token CSRF non valido.'
     invalid_request: 'Richiesta di configurazione non valida.'
@@ -150,3 +165,4 @@ setup:
     title: 'Configurazione completata'
     body: 'Il sito è pronto. Puoi accedere con l''account amministratore creato.'
     home: 'Vai alla home'
+    step: 'Fatto'

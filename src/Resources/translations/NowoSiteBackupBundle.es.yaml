@@ -26,6 +26,7 @@ panel:
   nav:
     panel: 'Panel'
     history: 'Historial'
+    label: 'Secciones de Site Backup'
   login:
     page_title: 'Acceso - Copia de seguridad del sitio'
     heading: 'Panel de copias de seguridad'
@@ -35,6 +36,7 @@ panel:
     submit: 'Iniciar sesión'
     invalid_password: 'Contraseña incorrecta.'
     too_many_attempts: 'Demasiados intentos de inicio de sesión. Vuelve a intentarlo en %minutes% minuto(s).'
+    intro: 'Introduce la contraseña del panel para gestionar las copias.'
   index:
     page_title: 'Panel de copias de seguridad'
     create_title: 'Crear copia de seguridad'
@@ -57,6 +59,7 @@ panel:
     restore_confirm: '¿Restaurar esta copia ahora? Los visitantes verán la página de carga.'
     delete_confirm: '¿Eliminar la copia de seguridad?'
     logout: 'Cerrar sesión'
+    empty_hint: 'Crea la primera copia de seguridad integral de este sitio.'
   history:
     page_title: 'Historial — Copia de seguridad del sitio'
     title: 'Historial'
@@ -66,6 +69,7 @@ panel:
     col_actor: 'Autor'
     col_message: 'Mensaje'
     empty: 'Sin historial.'
+    intro: 'Copias creadas, eliminadas y restauradas, de la más reciente a la más antigua.'
   flash:
     created: 'Copia de seguridad creada: %id%'
     deleted: 'Copia de seguridad eliminada: %id%'
@@ -76,6 +80,15 @@ panel:
   error:
     invalid_csrf: 'Token CSRF no válido.'
     access_denied: 'Acceso denegado.'
+    backup_not_found: 'Copia de seguridad no encontrada.'
+  create:
+    intro: 'Archiva las rutas configuradas y el volcado de la base de datos en un .tar.gz con sumas de verificación.'
+  confirm:
+    restore_title: '¿Restaurar la copia %id%?'
+    restore_expected: 'Escribe el id de la copia %value% para confirmar'
+    delete_message: 'La copia %id% (archivo y sumas de verificación) se elimina del directorio de almacenamiento. No se puede deshacer.'
+    restore_page_title: 'Restaurar copia de seguridad'
+    delete_page_title: 'Eliminar copia de seguridad'
 setup:
   page_title:
     wizard: '%brand% - Configuración'
@@ -87,6 +100,7 @@ setup:
     continue: 'Continuar'
     retry: 'Reintentar'
     running: 'Ejecutando el siguiente paso…'
+    progress: 'Progreso de la instalación'
   bootstrap:
     prompt: 'Elige cómo arrancar este sitio'
     guided: 'Asistente guiado (crear admin)'
@@ -122,6 +136,7 @@ setup:
   database:
     save: 'Guardar DATABASE_URL'
     skip: 'Omitir (usar env existente)'
+    field_label: 'DATABASE_URL'
   error:
     invalid_csrf: 'Token CSRF no válido.'
     invalid_request: 'Solicitud de configuración no válida.'
@@ -150,3 +165,4 @@ setup:
     title: 'Configuración completada'
     body: 'El sitio está listo. Puedes iniciar sesión con la cuenta de administrador.'
     home: 'Ir al inicio'
+    step: 'Listo'

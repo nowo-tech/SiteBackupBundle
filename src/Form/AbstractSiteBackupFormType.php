@@ -21,6 +21,8 @@ abstract class AbstractSiteBackupFormType extends AbstractType
             'csrf_token_id'      => $this->csrfTokenId(),
             'data_class'         => null,
             'method'             => 'POST',
+            // v1.21+: field labels / help are bundle translation keys (UiKit scaffolds render the default rows).
+            'translation_domain' => 'NowoSiteBackupBundle',
         ]);
     }
 

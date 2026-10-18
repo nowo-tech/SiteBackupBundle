@@ -15,11 +15,13 @@ final class AdminUserType extends AbstractSiteBackupFormType
     {
         $builder
             ->add('email', EmailType::class, [
-                'attr' => [
+                'label' => 'setup.admin.email',
+                'attr'  => [
                     'autocomplete' => 'username',
                 ],
             ])
             ->add('password', PasswordType::class, [
+                'label'        => 'setup.admin.password',
                 'always_empty' => true,
                 'attr'         => [
                     'autocomplete' => 'new-password',

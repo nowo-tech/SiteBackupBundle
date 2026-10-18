@@ -1,7 +1,10 @@
-{{ form_start(form) }}
-    <p>{{ 'setup.sample.prompt'|trans({}, 'NowoSiteBackupBundle') }}</p>
-    <div class="actions">
-        <button type="submit" name="action" value="load">{{ 'setup.sample.load'|trans({}, 'NowoSiteBackupBundle') }}</button>
-        <button class="secondary" type="submit" name="action" value="skip">{{ 'setup.sample.skip'|trans({}, 'NowoSiteBackupBundle') }}</button>
+{# Sample data step (Form\Setup\SampleDataType; submit name action = load | skip). Variables: form. #}
+{% set _b = 'NowoSiteBackupBundle' %}
+{{ form_start(form, {attr: {class: nowo_ui_class('form', _b)}}) }}
+    <p>{{ 'setup.sample.prompt'|trans({}, _b) }}</p>
+    {{ form_rest(form) }}
+    <div class="{{ nowo_ui_class('form_actions', _b) }}">
+        <button type="submit" name="action" value="load" class="{{ nowo_ui_class('btn_primary', _b) }}">{{ 'setup.sample.load'|trans({}, _b) }}</button>
+        <button type="submit" name="action" value="skip" class="{{ nowo_ui_class('btn_secondary', _b) }}">{{ 'setup.sample.skip'|trans({}, _b) }}</button>
     </div>
 {{ form_end(form) }}

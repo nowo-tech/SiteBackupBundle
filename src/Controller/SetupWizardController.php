@@ -19,6 +19,8 @@ use Nowo\SiteBackupBundle\Setup\SetupOrchestrator;
 use Nowo\SiteBackupBundle\Setup\SetupStepInput;
 use Nowo\SiteBackupBundle\Setup\Step\DatabaseUrlStep;
 use Nowo\SiteBackupBundle\Setup\Step\TabStep;
+use Nowo\SiteBackupBundle\View\SetupPages;
+use Nowo\SiteBackupBundle\View\SiteBackupView;
 use Symfony\Component\Form\FormFactoryInterface;
 use Symfony\Component\Form\FormInterface;
 use Symfony\Component\HttpFoundation\JsonResponse;
@@ -41,24 +43,35 @@ use function str_contains;
 
 use const JSON_THROW_ON_ERROR;
 
+/**
+ * Setup wizard (REQ-UI-003, v1.21+): token gate (page/auth), wizard steps and done (page/wizard), all on the guest
+ * layout. No database service is needed to render these pages (cold start, broken DATABASE_URL, no users yet).
+ */
 final class SetupWizardController
 {
+    private readonly SiteBackupView $view;
+
+    private readonly SetupPages $pages;
+
     /**
-     * @param array<string, string> $templates
+     * @param array<string, string> $templates page id => template (web_ui.templates; 1.x templates.* keys accepted)
      */
     public function __construct(
         private readonly SetupOrchestrator $orchestrator,
         private readonly SetupNeedEvaluator $needEvaluator,
         private readonly FormFactoryInterface $formFactory,
-        private readonly Environment $twig,
-        private readonly array $templates,
+        Environment $twig,
+        array $templates,
         private readonly string $pathPrefix,
         private readonly string $brandName,
         private readonly ?string $setupToken,
         private readonly ?CsrfTokenManagerInterface $csrfTokenManager = null,
         private readonly ?SetupPathPrefixResolver $pathPrefixResolver = null,
         private readonly ?TranslatorInterface $translator = null,
+        ?SiteBackupView $view = null,
     ) {
+        $this->view  = $view ?? new SiteBackupView($twig, guestLayoutTemplate: $templates['setup_layout'] ?? null, templates: $templates);
+        $this->pages = new SetupPages($this->view, $brandName);
     }
 
     public function index(Request $request): Response
@@ -70,11 +83,9 @@ final class SetupWizardController
         }
 
         if (!$this->isTokenValid($request)) {
-            return new Response($this->twig->render($this->templates['setup_token'], $this->setupViewVars([
-                'pathPrefix' => $pathPrefix,
-                'brandName'  => $this->brandName,
-                'tokenForm'  => $this->formFactory->createNamed('', SetupTokenType::class, null, ['action' => $pathPrefix])->createView(),
-            ])), 403);
+            return $this->view->render('setup_token', $this->setupViewVars([
+                'page' => $this->pages->token($this->formFactory->createNamed('', SetupTokenType::class, null, ['action' => $pathPrefix])->createView(), $pathPrefix),
+            ], $pathPrefix), Response::HTTP_FORBIDDEN);
         }
 
         $profile     = $request->query->getString('profile') ?: null;
@@ -129,28 +140,29 @@ final class SetupWizardController
             $wizardForm  = $this->createSetupForm($progress, $currentStep, $reasons);
         }
 
-        return new Response($this->twig->render($this->templates['setup_wizard'], $this->setupViewVars([
-            'pathPrefix'  => $pathPrefix,
-            'brandName'   => $this->brandName,
+        $wizardView = $wizardForm?->createView();
+
+        return $this->view->render('setup_wizard', $this->setupViewVars([
+            'page'        => $this->pages->wizard($steps, $progress, $currentStep, $wizardView),
             'progress'    => $progress,
             'steps'       => $steps,
             'currentStep' => $currentStep,
             'reasons'     => $reasons,
             'error'       => $error,
-            'csrfToken'   => $this->csrfTokenManager?->getToken('nowo_site_backup_setup')->getValue(),
             'progressUrl' => rtrim($pathPrefix, '/') . '/api/progress',
             'advanceMode' => $this->orchestrator->getAdvanceMode($progress->getProfile()),
-            'wizardForm'  => $wizardForm?->createView(),
-        ])));
+            'wizardForm'  => $wizardView,
+        ], $pathPrefix));
     }
 
     public function done(): Response
     {
-        return new Response($this->twig->render($this->templates['setup_done'], $this->setupViewVars([
-            'pathPrefix' => $this->effectivePathPrefix(),
-            'brandName'  => $this->brandName,
-            'progress'   => $this->orchestrator->getProgress(),
-        ])));
+        $progress = $this->orchestrator->getProgress();
+
+        return $this->view->render('setup_done', $this->setupViewVars([
+            'page'     => $this->pages->done($this->orchestrator->getSteps($progress->getProfile())),
+            'progress' => $progress,
+        ], $this->effectivePathPrefix()));
     }
 
     /**
@@ -338,15 +350,18 @@ final class SetupWizardController
     }
 
     /**
+     * Context shared by the setup pages (1.x names kept for host step templates: pathPrefix, brandName).
+     *
      * @param array<string, mixed> $vars
      *
      * @return array<string, mixed>
      */
-    private function setupViewVars(array $vars): array
+    private function setupViewVars(array $vars, string $pathPrefix): array
     {
-        $vars['layout_template'] = $this->templates['setup_layout']
-            ?? '@NowoSiteBackupBundle/setup/layout.html.twig';
-
-        return $vars;
+        return $vars + [
+            'pathPrefix' => $pathPrefix,
+            'brandName'  => $this->brandName,
+            'messages'   => [],
+        ];
     }
 }

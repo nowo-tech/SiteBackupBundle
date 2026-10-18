@@ -1,0 +1,21 @@
+{#
+  Restore status notice of the panel (block nowo_ui_flashes of panel/index): phase, percent, current step, error
+  and, once finished, the "Clear status" POST action (`clear_restore`, View\Action with a CSRF FormView). Hidden
+  while no restore ran (phase idle). Variables: progress (Model\RestoreProgress), clear_restore.
+#}
+{% set _b = 'NowoSiteBackupBundle' %}
+{% if progress is defined and progress and progress.phase != 'idle' %}
+    {% set _slot = progress.phase == 'failed' ? 'flash_error' : (progress.phase == 'completed' ? 'flash_success' : 'flash_info') %}
+    <div class="{{ nowo_ui_class(_slot, _b) }} nowo-sbb-restore-status" role="status" data-testid="nowo-sbb-restore-status" data-phase="{{ progress.phase }}"{{ nowo_ui_attrs(_slot, _b) }}>
+        <p>
+            <strong>{{ 'panel.index.restore_title'|trans({}, _b) }}:</strong>
+            {{ ('restore.phase.' ~ progress.phase)|trans({}, _b) }} — {{ progress.percent|number_format(0) }}%
+            {%- if progress.backupId %} · <code class="{{ nowo_ui_class('code', _b) }}">{{ progress.backupId }}</code>{% endif %}
+        </p>
+        {% if progress.message %}<p>{{ progress.message|trans({}, _b) }}</p>{% endif %}
+        {% if progress.error %}<p>{{ progress.error }}</p>{% endif %}
+        {% if progress.phase in ['completed', 'failed'] and clear_restore is defined and clear_restore %}
+            <div class="{{ nowo_ui_class('toolbar', _b) }}">{{ include(nowo_ui_partial('action', _b), {action: clear_restore, bundle: _b}, false) }}</div>
+        {% endif %}
+    </div>
+{% endif %}

@@ -1,49 +1,18 @@
-{% extends nowo_site_backup_setup_layout_template %}
 {#
-  Setup token gate (HTTP 403). v1.18+ chrome blocks (override instead of forking):
-    nowo_site_backup_token_art    — illustration slot above the title (empty by default)
-    nowo_site_backup_token_title  — heading text
-    nowo_site_backup_token_lead   — lead paragraph
-    nowo_site_backup_token_form   — "paste the token" GET form (`tokenForm`, field `token`)
-    nowo_site_backup_token_howto  — collapsible how-to (setup.setup_token, ?token=…, X-Setup-Token)
-  `tokenForm` is passed by SetupWizardController since 1.18; older custom controllers fall back to the text-only page.
+  Setup token gate (REQ-UI-003, page/auth on the guest layout, HTTP 403). Variable: page (View\AuthPage, built by
+  View\SetupPages::token): GET form Form\Setup\SetupTokenType (field `token`). Extra context: pathPrefix, brandName.
+  Data block: nowo_ui_auth_footer (how to find the token: setup.setup_token, ?token=…, X-Setup-Token).
 #}
-{% set _sbb_token_example = pathPrefix ~ '?token=…' %}
+{% extends '@NowoUiKit/page/auth.html.twig' %}
 
-{% block nowo_ui_document_title %}{{ 'setup.page_title.token'|trans({'%brand%': brandName}, 'NowoSiteBackupBundle') }}{% endblock %}
-{% block nowo_site_backup_title %}{{ 'setup.page_title.token'|trans({'%brand%': brandName}, 'NowoSiteBackupBundle') }}{% endblock %}
-
-{% block nowo_site_backup_content %}
-    <div class="nowo-ui-card card nowo-sbb-token" data-testid="nowo-sbb-token-gate">
-        {% block nowo_site_backup_token_art %}{% endblock %}
-        <h1>{% block nowo_site_backup_token_title %}{{ 'setup.token.title'|trans({}, 'NowoSiteBackupBundle') }}{% endblock %}</h1>
-        {% block nowo_site_backup_token_lead %}
-            {% if tokenForm is defined and tokenForm %}
-                <p class="sub">{{ 'setup.token.lead'|trans({}, 'NowoSiteBackupBundle') }}</p>
-            {% else %}
-                <p class="sub">{{ 'setup.token.body'|trans({'%path%': _sbb_token_example}, 'NowoSiteBackupBundle') }}</p>
-            {% endif %}
-        {% endblock %}
-        {% if tokenForm is defined and tokenForm %}
-            {% block nowo_site_backup_token_form %}
-                {{ form_start(tokenForm, {attr: {class: 'nowo-ui-form nowo-sbb-token__form'}}) }}
-                    <div>
-                        {{ form_label(tokenForm.token, 'setup.token.field_label'|trans({}, 'NowoSiteBackupBundle')) }}
-                        {{ form_widget(tokenForm.token, {attr: {placeholder: 'setup.token.field_placeholder'|trans({}, 'NowoSiteBackupBundle')}}) }}
-                    </div>
-                    <button type="submit">{{ 'setup.token.submit'|trans({}, 'NowoSiteBackupBundle') }}</button>
-                {{ form_end(tokenForm) }}
-            {% endblock %}
-            {% block nowo_site_backup_token_howto %}
-                <details class="nowo-sbb-token__howto">
-                    <summary>{{ 'setup.token.howto'|trans({}, 'NowoSiteBackupBundle') }}</summary>
-                    <ol>
-                        <li>{{ 'setup.token.step_env'|trans({}, 'NowoSiteBackupBundle') }}</li>
-                        <li>{{ 'setup.token.step_url'|trans({'%path%': _sbb_token_example}, 'NowoSiteBackupBundle') }}</li>
-                        <li>{{ 'setup.token.step_header'|trans({}, 'NowoSiteBackupBundle') }}</li>
-                    </ol>
-                </details>
-            {% endblock %}
-        {% endif %}
-    </div>
+{% block nowo_ui_auth_footer %}
+    {% set _example = pathPrefix ~ '?token=…' %}
+    <details class="nowo-sbb-token__howto" data-testid="nowo-sbb-token-howto">
+        <summary>{{ 'setup.token.howto'|trans({}, 'NowoSiteBackupBundle') }}</summary>
+        <ol>
+            <li>{{ 'setup.token.step_env'|trans({}, 'NowoSiteBackupBundle') }}</li>
+            <li>{{ 'setup.token.step_url'|trans({'%path%': _example}, 'NowoSiteBackupBundle') }}</li>
+            <li>{{ 'setup.token.step_header'|trans({}, 'NowoSiteBackupBundle') }}</li>
+        </ol>
+    </details>
 {% endblock %}

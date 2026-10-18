@@ -26,6 +26,7 @@ panel:
   nav:
     panel: 'Panneau'
     history: 'Historique'
+    label: 'Sections de Site Backup'
   login:
     page_title: 'Connexion - Sauvegarde du site'
     heading: 'Panneau de sauvegarde'
@@ -35,6 +36,7 @@ panel:
     submit: 'Se connecter'
     invalid_password: 'Mot de passe incorrect.'
     too_many_attempts: 'Trop de tentatives de connexion. Réessayez dans %minutes% minute(s).'
+    intro: 'Saisissez le mot de passe du panneau pour gérer les sauvegardes.'
   index:
     page_title: 'Panneau de sauvegarde'
     create_title: 'Créer une sauvegarde'
@@ -57,6 +59,7 @@ panel:
     restore_confirm: 'Restaurer cette sauvegarde maintenant ? Les visiteurs verront la page de chargement.'
     delete_confirm: 'Supprimer la sauvegarde ?'
     logout: 'Se déconnecter'
+    empty_hint: 'Créez la première sauvegarde intégrale de ce site.'
   history:
     page_title: 'Historique — Sauvegarde du site'
     title: 'Historique'
@@ -66,6 +69,7 @@ panel:
     col_actor: 'Auteur'
     col_message: 'Message'
     empty: 'Aucun historique.'
+    intro: 'Sauvegardes créées, supprimées et restaurées, de la plus récente à la plus ancienne.'
   flash:
     created: 'Sauvegarde créée : %id%'
     deleted: 'Sauvegarde supprimée : %id%'
@@ -76,6 +80,15 @@ panel:
   error:
     invalid_csrf: 'Jeton CSRF invalide.'
     access_denied: 'Accès refusé.'
+    backup_not_found: 'Sauvegarde introuvable.'
+  create:
+    intro: 'Archive les chemins configurés et le dump de la base de données dans un .tar.gz avec sommes de contrôle.'
+  confirm:
+    restore_title: 'Restaurer la sauvegarde %id% ?'
+    restore_expected: 'Saisissez l’identifiant de la sauvegarde %value% pour confirmer'
+    delete_message: 'La sauvegarde %id% (archive et sommes de contrôle) est supprimée du répertoire de stockage. Cette action est irréversible.'
+    restore_page_title: 'Restaurer la sauvegarde'
+    delete_page_title: 'Supprimer la sauvegarde'
 setup:
   page_title:
     wizard: '%brand% - Configuration'
@@ -87,6 +100,7 @@ setup:
     continue: 'Continuer'
     retry: 'Réessayer'
     running: 'Exécution de l''étape suivante…'
+    progress: 'Progression de l’installation'
   bootstrap:
     prompt: 'Choisissez comment initialiser ce site'
     guided: 'Configuration guidée (créer un administrateur)'
@@ -122,6 +136,7 @@ setup:
   database:
     save: 'Enregistrer DATABASE_URL'
     skip: 'Ignorer (utiliser l''env existant)'
+    field_label: 'DATABASE_URL'
   error:
     invalid_csrf: 'Jeton CSRF invalide.'
     invalid_request: 'Requête de configuration invalide.'
@@ -150,3 +165,4 @@ setup:
     title: 'Configuration terminée'
     body: 'Le site est prêt. Vous pouvez vous connecter avec le compte administrateur créé.'
     home: 'Aller à l''accueil'
+    step: 'Terminé'

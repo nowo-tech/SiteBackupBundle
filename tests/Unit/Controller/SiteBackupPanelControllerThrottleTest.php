@@ -114,9 +114,9 @@ final class SiteBackupPanelControllerThrottleTest extends TestCase
         self::assertGreaterThanOrEqual(1, $retryAfter);
         self::assertLessThanOrEqual(900, $retryAfter);
 
-        self::assertSame('translated-invalid', $this->rendered[0]['error']);
+        self::assertSame('translated-invalid', $this->rendered[0]['page']->error);
         $context = $this->rendered[1];
-        self::assertSame('translated-too-many', $context['error']);
+        self::assertSame('translated-too-many', $context['page']->error);
         self::assertTrue($context['throttled']);
         self::assertFalse($this->rendered[0]['throttled']);
     }
@@ -132,7 +132,7 @@ final class SiteBackupPanelControllerThrottleTest extends TestCase
 
         self::assertSame(429, $response->getStatusCode());
         self::assertSame('61', $response->headers->get('Retry-After'));
-        self::assertSame('Too many login attempts. Try again in 2 minute(s).', $this->rendered[0]['error']);
+        self::assertSame('Too many login attempts. Try again in 2 minute(s).', $this->rendered[0]['page']->error);
     }
 
     public function testThrottleExceptionWithoutRetryAfterDefaultsToSixtySeconds(): void
@@ -146,7 +146,7 @@ final class SiteBackupPanelControllerThrottleTest extends TestCase
 
         self::assertSame(429, $response->getStatusCode());
         self::assertSame('60', $response->headers->get('Retry-After'));
-        self::assertSame('Too many login attempts. Try again in 1 minute(s).', $this->rendered[0]['error']);
+        self::assertSame('Too many login attempts. Try again in 1 minute(s).', $this->rendered[0]['page']->error);
     }
 
     public function testSuccessfulLoginRedirectsThroughThrottledGate(): void

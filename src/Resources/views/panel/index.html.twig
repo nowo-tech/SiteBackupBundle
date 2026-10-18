@@ -1,130 +1,26 @@
-{% extends nowo_site_backup_panel_layout_template %}
-{% import '@NowoUiKitBundle/macros/ui.html.twig' as ui %}
-{% set _sbb_fw = nowo_site_backup_css_framework|default('custom') %}
-{% set _sbb_classes = nowo_site_backup_panel_classes|default({}) %}
-{% set _sbb_card = 'nowo-ui-card card' ~ (_sbb_classes.card|default('') ? ' ' ~ _sbb_classes.card) %}
-{% set _sbb_btn_extra = _sbb_classes.button|default('') ? ' ' ~ _sbb_classes.button : '' %}
-{# panel.row_actions_display: text (default, pre-1.18 markup) | icon | icon_text | kit (follow nowo_ui_kit_row_actions_display). #}
-{% set _sbb_display = nowo_site_backup_row_actions_display|default('text') %}
-{% if _sbb_display == 'kit' %}{% set _sbb_display = nowo_ui_kit_row_actions_display|default('icon') %}{% endif %}
-{# CSP: inline script/style tags carry the request attribute csp_nonce when the host sets one (nowo-tech kit convention). #}
-{% set _csp_nonce = app is defined and app and app.request ? app.request.attributes.get('csp_nonce')|default('') : '' %}
 {#
-  v1.18+ chrome blocks: nowo_site_backup_create_section, nowo_site_backup_restore_section,
-  nowo_site_backup_archives_section, nowo_site_backup_row_actions (per archive row; `b` = backup),
-  nowo_site_backup_logout, nowo_site_backup_confirm_script (drop it when the host ships its own confirm handler).
+  Backup panel — archives list (REQ-UI-003, page/list). Variable: page (View\ListPage, built by View\PanelPages::index):
+  header actions Create backup / Logout, area nav Backups | History, rows = Model\BackupArtifact, row actions Verify,
+  Restore (type-to-confirm dialog, no-JS fallback page) and Delete (confirm dialog, no-JS fallback page).
+  Extra context: messages (result of the last POST), progress (Model\RestoreProgress), clear_restore (View\Action).
+  Data blocks: nowo_ui_list_row; canonical block nowo_ui_flashes (+ messages, restore status).
 #}
+{% extends '@NowoUiKit/page/list.html.twig' %}
 
-{% block nowo_ui_document_title %}{{ 'panel.index.page_title'|trans({}, 'NowoSiteBackupBundle') }}{% endblock %}
-
-{% block nowo_site_backup_panel_content %}
-{% block nowo_site_backup_create_section %}
-<section class="{{ _sbb_card }}">
-    <h2>{{ 'panel.index.create_title'|trans({}, 'NowoSiteBackupBundle') }}</h2>
-    {{ form_start(createForm, {attr: {class: 'nowo-ui-form'}}) }}
-        <div>
-            {{ form_label(createForm.label, 'panel.index.label'|trans({}, 'NowoSiteBackupBundle')) }}
-            {{ form_widget(createForm.label, {attr: {placeholder: 'panel.index.label_placeholder'|trans({}, 'NowoSiteBackupBundle'), class: (ui.input(_sbb_fw) ~ (_sbb_classes.input|default('') ? ' ' ~ _sbb_classes.input))|trim}}) }}
-        </div>
-        <button type="submit" class="{{ ui.btn('primary', null, _sbb_fw) }}{{ _sbb_btn_extra }}">{{ 'panel.index.create_submit'|trans({}, 'NowoSiteBackupBundle') }}</button>
-    {{ form_end(createForm) }}
-</section>
+{% block nowo_ui_flashes %}
+    {{ parent() }}
+    {{ include('@NowoSiteBackupBundle/_messages.html.twig') }}
+    {{ include('@NowoSiteBackupBundle/panel/_restore_status.html.twig') }}
 {% endblock %}
 
-{% block nowo_site_backup_restore_section %}
-<section class="{{ _sbb_card }}">
-    <h2>{{ 'panel.index.restore_title'|trans({}, 'NowoSiteBackupBundle') }}</h2>
-    <p>{{ 'panel.index.phase'|trans({}, 'NowoSiteBackupBundle') }}: <strong data-phase="{{ progress.phase }}">{{ ('restore.phase.' ~ progress.phase)|trans({}, 'NowoSiteBackupBundle') }}</strong> - {{ progress.percent|number_format(1) }}%</p>
-    <p>{{ progress.message ? progress.message|trans({}, 'NowoSiteBackupBundle') }}</p>
-    {% if progress.error %}<p class="{{ ui.flash('error', _sbb_fw) }} nowo-ui-flash--err">{{ progress.error }}</p>{% endif %}
-    {% if progress.phase in ['completed', 'failed'] %}
-        {{ form_start(clearRestoreForm, {attr: {class: 'nowo-ui-form'}}) }}
-            <button type="submit" class="{{ ui.btn('secondary', null, _sbb_fw) }}{{ _sbb_btn_extra }}">{{ 'panel.index.clear_status'|trans({}, 'NowoSiteBackupBundle') }}</button>
-        {{ form_end(clearRestoreForm) }}
-    {% endif %}
-</section>
-{% endblock %}
-
-{% block nowo_site_backup_archives_section %}
-<section class="{{ _sbb_card }}">
-    <h2>{{ 'panel.index.archives'|trans({}, 'NowoSiteBackupBundle') }}</h2>
-    {% if backups is empty %}
-        <p class="{{ ui.empty(_sbb_fw) }}">{{ 'panel.index.empty'|trans({}, 'NowoSiteBackupBundle') }}</p>
+{% block nowo_ui_list_row %}
+    {% set _b = page.bundle %}
+    <td class="{{ nowo_ui_class('table_cell', _b) }}" data-label="{{ 'panel.index.col_id'|trans({}, _b) }}"><code class="{{ nowo_ui_class('code', _b) }}">{{ row.id }}</code></td>
+    <td class="{{ nowo_ui_class('table_cell', _b) }}" data-label="{{ 'panel.index.col_created'|trans({}, _b) }}"><time datetime="{{ row.createdAt|date('c') }}">{{ row.createdAt|date('Y-m-d H:i') }}</time></td>
+    <td class="{{ nowo_ui_class('table_cell', _b) }} nowo-ui-cell--end" data-label="{{ 'panel.index.col_size'|trans({}, _b) }}" data-nowo-ui-priority="2" data-bytes="{{ row.sizeBytes }}">{{ row.sizeBytes|number_format(0, '.', ' ') }} B</td>
+    {% if row.label %}
+        <td class="{{ nowo_ui_class('table_cell', _b) }}" data-label="{{ 'panel.index.col_label'|trans({}, _b) }}" data-nowo-ui-priority="3">{{ row.label }}</td>
     {% else %}
-        <div class="{{ ui.table_wrap(_sbb_fw) }}">
-        <table class="{{ ui.table(_sbb_fw) }}{{ _sbb_classes.table|default('') ? ' ' ~ _sbb_classes.table }}">
-            <thead>
-            <tr>
-                <th>{{ 'panel.index.col_id'|trans({}, 'NowoSiteBackupBundle') }}</th>
-                <th>{{ 'panel.index.col_created'|trans({}, 'NowoSiteBackupBundle') }}</th>
-                <th>{{ 'panel.index.col_size'|trans({}, 'NowoSiteBackupBundle') }}</th>
-                <th>{{ 'panel.index.col_label'|trans({}, 'NowoSiteBackupBundle') }}</th>
-                <th>{{ 'panel.index.col_actions'|trans({}, 'NowoSiteBackupBundle') }}</th>
-            </tr>
-            </thead>
-            <tbody>
-            {% for b in backups %}
-                <tr>
-                    <td><code>{{ b.id }}</code></td>
-                    <td>{{ b.createdAt|date('Y-m-d H:i') }}</td>
-                    <td>{{ b.sizeBytes }}</td>
-                    <td>{{ b.label }}</td>
-                    <td>
-                        {% block nowo_site_backup_row_actions %}
-                        <div class="{{ ui.row_actions(_sbb_fw) }} nowo-ui-row-actions--{{ _sbb_display|replace({_: '-'}) }}">
-                            {% for _sbb_action in [
-                                {kind: 'view', form: backupForms[b.id].verify, label: 'panel.index.verify', confirm: null},
-                                {kind: 'restore', form: backupForms[b.id].restore, label: 'panel.index.restore', confirm: 'panel.index.restore_confirm'},
-                                {kind: 'delete', form: backupForms[b.id].delete, label: 'panel.index.delete', confirm: 'panel.index.delete_confirm'},
-                            ] %}
-                                {% set _sbb_label = _sbb_action.label|trans({}, 'NowoSiteBackupBundle') %}
-                                {% set _sbb_form_attr = {class: 'nowo-ui-form--inline inline nowo-ui-row-actions__form'} %}
-                                {% if _sbb_action.confirm %}
-                                    {% set _sbb_form_attr = _sbb_form_attr|merge({'data-nowo-confirm': _sbb_action.confirm|trans({}, 'NowoSiteBackupBundle')}) %}
-                                {% endif %}
-                                {{ form_start(_sbb_action.form, {attr: _sbb_form_attr}) }}
-                                    <button type="submit" class="{{ ui.action(_sbb_action.kind, _sbb_fw) }}{{ _sbb_action.kind == 'delete' ? ' danger' }}{{ _sbb_btn_extra }}"{% if _sbb_display == 'icon' %} title="{{ _sbb_label }}" aria-label="{{ _sbb_label }}"{% endif %}>
-                                        {%- if _sbb_display == 'text' -%}
-                                            {{ _sbb_label }}
-                                        {%- else -%}
-                                            {{ include('@NowoUiKitBundle/components/_icon.html.twig', {name: _sbb_action.kind, label: _sbb_label}, false) }}
-                                            {%- if _sbb_display == 'icon_text' %} <span class="nowo-ui-action__label">{{ _sbb_label }}</span>{% else %}<span class="visually-hidden">{{ _sbb_label }}</span>{% endif -%}
-                                        {%- endif -%}
-                                    </button>
-                                {{ form_end(_sbb_action.form) }}
-                            {% endfor %}
-                        </div>
-                        {% endblock %}
-                    </td>
-                </tr>
-            {% endfor %}
-            </tbody>
-        </table>
-        </div>
+        <td class="{{ nowo_ui_class('table_cell', _b) }} {{ nowo_ui_class('table_cell_muted', _b) }}" data-label="{{ 'panel.index.col_label'|trans({}, _b) }}" data-nowo-ui-priority="3">—</td>
     {% endif %}
-</section>
-{% endblock %}
-
-{% block nowo_site_backup_logout %}
-{{ form_start(logoutForm, {attr: {class: 'nowo-ui-form'}}) }}
-    <button type="submit" class="{{ ui.btn('secondary', null, _sbb_fw) }}{{ _sbb_btn_extra }}">{{ 'panel.index.logout'|trans({}, 'NowoSiteBackupBundle') }}</button>
-{{ form_end(logoutForm) }}
-{% endblock %}
-{% block nowo_site_backup_confirm_script %}
-{# No inline on* handlers (CSP): confirm via data-nowo-confirm + one delegated listener. #}
-<script{% if _csp_nonce %} nonce="{{ _csp_nonce }}"{% endif %}>
-(function () {
-  if (window.__nowoSiteBackupConfirm) { return; }
-  window.__nowoSiteBackupConfirm = true;
-  document.addEventListener('submit', function (event) {
-    var form = event.target;
-    if (!form || !form.getAttribute) { return; }
-    var message = form.getAttribute('data-nowo-confirm');
-    if (message && !window.confirm(message)) {
-      event.preventDefault();
-    }
-  }, true);
-})();
-</script>
-{% endblock %}
 {% endblock %}

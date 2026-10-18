@@ -18,7 +18,12 @@ final class CreateBackupType extends AbstractSiteBackupFormType
                 'data' => 'create',
             ])
             ->add('label', TextType::class, [
+                'label'    => 'panel.index.label',
                 'required' => false,
+                'attr'     => [
+                    'placeholder' => 'panel.index.label_placeholder',
+                    'maxlength'   => 120,
+                ],
             ]);
     }
 

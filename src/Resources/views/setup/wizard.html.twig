@@ -1,98 +1,107 @@
-{% extends nowo_site_backup_setup_layout_template %}
+{#
+  Setup wizard (REQ-UI-003, page/wizard on the guest layout). Variable: page (View\WizardPage, built by
+  View\SetupPages::wizard): configured steps + a final "done" step, current step from the setup progress.
+  Extra context (1.x names, also passed to host step templates): progress (Model\SetupProgress), steps, currentStep,
+  reasons (setup need detectors), error, wizardForm (= page.form), advanceMode, progressUrl, pathPrefix, brandName.
+  Data block: nowo_ui_wizard_step (progress bar, reasons, error, the step form, log). No database service is used.
+#}
+{% extends '@NowoUiKit/page/wizard.html.twig' %}
 
-{% block nowo_ui_document_title %}{{ 'setup.page_title.wizard'|trans({'%brand%': brandName}, 'NowoSiteBackupBundle') }}{% endblock %}
-{% block nowo_site_backup_title %}{{ 'setup.page_title.wizard'|trans({'%brand%': brandName}, 'NowoSiteBackupBundle') }}{% endblock %}
+{% set _sbb_auto_advance = advanceMode|default('automatic') == 'automatic' and progress.phase == 'running' and wizardForm %}
 
-{% block nowo_site_backup_content %}
-    <h1>{{ 'setup.wizard.title'|trans({}, 'NowoSiteBackupBundle') }}</h1>
-    <p class="sub">{{ 'setup.wizard.subtitle'|trans({}, 'NowoSiteBackupBundle') }}</p>
+{% block nowo_ui_flashes %}
+    {{ parent() }}
+    {{ include('@NowoSiteBackupBundle/_messages.html.twig') }}
+{% endblock %}
 
-    <div class="card">
-        <div class="steps">
-            {% for step in steps %}
-                {% set tabDomain = step.labelDomain|default('NowoSiteBackupBundle') %}
-                <span class="{% if progress.currentStepId == step.id %}on{% elseif step.id in progress.completedStepIds %}done{% endif %}">{{ step.label|trans({}, tabDomain) }}</span>
-            {% endfor %}
-        </div>
-        <progress class="bar" max="100" value="{{ progress.percent }}">{{ progress.percent }}%</progress>
-        <p><strong>{{ progress.percent|number_format(0) }}%</strong> - {{ progress.message|trans({}, 'NowoSiteBackupBundle') }}</p>
-
-        {% set setup_reasons = reasons|default([]) %}
-        {% set db_connection_failed = 'database connection failed' in setup_reasons %}
-        {% set db_schema_empty = 'database schema is empty' in setup_reasons %}
-        {% if setup_reasons is not empty %}
-            <div class="warn" role="status">
-                <strong>{{ 'setup.reason.heading'|trans({}, 'NowoSiteBackupBundle') }}</strong>
-                <ul>
-                    {% for reason in setup_reasons %}
-                        <li>
-                            {% if reason == 'database connection failed' %}
-                                {{ 'setup.reason.db_connection'|trans({}, 'NowoSiteBackupBundle') }}
-                            {% elseif reason == 'database schema is empty' %}
-                                {{ 'setup.reason.db_schema_empty'|trans({}, 'NowoSiteBackupBundle') }}
-                            {% elseif reason == 'setup.required marker present' %}
-                                {{ 'setup.reason.marker_required'|trans({}, 'NowoSiteBackupBundle') }}
-                            {% elseif reason == 'setup.done marker missing' %}
-                                {{ 'setup.reason.marker_done_missing'|trans({}, 'NowoSiteBackupBundle') }}
-                            {% elseif reason starts with 'incomplete setup progress' %}
-                                {{ 'setup.reason.incomplete'|trans({'%detail%': reason}, 'NowoSiteBackupBundle') }}
-                            {% else %}
-                                {{ reason }}
-                            {% endif %}
-                        </li>
-                    {% endfor %}
-                </ul>
-                {% if db_connection_failed %}
-                    <p class="sub sub--hint">{{ 'setup.reason.db_connection_hint'|trans({}, 'NowoSiteBackupBundle') }}</p>
-                {% elseif db_schema_empty %}
-                    <p class="sub sub--hint">{{ 'setup.reason.db_schema_hint'|trans({}, 'NowoSiteBackupBundle') }}</p>
-                {% endif %}
-            </div>
-        {% endif %}
-
-        {% if error %}<p class="err">{{ error|trans({}, 'NowoSiteBackupBundle') }}</p>{% endif %}
-        {% if progress.error and not error %}<p class="err">{{ progress.error|trans({}, 'NowoSiteBackupBundle') }}</p>{% endif %}
-
-        {% block setup_body %}
-            {% if progress.phase == 'waiting_input' and currentStep %}
-                {% if currentStep.template|default(null) %}
-                    {{ include(currentStep.template, {form: wizardForm}) }}
-                {% elseif 'bootstrap' in currentStep.id %}
-                    {{ include('@NowoSiteBackupBundle/setup/_bootstrap_form.html.twig', {form: wizardForm}) }}
-                {% elseif 'admin' in currentStep.id %}
-                    {{ include('@NowoSiteBackupBundle/setup/_admin_form.html.twig', {form: wizardForm}) }}
-                {% elseif 'sample' in currentStep.id %}
-                    {{ include('@NowoSiteBackupBundle/setup/_sample_form.html.twig', {form: wizardForm}) }}
-                {% elseif 'database_url' in currentStep.id %}
-                    {{ include('@NowoSiteBackupBundle/setup/_database_form.html.twig', {
-                        form: wizardForm,
-                        db_connection_failed: db_connection_failed,
-                    }) }}
-                {% else %}
-                    {{ include('@NowoSiteBackupBundle/setup/_continue_form.html.twig', {form: wizardForm}) }}
-                {% endif %}
-            {% elseif progress.phase == 'failed' %}
-                {{ form_start(wizardForm) }}
-                    <div class="actions">
-                        <button type="submit">{{ 'setup.wizard.retry'|trans({}, 'NowoSiteBackupBundle') }}</button>
-                    </div>
-                {{ form_end(wizardForm) }}
-            {% else %}
-                {{ form_start(wizardForm, {attr: {id: 'auto-advance'}}) }}
-                    <p class="sub">{{ 'setup.wizard.running'|trans({}, 'NowoSiteBackupBundle') }}</p>
-                    <button type="submit">{{ 'setup.wizard.continue'|trans({}, 'NowoSiteBackupBundle') }}</button>
-                {{ form_end(wizardForm) }}
-                {% if advanceMode|default('automatic') == 'automatic' and progress.phase == 'running' %}
-                    {% set _csp_nonce = app is defined and app and app.request ? app.request.attributes.get('csp_nonce')|default('') : '' %}
-                    <script{% if _csp_nonce %} nonce="{{ _csp_nonce }}"{% endif %}>setTimeout(function () { document.getElementById('auto-advance').submit(); }, 600);</script>
-                {% endif %}
-            {% endif %}
-        {% endblock %}
-
-        {% if progress.log is not empty %}
-            <div class="log">
-                {% for line in progress.log|slice(-12) %}{{ line }}<br>{% endfor %}
-            </div>
-        {% endif %}
+{% block nowo_ui_wizard_step %}
+    {% set _b = page.bundle %}
+    {% set _d = 'NowoSiteBackupBundle' %}
+    <div class="nowo-sbb-setup__progress">
+        <progress class="nowo-sbb-progress" max="100" value="{{ progress.percent }}" aria-label="{{ 'setup.wizard.progress'|trans({}, _d) }}">{{ progress.percent|number_format(0) }}%</progress>
+        <p><strong>{{ progress.percent|number_format(0) }}%</strong>{% if progress.message %} — {{ progress.message|trans({}, _d) }}{% endif %}</p>
     </div>
+
+    {% set setup_reasons = reasons|default([]) %}
+    {% set db_connection_failed = 'database connection failed' in setup_reasons %}
+    {% set db_schema_empty = 'database schema is empty' in setup_reasons %}
+    {% if setup_reasons is not empty %}
+        <div class="{{ nowo_ui_class('flash_warning', _b) }}" role="status" data-testid="nowo-sbb-setup-reasons"{{ nowo_ui_attrs('flash_warning', _b) }}>
+            <strong>{{ 'setup.reason.heading'|trans({}, _d) }}</strong>
+            <ul>
+                {% for reason in setup_reasons %}
+                    <li>
+                        {% if reason == 'database connection failed' %}
+                            {{ 'setup.reason.db_connection'|trans({}, _d) }}
+                        {% elseif reason == 'database schema is empty' %}
+                            {{ 'setup.reason.db_schema_empty'|trans({}, _d) }}
+                        {% elseif reason == 'setup.required marker present' %}
+                            {{ 'setup.reason.marker_required'|trans({}, _d) }}
+                        {% elseif reason == 'setup.done marker missing' %}
+                            {{ 'setup.reason.marker_done_missing'|trans({}, _d) }}
+                        {% elseif reason starts with 'incomplete setup progress' %}
+                            {{ 'setup.reason.incomplete'|trans({'%detail%': reason}, _d) }}
+                        {% else %}
+                            {{ reason }}
+                        {% endif %}
+                    </li>
+                {% endfor %}
+            </ul>
+            {% if db_connection_failed %}
+                <p class="{{ nowo_ui_class('muted', _b) }}">{{ 'setup.reason.db_connection_hint'|trans({}, _d) }}</p>
+            {% elseif db_schema_empty %}
+                <p class="{{ nowo_ui_class('muted', _b) }}">{{ 'setup.reason.db_schema_hint'|trans({}, _d) }}</p>
+            {% endif %}
+        </div>
+    {% endif %}
+
+    {% if error %}
+        <div class="{{ nowo_ui_class('flash_error', _b) }}" role="alert"{{ nowo_ui_attrs('flash_error', _b) }}>{{ error|trans({}, _d) }}</div>
+    {% elseif progress.error %}
+        <div class="{{ nowo_ui_class('flash_error', _b) }}" role="alert"{{ nowo_ui_attrs('flash_error', _b) }}>{{ progress.error|trans({}, _d) }}</div>
+    {% endif %}
+
+    {% if wizardForm %}
+        {% if progress.phase == 'waiting_input' and currentStep %}
+            {% if currentStep.template|default(null) %}
+                {{ include(currentStep.template, {form: wizardForm}) }}
+            {% elseif 'bootstrap' in currentStep.id %}
+                {{ include('@NowoSiteBackupBundle/setup/_bootstrap_form.html.twig', {form: wizardForm}) }}
+            {% elseif 'admin' in currentStep.id %}
+                {{ include('@NowoSiteBackupBundle/setup/_admin_form.html.twig', {form: wizardForm}) }}
+            {% elseif 'sample' in currentStep.id %}
+                {{ include('@NowoSiteBackupBundle/setup/_sample_form.html.twig', {form: wizardForm}) }}
+            {% elseif 'database_url' in currentStep.id %}
+                {{ include('@NowoSiteBackupBundle/setup/_database_form.html.twig', {form: wizardForm, db_connection_failed: db_connection_failed}) }}
+            {% else %}
+                {{ include('@NowoSiteBackupBundle/setup/_continue_form.html.twig', {form: wizardForm}) }}
+            {% endif %}
+        {% elseif progress.phase == 'failed' %}
+            {{ form_start(wizardForm, {attr: {class: nowo_ui_class('form', _b)}}) }}
+                <div class="{{ nowo_ui_class('form_actions', _b) }}">
+                    <button type="submit" class="{{ nowo_ui_class('btn_primary', _b) }}">{{ 'setup.wizard.retry'|trans({}, _d) }}</button>
+                </div>
+            {{ form_end(wizardForm) }}
+        {% else %}
+            {{ form_start(wizardForm, {attr: {class: nowo_ui_class('form', _b), id: 'nowo-sbb-auto-advance'}}) }}
+                <p class="{{ nowo_ui_class('muted', _b) }}">{{ 'setup.wizard.running'|trans({}, _d) }}</p>
+                <div class="{{ nowo_ui_class('form_actions', _b) }}">
+                    <button type="submit" class="{{ nowo_ui_class('btn_primary', _b) }}">{{ 'setup.wizard.continue'|trans({}, _d) }}</button>
+                </div>
+            {{ form_end(wizardForm) }}
+        {% endif %}
+    {% endif %}
+
+    {% if progress.log is not empty %}
+        <pre class="{{ nowo_ui_class('code_block', _b) }} nowo-sbb-setup__log" data-testid="nowo-sbb-setup-log"{{ nowo_ui_attrs('code_block', _b) }}><code>{{ progress.log|slice(-12)|join(constant('PHP_EOL')) }}</code></pre>
+    {% endif %}
+{% endblock %}
+
+{% block nowo_ui_scripts %}
+    {{ parent() }}
+    {% if _sbb_auto_advance %}
+        {# Automatic advance mode: submit the running step after a short pause (no inline on* handler; CSP nonce). #}
+        {% set _csp_nonce = app is defined and app and app.request ? app.request.attributes.get('csp_nonce')|default('') : '' %}
+        <script{% if _csp_nonce %} nonce="{{ _csp_nonce }}"{% endif %}>setTimeout(function () { var f = document.getElementById('nowo-sbb-auto-advance'); if (f) { f.submit(); } }, 600);</script>
+    {% endif %}
 {% endblock %}

@@ -24,6 +24,7 @@ services:
             - '../../Security/SiteBackupAccessCheckerInterface.php'
             - '../../Security/ConfigurableSiteBackupAccessChecker.php'
             - '../../Security/AllowAllSiteBackupAccessChecker.php'
+            - '../../View/'
 
     Nowo\SiteBackupBundle\Storage\FilesystemRestoreProgressStorage:
         arguments:

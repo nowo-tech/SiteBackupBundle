@@ -1,0 +1,7 @@
+{#
+  Backup panel — no-JS restore / delete confirmation (REQ-UI-003, page/confirm), the Action::fallbackHref target of
+  the row dialogs. Variable: page (View\ConfirmPage, built by View\PanelPages::confirm): the same Confirm as the
+  dialog (restore: type the backup id) and a POST action with the CSRF action form. No data blocks.
+  Pages: web_ui.templates.restore_confirm / delete_confirm.
+#}
+{% extends '@NowoUiKit/page/confirm.html.twig' %}

@@ -1,0 +1,11 @@
+{#
+  Backup panel — create backup (REQ-UI-003, page/form). Variable: page (View\FormPage, built by
+  View\PanelPages::create): form Form\Panel\CreateBackupType (optional label), posted to the panel index
+  (action=create, CSRF). No data block filled: the default child loop renders the fields.
+#}
+{% extends '@NowoUiKit/page/form.html.twig' %}
+
+{% block nowo_ui_flashes %}
+    {{ parent() }}
+    {{ include('@NowoSiteBackupBundle/_messages.html.twig') }}
+{% endblock %}

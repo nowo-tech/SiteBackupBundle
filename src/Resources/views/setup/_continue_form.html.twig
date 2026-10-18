@@ -1,6 +1,11 @@
+{# Step without input (Form\Setup\ContinueType). Variables: form, currentStep. #}
+{% set _b = 'NowoSiteBackupBundle' %}
 {% if currentStep.description|default(null) %}
-    <p class="sub">{{ currentStep.description|trans({}, currentStep.labelDomain|default('NowoSiteBackupBundle')) }}</p>
+    <p class="{{ nowo_ui_class('muted', _b) }}">{{ currentStep.description|trans({}, currentStep.labelDomain|default(_b)) }}</p>
 {% endif %}
-{{ form_start(form) }}
-    <button type="submit">{{ 'setup.wizard.continue'|trans({}, 'NowoSiteBackupBundle') }}</button>
+{{ form_start(form, {attr: {class: nowo_ui_class('form', _b)}}) }}
+    {{ form_rest(form) }}
+    <div class="{{ nowo_ui_class('form_actions', _b) }}">
+        <button type="submit" class="{{ nowo_ui_class('btn_primary', _b) }}">{{ 'setup.wizard.continue'|trans({}, _b) }}</button>
+    </div>
 {{ form_end(form) }}

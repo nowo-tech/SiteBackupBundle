@@ -26,6 +26,7 @@ panel:
   nav:
     panel: 'Übersicht'
     history: 'Verlauf'
+    label: 'Site-Backup-Bereiche'
   login:
     page_title: 'Anmeldung - Website-Backup'
     heading: 'Backup-Verwaltung'
@@ -35,6 +36,7 @@ panel:
     submit: 'Anmelden'
     invalid_password: 'Ungültiges Passwort.'
     too_many_attempts: 'Zu viele Anmeldeversuche. Bitte in %minutes% Minute(n) erneut versuchen.'
+    intro: 'Geben Sie das Panel-Passwort ein, um Sicherungen zu verwalten.'
   index:
     page_title: 'Backup-Verwaltung'
     create_title: 'Backup erstellen'
@@ -57,6 +59,7 @@ panel:
     restore_confirm: 'Dieses Backup jetzt wiederherstellen? Besucher sehen die Ladeseite.'
     delete_confirm: 'Backup löschen?'
     logout: 'Abmelden'
+    empty_hint: 'Erstellen Sie die erste vollständige Sicherung dieser Website.'
   history:
     page_title: 'Verlauf — Website-Backup'
     title: 'Verlauf'
@@ -66,6 +69,7 @@ panel:
     col_actor: 'Ausgeführt von'
     col_message: 'Nachricht'
     empty: 'Kein Verlauf.'
+    intro: 'Erstellte, gelöschte und wiederhergestellte Sicherungen, neueste zuerst.'
   flash:
     created: 'Backup erstellt: %id%'
     deleted: 'Backup gelöscht: %id%'
@@ -76,6 +80,15 @@ panel:
   error:
     invalid_csrf: 'Ungültiges CSRF-Token.'
     access_denied: 'Zugriff verweigert.'
+    backup_not_found: 'Sicherung nicht gefunden.'
+  create:
+    intro: 'Archiviert die konfigurierten Pfade und den Datenbank-Dump in einer .tar.gz mit Prüfsummen.'
+  confirm:
+    restore_title: 'Sicherung %id% wiederherstellen?'
+    restore_expected: 'Geben Sie die Sicherungs-ID %value% zur Bestätigung ein'
+    delete_message: 'Die Sicherung %id% (Archiv und Prüfsummen) wird aus dem Speicherverzeichnis entfernt. Dies kann nicht rückgängig gemacht werden.'
+    restore_page_title: 'Sicherung wiederherstellen'
+    delete_page_title: 'Sicherung löschen'
 setup:
   page_title:
     wizard: '%brand% - Einrichtung'
@@ -87,6 +100,7 @@ setup:
     continue: 'Weiter'
     retry: 'Erneut versuchen'
     running: 'Nächster Einrichtungsschritt läuft…'
+    progress: 'Einrichtungsfortschritt'
   bootstrap:
     prompt: 'Wählen Sie, wie diese Website initialisiert wird'
     guided: 'Geführte Einrichtung (Administrator anlegen)'
@@ -122,6 +136,7 @@ setup:
   database:
     save: 'DATABASE_URL speichern'
     skip: 'Überspringen (bestehende Env nutzen)'
+    field_label: 'DATABASE_URL'
   error:
     invalid_csrf: 'Ungültiges CSRF-Token.'
     invalid_request: 'Ungültige Einrichtungsanfrage.'
@@ -150,3 +165,4 @@ setup:
     title: 'Einrichtung abgeschlossen'
     body: 'Die Website ist bereit. Sie können sich mit dem erstellten Admin-Konto anmelden.'
     home: 'Zur Startseite'
+    step: 'Fertig'

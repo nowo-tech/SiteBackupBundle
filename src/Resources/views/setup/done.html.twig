@@ -1,12 +1,14 @@
-{% extends nowo_site_backup_setup_layout_template %}
+{#
+  Setup wizard — done (REQ-UI-003, page/wizard on the guest layout, current step = the final "done" step).
+  Variable: page (View\WizardPage, built by View\SetupPages::done). Data block: nowo_ui_wizard_step.
+#}
+{% extends '@NowoUiKit/page/wizard.html.twig' %}
 
-{% block nowo_ui_document_title %}{{ 'setup.page_title.done'|trans({'%brand%': brandName}, 'NowoSiteBackupBundle') }}{% endblock %}
-{% block nowo_site_backup_title %}{{ 'setup.page_title.done'|trans({'%brand%': brandName}, 'NowoSiteBackupBundle') }}{% endblock %}
-
-{% block nowo_site_backup_content %}
-    <div class="nowo-ui-card card nowo-sbb-center">
-        <h1>{{ 'setup.done.title'|trans({}, 'NowoSiteBackupBundle') }}</h1>
-        <p class="sub">{{ 'setup.done.body'|trans({}, 'NowoSiteBackupBundle') }}</p>
-        <p><a href="/">{{ 'setup.done.home'|trans({}, 'NowoSiteBackupBundle') }}</a></p>
+{% block nowo_ui_wizard_step %}
+    {% set _b = page.bundle %}
+    <h2 class="{{ nowo_ui_class('card_title', _b) }}">{{ 'setup.done.title'|trans({}, 'NowoSiteBackupBundle') }}</h2>
+    <p>{{ 'setup.done.body'|trans({}, 'NowoSiteBackupBundle') }}</p>
+    <div class="{{ nowo_ui_class('form_actions', _b) }}">
+        <a class="{{ nowo_ui_class('btn_primary', _b) }}" href="/" data-testid="nowo-sbb-setup-home">{{ 'setup.done.home'|trans({}, 'NowoSiteBackupBundle') }}</a>
     </div>
 {% endblock %}

@@ -149,8 +149,9 @@ final class ControllersTest extends TestCase
             '/_site_backup',
         );
 
+        // v1.21+: a failed create goes back to the create form (422) with the message.
         $request = Request::create('/_site_backup', 'POST', ['action' => 'create']);
-        self::assertSame(200, $controller->index($request)->getStatusCode());
+        self::assertSame(422, $controller->index($request)->getStatusCode());
     }
 
     public function testPanelMisconfiguredLogin(): void

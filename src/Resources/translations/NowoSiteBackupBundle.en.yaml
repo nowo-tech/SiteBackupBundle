@@ -26,6 +26,7 @@ panel:
   nav:
     panel: 'Panel'
     history: 'History'
+    label: 'Site Backup sections'
   login:
     page_title: 'Login - Site Backup'
     heading: 'Site Backup panel'
@@ -35,6 +36,7 @@ panel:
     submit: 'Sign in'
     invalid_password: 'Invalid password.'
     too_many_attempts: 'Too many login attempts. Try again in %minutes% minute(s).'
+    intro: 'Enter the panel password to manage backups.'
   index:
     page_title: 'Site Backup panel'
     create_title: 'Create backup'
@@ -57,6 +59,7 @@ panel:
     restore_confirm: 'Restore this backup now? Visitors will see the loading page.'
     delete_confirm: 'Delete backup?'
     logout: 'Logout'
+    empty_hint: 'Create the first integral backup of this site.'
   history:
     page_title: 'History — Site Backup'
     title: 'History'
@@ -66,6 +69,7 @@ panel:
     col_actor: 'Actor'
     col_message: 'Message'
     empty: 'No history.'
+    intro: 'Backups created, deleted and restored, newest first.'
   flash:
     created: 'Backup created: %id%'
     deleted: 'Backup deleted: %id%'
@@ -76,6 +80,15 @@ panel:
   error:
     invalid_csrf: 'Invalid CSRF token.'
     access_denied: 'Access denied.'
+    backup_not_found: 'Backup not found.'
+  create:
+    intro: 'Archives the configured paths and the database dump into a checksummed .tar.gz.'
+  confirm:
+    restore_title: 'Restore backup %id%?'
+    restore_expected: 'Type the backup id %value% to confirm'
+    delete_message: 'Backup %id% (archive and checksums) is removed from the storage directory. This cannot be undone.'
+    restore_page_title: 'Restore backup'
+    delete_page_title: 'Delete backup'
 setup:
   page_title:
     wizard: '%brand% - Setup'
@@ -87,6 +100,7 @@ setup:
     continue: 'Continue'
     retry: 'Retry'
     running: 'Running the next setup step…'
+    progress: 'Setup progress'
   bootstrap:
     prompt: 'Choose how to bootstrap this site'
     guided: 'Guided setup (create admin)'
@@ -122,6 +136,7 @@ setup:
   database:
     save: 'Save DATABASE_URL'
     skip: 'Skip (use existing env)'
+    field_label: 'DATABASE_URL'
   error:
     invalid_csrf: 'Invalid CSRF token.'
     invalid_request: 'Invalid setup request.'
@@ -150,3 +165,4 @@ setup:
     title: 'Setup complete'
     body: 'The site is ready. You can sign in with the admin account you created.'
     home: 'Go to homepage'
+    step: 'Done'

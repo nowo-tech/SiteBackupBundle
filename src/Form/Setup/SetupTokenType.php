@@ -17,8 +17,10 @@ final class SetupTokenType extends AbstractSiteBackupFormType
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
         $builder->add('token', TextType::class, [
+            'label'    => 'setup.token.field_label',
             'required' => true,
             'attr'     => [
+                'placeholder'  => 'setup.token.field_placeholder',
                 'autocomplete' => 'off',
                 'spellcheck'   => 'false',
             ],

@@ -1,13 +1,10 @@
-{{ form_start(form) }}
-    <div>
-        {{ form_label(form.email, 'setup.admin.email'|trans({}, 'NowoSiteBackupBundle')) }}
-        {{ form_widget(form.email, {attr: {autocomplete: 'username'}}) }}
-    </div>
-    <div>
-        {{ form_label(form.password, 'setup.admin.password'|trans({}, 'NowoSiteBackupBundle')) }}
-        {{ form_widget(form.password, {attr: {autocomplete: 'new-password'}}) }}
-    </div>
-    <div class="actions">
-        <button type="submit">{{ 'setup.admin.create'|trans({}, 'NowoSiteBackupBundle') }}</button>
+{# Admin user step (Form\Setup\AdminUserType: email, password). Variables: form. #}
+{% set _b = 'NowoSiteBackupBundle' %}
+{{ form_start(form, {attr: {class: nowo_ui_class('form', _b)}}) }}
+    {{ form_row(form.email) }}
+    {{ form_row(form.password) }}
+    {{ form_rest(form) }}
+    <div class="{{ nowo_ui_class('form_actions', _b) }}">
+        <button type="submit" class="{{ nowo_ui_class('btn_primary', _b) }}">{{ 'setup.admin.create'|trans({}, _b) }}</button>
     </div>
 {{ form_end(form) }}

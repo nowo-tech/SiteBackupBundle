@@ -33,7 +33,8 @@ final class PanelRouteLoaderTest extends TestCase
 
         $names = array_keys($collection->all());
         sort($names);
-        self::assertSame(['nowo_site_backup_history', 'nowo_site_backup_panel', 'nowo_site_backup_progress'], $names);
+        self::assertSame(['nowo_site_backup_create', 'nowo_site_backup_delete_confirm', 'nowo_site_backup_history', 'nowo_site_backup_panel', 'nowo_site_backup_progress', 'nowo_site_backup_restore_confirm'], $names);
+        self::assertSame('/ops/backup/restore/{id}', $collection->get('nowo_site_backup_restore_confirm')?->getPath());
         // Same as the former YAML import with prefix (trailing_slash_on_root: true).
         self::assertSame('/ops/backup/', $collection->get('nowo_site_backup_panel')?->getPath());
         self::assertSame('/ops/backup/progress.json', $collection->get('nowo_site_backup_progress')?->getPath());

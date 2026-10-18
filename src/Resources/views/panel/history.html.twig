@@ -1,41 +1,21 @@
-{% extends nowo_site_backup_panel_layout_template %}
-{% import '@NowoUiKitBundle/macros/ui.html.twig' as ui %}
-{% set _sbb_fw = nowo_site_backup_css_framework|default('custom') %}
-{% set _sbb_classes = nowo_site_backup_panel_classes|default({}) %}
-{# v1.18+ chrome blocks: nowo_site_backup_history_heading, nowo_site_backup_history_row (per entry; `h` = entry). #}
+{#
+  Backup panel — history (REQ-UI-003, page/list). Variable: page (View\ListPage, built by View\PanelPages::history):
+  rows = Model\BackupHistoryEntry (newest first), area nav Backups | History, no row actions.
+  Data block: nowo_ui_list_row.
+#}
+{% extends '@NowoUiKit/page/list.html.twig' %}
 
-{% block nowo_ui_document_title %}{{ 'panel.history.page_title'|trans({}, 'NowoSiteBackupBundle') }}{% endblock %}
+{% block nowo_ui_flashes %}
+    {{ parent() }}
+    {{ include('@NowoSiteBackupBundle/_messages.html.twig') }}
+{% endblock %}
 
-{% block nowo_site_backup_panel_content %}
-<section class="nowo-ui-card card{{ _sbb_classes.card|default('') ? ' ' ~ _sbb_classes.card }}">
-    <h2>{% block nowo_site_backup_history_heading %}{{ 'panel.history.title'|trans({}, 'NowoSiteBackupBundle') }}{% endblock %}</h2>
-    <div class="{{ ui.table_wrap(_sbb_fw) }}">
-    <table class="{{ ui.table(_sbb_fw) }} nowo-ui-table{{ _sbb_classes.table|default('') ? ' ' ~ _sbb_classes.table }}">
-        <thead>
-        <tr>
-            <th>{{ 'panel.history.col_when'|trans({}, 'NowoSiteBackupBundle') }}</th>
-            <th>{{ 'panel.history.col_action'|trans({}, 'NowoSiteBackupBundle') }}</th>
-            <th>{{ 'panel.history.col_backup'|trans({}, 'NowoSiteBackupBundle') }}</th>
-            <th>{{ 'panel.history.col_actor'|trans({}, 'NowoSiteBackupBundle') }}</th>
-            <th>{{ 'panel.history.col_message'|trans({}, 'NowoSiteBackupBundle') }}</th>
-        </tr>
-        </thead>
-        <tbody>
-        {% for h in history %}
-            {% block nowo_site_backup_history_row %}
-            <tr>
-                <td>{{ h.occurredAt|date('Y-m-d H:i:s') }}</td>
-                <td>{{ h.action }}</td>
-                <td>{{ h.backupId }}</td>
-                <td>{{ h.actor }}</td>
-                <td>{{ h.message }}</td>
-            </tr>
-            {% endblock %}
-        {% else %}
-            <tr><td colspan="5" class="{{ ui.empty(_sbb_fw) }}">{{ 'panel.history.empty'|trans({}, 'NowoSiteBackupBundle') }}</td></tr>
-        {% endfor %}
-        </tbody>
-    </table>
-    </div>
-</section>
+{% block nowo_ui_list_row %}
+    {% set _b = page.bundle %}
+    {% set _muted = nowo_ui_class('table_cell', _b) ~ ' ' ~ nowo_ui_class('table_cell_muted', _b) %}
+    <td class="{{ nowo_ui_class('table_cell', _b) }}" data-label="{{ 'panel.history.col_when'|trans({}, _b) }}"><time datetime="{{ row.occurredAt|date('c') }}">{{ row.occurredAt|date('Y-m-d H:i:s') }}</time></td>
+    <td class="{{ nowo_ui_class('table_cell', _b) }}" data-label="{{ 'panel.history.col_action'|trans({}, _b) }}"><span class="{{ nowo_ui_class(row.action in ['delete', 'restore_failed'] ? 'badge_danger' : (row.action starts with 'restore' ? 'badge_warning' : (row.action == 'create' ? 'badge_success' : 'badge_neutral')), _b) }}">{{ row.action }}</span></td>
+    <td class="{{ row.backupId ? nowo_ui_class('table_cell', _b) : _muted }}" data-label="{{ 'panel.history.col_backup'|trans({}, _b) }}" data-nowo-ui-priority="2">{% if row.backupId %}<code class="{{ nowo_ui_class('code', _b) }}">{{ row.backupId }}</code>{% else %}—{% endif %}</td>
+    <td class="{{ row.actor ? nowo_ui_class('table_cell', _b) : _muted }}" data-label="{{ 'panel.history.col_actor'|trans({}, _b) }}" data-nowo-ui-priority="3">{{ row.actor ?: '—' }}</td>
+    <td class="{{ row.message ? nowo_ui_class('table_cell', _b) : _muted }}" data-label="{{ 'panel.history.col_message'|trans({}, _b) }}" data-nowo-ui-priority="3">{{ row.message ?: '—' }}</td>
 {% endblock %}

@@ -55,8 +55,10 @@ final class TranslationCatalogueTest extends TestCase
             $content = (string) file_get_contents($path);
             // Twig: 'panel.x.y'|trans(…, 'NowoSiteBackupBundle')  — PHP: message('panel.x.y', …) / trans('panel.x.y', …)
             preg_match_all("/'((?:panel|setup|restore)\\.[a-z_]+\\.[a-z_.]+)'\\s*\\|\\s*trans/", $content, $twig);
-            preg_match_all("/(?:message|trans)\\('((?:panel|setup|restore)\\.[a-z_]+\\.[a-z_.]+)'/", $content, $php);
-            foreach ([...$twig[1], ...$php[1]] as $key) {
+            preg_match_all("/(?:message|trans|label)\\('((?:panel|setup|restore)\\.[a-z_]+\\.[a-z_.]+)'/", $content, $php);
+            // v1.21+: view-model labels (SiteBackupView::label / new Label) and form type options.
+            preg_match_all("/(?:Label\\(|'(?:label|help|placeholder)'\\s*=>\\s*)'((?:panel|setup|restore)\\.[a-z_]+\\.[a-z_.]+)'/", $content, $views);
+            foreach ([...$twig[1], ...$php[1], ...$views[1]] as $key) {
                 $used[$key] = $path;
             }
         }
@@ -64,6 +66,8 @@ final class TranslationCatalogueTest extends TestCase
         self::assertArrayHasKey('panel.login.submit', $used);
         self::assertArrayHasKey('panel.flash.created', $used);
         self::assertArrayHasKey('setup.error.invalid_csrf', $used);
+        self::assertArrayHasKey('panel.confirm.restore_expected', $used);
+        self::assertArrayHasKey('setup.token.field_placeholder', $used);
 
         foreach (self::LOCALES as $locale) {
             $catalogue = $this->catalogue($locale);

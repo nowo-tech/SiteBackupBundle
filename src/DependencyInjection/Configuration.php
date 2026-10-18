@@ -5,14 +5,22 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\DependencyInjection;
 
 use DateTimeImmutable;
+use InvalidArgumentException;
+use Nowo\SiteBackupBundle\View\SiteBackupView;
 use Symfony\Component\Config\Definition\Builder\ArrayNodeDefinition;
 use Symfony\Component\Config\Definition\Builder\NodeBuilder;
 use Symfony\Component\Config\Definition\Builder\TreeBuilder;
 use Symfony\Component\Config\Definition\ConfigurationInterface;
 use Throwable;
 
+use function array_diff;
+use function array_key_exists;
+use function array_keys;
+use function implode;
 use function in_array;
+use function is_array;
 use function is_string;
+use function sprintf;
 
 /**
  * Bundle configuration tree under alias `nowo_site_backup`.
@@ -27,6 +35,25 @@ final class Configuration implements ConfigurationInterface
     /** @var list<string> */
     public const ROW_ACTIONS_DISPLAYS = ['text', 'icon', 'icon_text', 'kit'];
 
+    private const DEPRECATION_PACKAGE = 'nowo-tech/site-backup-bundle';
+
+    private const DEPRECATION_VERSION = '1.21';
+
+    /**
+     * Deprecated 1.x templates.* key => web_ui.templates page id (REQ-UI-003).
+     *
+     * @var array<string, string>
+     */
+    public const LEGACY_TEMPLATE_PAGES = [
+        'restore_page'  => 'restore_page',
+        'panel_index'   => 'index',
+        'panel_login'   => 'login',
+        'panel_history' => 'history',
+        'setup_wizard'  => 'setup_wizard',
+        'setup_done'    => 'setup_done',
+        'setup_token'   => 'setup_token',
+    ];
+
     public function getConfigTreeBuilder(): TreeBuilder
     {
         $treeBuilder = new TreeBuilder(self::ALIAS);
@@ -35,6 +62,18 @@ final class Configuration implements ConfigurationInterface
 
         $rootNode
             ->info('Nowo Site Backup Bundle configuration.')
+            ->beforeNormalization()
+                ->always(static fn (mixed $v): mixed => is_array($v) ? self::mapLegacyKeys($v) : $v)
+            ->end()
+            ->validate()
+                ->always(static function (array $v): array {
+                    // Internal readers keep using panel.enabled / panel.path_prefix (synced from the canonical keys).
+                    $v['panel']['enabled']     = $v['web_ui']['enabled'];
+                    $v['panel']['path_prefix'] = $v['web_ui']['path_prefix'];
+
+                    return $v;
+                })
+            ->end()
             ->children()
                 ->booleanNode('enabled')
                     ->info('Master switch: when false the restore loading page is never shown.')
@@ -145,10 +184,12 @@ final class Configuration implements ConfigurationInterface
                     ->end()
                 ->end()
                 ->enumNode('css_framework')
-                    ->info('Host CSS stack hint for setup/panel Web UI (REQ-UI-001). Twig global nowo_site_backup_css_framework. Demo default: custom (semantic nowo-ui-*).')
-                    ->values(self::CSS_FRAMEWORKS)
-                    ->defaultValue('custom')
+                    ->info('Deprecated since 1.21: set nowo_ui_kit.css_framework. When set here (and not on UiKit) it is still seeded into nowo_ui_kit.css_framework / icon_set. null = UiKit decides.')
+                    ->values([...self::CSS_FRAMEWORKS, null])
+                    ->defaultNull()
+                    ->setDeprecated(self::DEPRECATION_PACKAGE, self::DEPRECATION_VERSION, 'The "%path%.%node%" option is deprecated, set "nowo_ui_kit.css_framework" instead.')
                 ->end()
+                ->append($this->webUiNode())
                 ->arrayNode('backup')
                     ->info('What is included in an integral backup.')
                     ->addDefaultsIfNotSet()
@@ -196,19 +237,27 @@ final class Configuration implements ConfigurationInterface
                 ->arrayNode('panel')
                     ->addDefaultsIfNotSet()
                     ->children()
-                        ->booleanNode('enabled')->defaultTrue()->end()
-                        ->scalarNode('path_prefix')->defaultValue('/_site_backup')->cannotBeEmpty()->end()
+                        ->booleanNode('enabled')
+                            ->info('Deprecated alias of web_ui.enabled.')
+                            ->setDeprecated(self::DEPRECATION_PACKAGE, self::DEPRECATION_VERSION, 'The "%path%.%node%" option is deprecated, use "nowo_site_backup.web_ui.enabled" instead.')
+                        ->end()
+                        ->scalarNode('path_prefix')
+                            ->info('Deprecated alias of web_ui.path_prefix.')
+                            ->setDeprecated(self::DEPRECATION_PACKAGE, self::DEPRECATION_VERSION, 'The "%path%.%node%" option is deprecated, use "nowo_site_backup.web_ui.path_prefix" instead.')
+                        ->end()
                         ->scalarNode('layout_template')
-                            ->info('Host Twig layout for panel pages (global nowo_site_backup_panel_layout_template). Must define block nowo_ui_content / nowo_site_backup_panel_content. Default: bundle standalone panel layout.')
-                            ->defaultNull()
+                            ->info('Deprecated alias of web_ui.layout_template.')
+                            ->setDeprecated(self::DEPRECATION_PACKAGE, self::DEPRECATION_VERSION, 'The "%path%.%node%" option is deprecated, use "nowo_site_backup.web_ui.layout_template" (null = nowo_ui_kit.layouts.admin) instead.')
                         ->end()
                         ->enumNode('row_actions_display')
-                            ->info('v1.18+: archive row actions (Verify / Restore / Delete) as text buttons (default, pre-1.18 markup), icon-only, icon + text, or "kit" to follow the UiKit global nowo_ui_kit_row_actions_display. Twig global nowo_site_backup_row_actions_display.')
-                            ->values(self::ROW_ACTIONS_DISPLAYS)
-                            ->defaultValue('text')
+                            ->info('Deprecated since 1.21: archive row actions follow nowo_ui_kit.row_actions_display. text | icon | icon_text still force a display on the Verify / Restore / Delete actions; kit / null = UiKit.')
+                            ->values([...self::ROW_ACTIONS_DISPLAYS, null])
+                            ->defaultNull()
+                            ->setDeprecated(self::DEPRECATION_PACKAGE, self::DEPRECATION_VERSION, 'The "%path%.%node%" option is deprecated, set "nowo_ui_kit.row_actions_display" instead.')
                         ->end()
                         ->arrayNode('extra_classes')
-                            ->info('v1.18+: extra CSS classes appended to panel markup (Twig global nowo_site_backup_panel_classes), so hosts do not fork templates only to add classes.')
+                            ->info('Deprecated since 1.21: bridged into nowo_ui_kit.theme.bundles.NowoSiteBackupBundle.classes (card → card, table → table, input → input, button → btn_primary, btn_secondary and action).')
+                            ->setDeprecated(self::DEPRECATION_PACKAGE, self::DEPRECATION_VERSION, 'The "%path%.%node%" option is deprecated, use "nowo_ui_kit.theme.bundles.NowoSiteBackupBundle.classes" (UiKit theme slots) instead.')
                             ->addDefaultsIfNotSet()
                             ->children()
                                 ->scalarNode('card')->defaultValue('')->end()
@@ -293,44 +342,56 @@ final class Configuration implements ConfigurationInterface
                     ->end()
                 ->end()
                 ->arrayNode('templates')
+                    ->info('Deprecated since 1.21: per-page templates moved to web_ui.templates.<page>, layouts to web_ui.layout_template / guest_layout_template.')
                     ->addDefaultsIfNotSet()
                     ->children()
                         ->scalarNode('restore_page')
-                            ->defaultValue('@NowoSiteBackupBundle/restore/page.html.twig')
+                            ->defaultNull()
+                            ->setDeprecated(self::DEPRECATION_PACKAGE, self::DEPRECATION_VERSION, 'The "%path%.%node%" option is deprecated, use "nowo_site_backup.web_ui.templates.restore_page" instead.')
                         ->end()
                         ->scalarNode('panel_layout')
-                            ->defaultValue('@NowoSiteBackupBundle/panel/layout.html.twig')
+                            ->defaultNull()
+                            ->setDeprecated(self::DEPRECATION_PACKAGE, self::DEPRECATION_VERSION, 'The "%path%.%node%" option is deprecated, use "nowo_site_backup.web_ui.layout_template" instead.')
                         ->end()
                         ->scalarNode('panel_index')
-                            ->defaultValue('@NowoSiteBackupBundle/panel/index.html.twig')
+                            ->defaultNull()
+                            ->setDeprecated(self::DEPRECATION_PACKAGE, self::DEPRECATION_VERSION, 'The "%path%.%node%" option is deprecated, use "nowo_site_backup.web_ui.templates.index" instead.')
                         ->end()
                         ->scalarNode('panel_login')
-                            ->defaultValue('@NowoSiteBackupBundle/panel/login.html.twig')
+                            ->defaultNull()
+                            ->setDeprecated(self::DEPRECATION_PACKAGE, self::DEPRECATION_VERSION, 'The "%path%.%node%" option is deprecated, use "nowo_site_backup.web_ui.templates.login" instead.')
                         ->end()
                         ->scalarNode('panel_history')
-                            ->defaultValue('@NowoSiteBackupBundle/panel/history.html.twig')
+                            ->defaultNull()
+                            ->setDeprecated(self::DEPRECATION_PACKAGE, self::DEPRECATION_VERSION, 'The "%path%.%node%" option is deprecated, use "nowo_site_backup.web_ui.templates.history" instead.')
                         ->end()
                         ->scalarNode('setup_wizard')
-                            ->defaultValue('@NowoSiteBackupBundle/setup/wizard.html.twig')
+                            ->defaultNull()
+                            ->setDeprecated(self::DEPRECATION_PACKAGE, self::DEPRECATION_VERSION, 'The "%path%.%node%" option is deprecated, use "nowo_site_backup.web_ui.templates.setup_wizard" instead.')
                         ->end()
                         ->scalarNode('setup_layout')
-                            ->info('Twig layout extended by setup wizard/done/token. Prefer setup.layout_template.')
-                            ->defaultValue('@NowoSiteBackupBundle/setup/layout.html.twig')
+                            ->defaultNull()
+                            ->setDeprecated(self::DEPRECATION_PACKAGE, self::DEPRECATION_VERSION, 'The "%path%.%node%" option is deprecated, use "nowo_site_backup.web_ui.guest_layout_template" instead.')
                         ->end()
                         ->scalarNode('setup_admin')
-                            ->defaultValue('@NowoSiteBackupBundle/setup/admin.html.twig')
+                            ->defaultNull()
+                            ->setDeprecated(self::DEPRECATION_PACKAGE, self::DEPRECATION_VERSION, 'The "%path%.%node%" option is deprecated, it has no effect (the setup steps render inside setup/wizard.html.twig).')
                         ->end()
                         ->scalarNode('setup_sample')
-                            ->defaultValue('@NowoSiteBackupBundle/setup/sample_data.html.twig')
+                            ->defaultNull()
+                            ->setDeprecated(self::DEPRECATION_PACKAGE, self::DEPRECATION_VERSION, 'The "%path%.%node%" option is deprecated, it has no effect (the setup steps render inside setup/wizard.html.twig).')
                         ->end()
                         ->scalarNode('setup_database')
-                            ->defaultValue('@NowoSiteBackupBundle/setup/database.html.twig')
+                            ->defaultNull()
+                            ->setDeprecated(self::DEPRECATION_PACKAGE, self::DEPRECATION_VERSION, 'The "%path%.%node%" option is deprecated, it has no effect (the setup steps render inside setup/wizard.html.twig).')
                         ->end()
                         ->scalarNode('setup_done')
-                            ->defaultValue('@NowoSiteBackupBundle/setup/done.html.twig')
+                            ->defaultNull()
+                            ->setDeprecated(self::DEPRECATION_PACKAGE, self::DEPRECATION_VERSION, 'The "%path%.%node%" option is deprecated, use "nowo_site_backup.web_ui.templates.setup_done" instead.')
                         ->end()
                         ->scalarNode('setup_token')
-                            ->defaultValue('@NowoSiteBackupBundle/setup/token.html.twig')
+                            ->defaultNull()
+                            ->setDeprecated(self::DEPRECATION_PACKAGE, self::DEPRECATION_VERSION, 'The "%path%.%node%" option is deprecated, use "nowo_site_backup.web_ui.templates.setup_token" instead.')
                         ->end()
                     ->end()
                 ->end()
@@ -341,8 +402,8 @@ final class Configuration implements ConfigurationInterface
                         ->booleanNode('enabled')->defaultTrue()->end()
                         ->scalarNode('path_prefix')->defaultValue('/_setup')->cannotBeEmpty()->end()
                         ->scalarNode('layout_template')
-                            ->info('Host Twig layout for setup pages (extends pattern like CookieConsent layout_template). Must define block nowo_site_backup_content. Default uses the bundle standalone layout.')
-                            ->defaultNull()
+                            ->info('Deprecated alias of web_ui.guest_layout_template.')
+                            ->setDeprecated(self::DEPRECATION_PACKAGE, self::DEPRECATION_VERSION, 'The "%path%.%node%" option is deprecated, use "nowo_site_backup.web_ui.guest_layout_template" (null = nowo_ui_kit.layouts.guest) instead.')
                         ->end()
                         ->booleanNode('require_done_marker')
                             ->info('When true, missing setup.done forces the wizard (fresh clones). Default false so adding the bundle does not lock existing apps.')
@@ -515,6 +576,101 @@ final class Configuration implements ConfigurationInterface
             ->end();
 
         return $treeBuilder;
+    }
+
+    /**
+     * REQ-UI-003 canonical Web UI keys of the panel and the guest pages (login, setup wizard).
+     */
+    private function webUiNode(): ArrayNodeDefinition
+    {
+        $node = new ArrayNodeDefinition('web_ui');
+        $node
+            ->info('REQ-UI-003 Web UI: the panel and setup pages extend the UiKit scaffolds; theme them once in nowo_ui_kit.theme.')
+            ->addDefaultsIfNotSet()
+            ->children()
+                ->booleanNode('enabled')
+                    ->info('Register the backup panel routes (/, /history, /create, /restore/{id}, /delete/{id}, /progress.json).')
+                    ->defaultTrue()
+                ->end()
+                ->scalarNode('path_prefix')
+                    ->info('URL prefix of the backup panel.')
+                    ->defaultValue(SiteBackupView::DEFAULT_PATH_PREFIX)
+                    ->cannotBeEmpty()
+                ->end()
+                ->scalarNode('layout_template')
+                    ->info('Layout the panel scaffolds extend instead of nowo_ui_kit.layouts.admin (null = UiKit layout). It must render the UiKit canonical blocks; a 1.x layout without nowo_ui_content is bridged (deprecated).')
+                    ->defaultNull()
+                ->end()
+                ->scalarNode('guest_layout_template')
+                    ->info('Layout of the guest pages (panel login, setup wizard, setup token) instead of nowo_ui_kit.layouts.guest (null = UiKit layout). The setup wizard renders it before the app has a database: it must not need DB services. A 1.x layout without nowo_ui_content is bridged (deprecated).')
+                    ->defaultNull()
+                ->end()
+                ->arrayNode('templates')
+                    ->info('Per-page template override (page => template): ' . implode(', ', array_keys(SiteBackupView::TEMPLATES)) . '. Prefer a thin {% extends \'@!NowoSiteBackupBundle/…\' %} that overrides a data block.')
+                    ->normalizeKeys(false)
+                    ->useAttributeAsKey('page')
+                    ->scalarPrototype()->cannotBeEmpty()->end()
+                    ->validate()
+                        ->ifTrue(static fn (array $v): bool => array_diff(array_keys($v), array_keys(SiteBackupView::TEMPLATES)) !== [])
+                        ->then(static function (array $v): array {
+                            throw new InvalidArgumentException(sprintf('Unknown nowo_site_backup.web_ui.templates page(s): %s. Allowed: %s.', implode(', ', array_diff(array_keys($v), array_keys(SiteBackupView::TEMPLATES))), implode(', ', array_keys(SiteBackupView::TEMPLATES))));
+                        })
+                    ->end()
+                ->end()
+            ->end();
+
+        return $node;
+    }
+
+    /**
+     * Copies the deprecated 1.x keys into the canonical web_ui keys (the canonical key wins when both are set). The
+     * old keys stay in place so their deprecation is reported.
+     *
+     * @param array<mixed> $v
+     *
+     * @return array<mixed>
+     */
+    private static function mapLegacyKeys(array $v): array
+    {
+        $panel     = is_array($v['panel'] ?? null) ? $v['panel'] : [];
+        $setup     = is_array($v['setup'] ?? null) ? $v['setup'] : [];
+        $templates = is_array($v['templates'] ?? null) ? $v['templates'] : [];
+        $webUi     = is_array($v['web_ui'] ?? null) ? $v['web_ui'] : [];
+        $pages     = is_array($webUi['templates'] ?? null) ? $webUi['templates'] : [];
+
+        foreach (['enabled', 'path_prefix', 'layout_template'] as $key) {
+            if (array_key_exists($key, $panel) && !array_key_exists($key, $webUi)) {
+                $webUi[$key] = $panel[$key];
+            }
+        }
+        if (!array_key_exists('layout_template', $webUi) && isset($templates['panel_layout'])) {
+            $webUi['layout_template'] = $templates['panel_layout'];
+        }
+        if (!array_key_exists('guest_layout_template', $webUi)) {
+            $guest = $setup['layout_template'] ?? $templates['setup_layout'] ?? null;
+            if ($guest !== null) {
+                $webUi['guest_layout_template'] = $guest;
+            }
+        }
+        foreach (['layout_template', 'guest_layout_template'] as $key) {
+            if (array_key_exists($key, $webUi)) {
+                // The 1.x bundle layouts (standalone HTML pages) are gone: null = UiKit layout.
+                $webUi[$key] = SiteBackupView::normalizeLayout($webUi[$key]);
+            }
+        }
+        foreach (self::LEGACY_TEMPLATE_PAGES as $old => $page) {
+            if (is_string($templates[$old] ?? null) && $templates[$old] !== '' && !array_key_exists($page, $pages)) {
+                $pages[$page] = $templates[$old];
+            }
+        }
+        if ($pages !== []) {
+            $webUi['templates'] = $pages;
+        }
+        if ($webUi !== []) {
+            $v['web_ui'] = $webUi;
+        }
+
+        return $v;
     }
 
     private function setupProfilesNode(): ArrayNodeDefinition

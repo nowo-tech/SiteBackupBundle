@@ -45,6 +45,7 @@ use Nowo\SiteBackupBundle\Setup\SetupTabCheckerLocator;
 use Nowo\SiteBackupBundle\Setup\SetupWizardReopener;
 use Nowo\SiteBackupBundle\Setup\Storage\DoctrineDbalSetupProgressStorage;
 use Nowo\SiteBackupBundle\Setup\Storage\DoctrineDbalSetupStepJournal;
+use Nowo\SiteBackupBundle\View\SiteBackupView;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\DependencyInjection\Argument\TaggedIteratorArgument;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
@@ -109,10 +110,18 @@ final class SiteBackupExtensionTest extends TestCase
         ]], $container);
 
         self::assertSame('always', $container->getParameter('nowo.site_backup.setup.locale.in_path'));
+        // v1.21: the deprecated layout keys map to web_ui.layout_template / guest_layout_template.
+        /** @var array<string, mixed> $webUi */
+        $webUi = $container->getParameter('nowo.site_backup.web_ui');
+        self::assertSame('kit/setup_layout.html.twig', $webUi['guest_layout_template']);
+        self::assertSame('kit/panel_layout.html.twig', $webUi['layout_template']);
+        $view = $container->getDefinition(SiteBackupView::class);
+        self::assertSame('kit/panel_layout.html.twig', $view->getArgument('$layoutTemplate'));
+        self::assertSame('kit/setup_layout.html.twig', $view->getArgument('$guestLayoutTemplate'));
+        self::assertTrue($view->hasTag('nowo_ui_kit.area_nav_provider'));
         /** @var array<string, string> $templates */
         $templates = $container->getParameter('nowo.site_backup.templates');
-        self::assertSame('kit/setup_layout.html.twig', $templates['setup_layout']);
-        self::assertSame('kit/panel_layout.html.twig', $templates['panel_layout']);
+        self::assertSame('@NowoSiteBackupBundle/panel/index.html.twig', $templates['index']);
 
         $matcher = $container->getDefinition(SiteBackupExclusionMatcher::class);
         /** @var list<string> $patterns */

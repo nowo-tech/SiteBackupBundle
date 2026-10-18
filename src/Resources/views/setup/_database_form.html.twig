@@ -1,29 +1,21 @@
+{# DATABASE_URL step (Form\Setup\DatabaseUrlType). Variables: form, reasons, db_connection_failed (optional). #}
+{% set _b = 'NowoSiteBackupBundle' %}
 {% set db_connection_failed = db_connection_failed|default(false) %}
 {% if not db_connection_failed and reasons is defined %}
     {% set db_connection_failed = 'database connection failed' in reasons %}
 {% endif %}
-{% set database_url_optional = database_url_optional|default(true) %}
-{% if form.vars.optional is defined %}
-    {% set database_url_optional = form.vars.optional %}
-{% endif %}
-
-{{ form_start(form) }}
+{% set database_url_optional = form.vars.optional is defined ? form.vars.optional : (database_url_optional|default(true)) %}
+{{ form_start(form, {attr: {class: nowo_ui_class('form', _b)}}) }}
     {% if db_connection_failed %}
-        <p class="warn" role="alert">{{ 'setup.reason.db_connection_form'|trans({}, 'NowoSiteBackupBundle') }}</p>
+        <div class="{{ nowo_ui_class('flash_warning', _b) }}" role="alert">{{ 'setup.reason.db_connection_form'|trans({}, _b) }}</div>
     {% endif %}
-    {{ form_label(form.database_url, 'DATABASE_URL', {label_attr: {for: 'nowo-sbb-database-url'}}) }}
-    {{ form_widget(form.database_url, {
-        id: 'nowo-sbb-database-url',
-        attr: {
-            autocomplete: 'off',
-            placeholder: 'postgresql://user:pass@db:5432/app',
-        },
-    }) }}
-    <div class="actions">
-        <button type="submit">{{ 'setup.database.save'|trans({}, 'NowoSiteBackupBundle') }}</button>
+    {{ form_row(form.database_url, {id: 'nowo-sbb-database-url', attr: {class: nowo_ui_class('input_full', _b), autocomplete: 'off', placeholder: 'postgresql://user:pass@db:5432/app'}}) }}
+    {{ form_rest(form) }}
+    <div class="{{ nowo_ui_class('form_actions', _b) }}">
+        <button type="submit" class="{{ nowo_ui_class('btn_primary', _b) }}">{{ 'setup.database.save'|trans({}, _b) }}</button>
         {% if database_url_optional or not db_connection_failed %}
             {# formnovalidate: HTML5 must not block Skip with an empty field #}
-            <button class="secondary" type="submit" name="action" value="skip" formnovalidate>{{ 'setup.database.skip'|trans({}, 'NowoSiteBackupBundle') }}</button>
+            <button type="submit" name="action" value="skip" formnovalidate class="{{ nowo_ui_class('btn_secondary', _b) }}">{{ 'setup.database.skip'|trans({}, _b) }}</button>
         {% endif %}
     </div>
 {{ form_end(form) }}

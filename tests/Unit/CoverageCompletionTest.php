@@ -512,7 +512,8 @@ final class CoverageCompletionTest extends TestCase
         $container = new ContainerBuilder();
         $container->registerExtension(new DummyUiKitExtension());
         (new SiteBackupExtension())->prepend($container);
-        self::assertNotEmpty($container->getExtensionConfig('nowo_ui_kit'));
+        // v1.21: without the deprecated css_framework nothing is seeded (UiKit decides).
+        self::assertSame([], $container->getExtensionConfig('nowo_ui_kit'));
 
         $container2 = new ContainerBuilder();
         $container2->registerExtension(new DummyUiKitExtension());

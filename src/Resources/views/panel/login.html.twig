@@ -1,44 +1,6 @@
-{% extends nowo_site_backup_panel_layout_template %}
-{% import '@NowoUiKitBundle/macros/ui.html.twig' as ui %}
-{% set _sbb_fw = nowo_site_backup_css_framework|default('custom') %}
-{% set _sbb_classes = nowo_site_backup_panel_classes|default({}) %}
 {#
-  v1.18+ chrome blocks (override instead of forking):
-    nowo_site_backup_login_eyebrow  — small label above the heading (empty by default)
-    nowo_site_backup_login_heading  — heading text
-    nowo_site_backup_login_intro    — paragraph under the heading (empty by default)
-    nowo_site_backup_login_notice   — misconfigured / unprotected notices
-    nowo_site_backup_login_form     — password form
-    nowo_site_backup_login_after    — after the form (empty by default)
-  Classes: panel.extra_classes.{card,input,button}.
+  Backup panel — password sign-in (REQ-UI-003, page/auth, guest layout). Variable: page (View\AuthPage, built by
+  View\PanelPages::login): form Form\Panel\PanelLoginType (null when the gate is misconfigured: the page shows the
+  error only), error (invalid password, throttle, CSRF, misconfiguration). No data block filled.
 #}
-
-{% block nowo_ui_document_title %}{{ 'panel.login.page_title'|trans({}, 'NowoSiteBackupBundle') }}{% endblock %}
-
-{% block nowo_site_backup_panel_content %}
-<section class="nowo-ui-card card nowo-sbb-login{{ _sbb_classes.card|default('') ? ' ' ~ _sbb_classes.card }}">
-    {% block nowo_site_backup_login_eyebrow %}{% endblock %}
-    <h2>{% block nowo_site_backup_login_heading %}{{ 'panel.login.heading'|trans({}, 'NowoSiteBackupBundle') }}{% endblock %}</h2>
-    {% block nowo_site_backup_login_intro %}{% endblock %}
-    {% block nowo_site_backup_login_notice %}
-        {% if misconfigured|default(false) %}
-            <p class="{{ ui.flash('error', _sbb_fw) }} nowo-ui-flash--err error" role="alert">{{ 'panel.login.misconfigured'|trans({'%option%': '<code>security.password_hash</code>', '%command%': '<code>nowo:site-backup:hash-password</code>'}, 'NowoSiteBackupBundle')|raw }}</p>
-        {% elseif not protectionEnabled %}
-            <p class="nowo-sbb-login__unprotected" role="status">{{ 'panel.login.unprotected'|trans({}, 'NowoSiteBackupBundle') }}</p>
-        {% endif %}
-    {% endblock %}
-    {% if not misconfigured|default(false) and protectionEnabled %}
-        {% block nowo_site_backup_login_form %}
-            {{ form_start(loginForm, {attr: {class: 'nowo-ui-form'}}) }}
-                <div>
-                    {{ form_label(loginForm.password, 'panel.login.password'|trans({}, 'NowoSiteBackupBundle')) }}
-                    {{ form_widget(loginForm.password, {attr: {autofocus: true, autocomplete: 'current-password', class: (ui.input(_sbb_fw) ~ (_sbb_classes.input|default('') ? ' ' ~ _sbb_classes.input))|trim}}) }}
-                    {{ form_errors(loginForm.password) }}
-                </div>
-                <button type="submit" class="{{ ui.btn('primary', null, _sbb_fw) }}{{ _sbb_classes.button|default('') ? ' ' ~ _sbb_classes.button }}">{{ 'panel.login.submit'|trans({}, 'NowoSiteBackupBundle') }}</button>
-            {{ form_end(loginForm) }}
-        {% endblock %}
-    {% endif %}
-    {% block nowo_site_backup_login_after %}{% endblock %}
-</section>
-{% endblock %}
+{% extends '@NowoUiKit/page/auth.html.twig' %}

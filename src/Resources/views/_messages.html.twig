@@ -1,0 +1,8 @@
+{#
+  Result of the last panel / setup POST (`messages`: {error: [..], success: [..]}, already translated by the
+  controller), rendered through the UiKit flashes partial (slots flash_error / flash_success) after the host's
+  session flashes. Included by every page in block nowo_ui_flashes.
+#}
+{% if messages|default({}) is not empty %}
+    {{ include(nowo_ui_partial('flashes', 'NowoSiteBackupBundle'), {flashes: messages, bundle: 'NowoSiteBackupBundle'}, false) }}
+{% endif %}

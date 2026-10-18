@@ -13,6 +13,8 @@ final class BootstrapModeType extends AbstractSiteBackupFormType
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
         $builder->add('sql_import_path', TextType::class, [
+            'label'    => 'setup.bootstrap.sql_path',
+            'help'     => 'setup.bootstrap.sql_hint',
             'required' => false,
         ]);
     }

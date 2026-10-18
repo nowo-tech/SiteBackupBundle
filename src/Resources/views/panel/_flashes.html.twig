@@ -1,8 +1,0 @@
-{# Panel flash messages (v1.18+): `error` / `success` from SiteBackupPanelController (already translated).
-   The bundle layout renders it in block nowo_ui_flashes; a host layout (panel.layout_template) that does not
-   extend the bundle layout includes it where messages belong:
-       {% include '@NowoSiteBackupBundle/panel/_flashes.html.twig' %} #}
-{% import '@NowoUiKitBundle/macros/ui.html.twig' as ui %}
-{% set _sbb_fw = nowo_site_backup_css_framework|default('custom') %}
-{% if error is defined and error %}<div class="{{ ui.flash('error', _sbb_fw) }} nowo-ui-flash--err flash err" role="alert">{{ error }}</div>{% endif %}
-{% if success is defined and success %}<div class="{{ ui.flash('success', _sbb_fw) }} nowo-ui-flash--ok flash ok" role="status">{{ success }}</div>{% endif %}

@@ -7,9 +7,14 @@ namespace Nowo\SiteBackupBundle\Controller;
 use Nowo\SiteBackupBundle\Form\Panel\CreateBackupType;
 use Nowo\SiteBackupBundle\Form\Panel\PanelActionType;
 use Nowo\SiteBackupBundle\Form\Panel\PanelLoginType;
+use Nowo\SiteBackupBundle\Model\BackupArtifact;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessCheckerInterface;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessGateInterface;
 use Nowo\SiteBackupBundle\Service\SiteBackupManager;
+use Nowo\SiteBackupBundle\View\PanelPages;
+use Nowo\SiteBackupBundle\View\SiteBackupView;
+use Nowo\UiKitBundle\View\Action;
+use Nowo\UiKitBundle\View\Label;
 use Symfony\Component\Form\FormFactoryInterface;
 use Symfony\Component\Form\FormInterface;
 use Symfony\Component\Form\FormView;
@@ -24,32 +29,44 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 use Throwable;
 use Twig\Environment;
 
+use function array_filter;
 use function array_merge;
+use function array_values;
 use function ceil;
 use function implode;
 use function is_numeric;
 use function is_string;
 use function max;
-use function method_exists;
 use function strtr;
 
+/**
+ * Backup panel (REQ-UI-003, v1.21+): every page renders a UiKit view model built by {@see PanelPages} through
+ * {@see SiteBackupView} (archives list, history, create form, no-JS restore / delete confirmations, guest login).
+ */
 final class SiteBackupPanelController
 {
+    private readonly SiteBackupView $view;
+
+    private readonly PanelPages $pages;
+
     /**
-     * @param array<string, string> $templates
+     * @param array<string, string> $templates page id => template (web_ui.templates; 1.x templates.* keys accepted)
      */
     public function __construct(
         private readonly SiteBackupManager $manager,
         private readonly SiteBackupAccessGateInterface $accessGate,
         private readonly FormFactoryInterface $formFactory,
-        private readonly Environment $twig,
-        private readonly array $templates,
+        Environment $twig,
+        array $templates,
         private readonly string $pathPrefix,
         private readonly ?CsrfTokenManagerInterface $csrfTokenManager = null,
         private readonly ?SiteBackupAccessCheckerInterface $accessChecker = null,
         private readonly bool $allowUnauthenticated = true,
         private readonly ?TranslatorInterface $translator = null,
+        ?SiteBackupView $view = null,
     ) {
+        $this->view  = $view ?? new SiteBackupView($twig, $pathPrefix, templates: $templates);
+        $this->pages = new PanelPages($this->view);
     }
 
     #[Route('', name: 'nowo_site_backup_panel', methods: ['GET', 'POST'])]
@@ -101,21 +118,49 @@ final class SiteBackupPanelController
             }
         }
 
-        $backups = $this->manager->listBackups();
+        if ($submittedAction === 'create' && $submittedForm instanceof FormInterface && $error !== null) {
+            // A failed create (invalid CSRF / archiver error) goes back to the form with the message.
+            return $this->view->render('create', [
+                'page'     => $this->pages->create($submittedForm->createView()),
+                'messages' => $this->messages($error, null),
+            ], Response::HTTP_UNPROCESSABLE_ENTITY);
+        }
 
-        return new Response($this->twig->render($this->templates['panel_index'], [
-            'backups'          => $backups,
-            'progress'         => $this->manager->getRestoreProgress(),
-            'history'          => $this->manager->history(30),
-            'pathPrefix'       => $this->pathPrefix,
-            'error'            => $error,
-            'success'          => $success,
-            'csrfToken'        => $this->csrfTokenManager?->getToken('nowo_site_backup_panel')->getValue(),
-            'createForm'       => $this->resolveCreateFormView($submittedAction, $submittedForm),
-            'clearRestoreForm' => $this->createPanelActionForm('clear_restore')->createView(),
-            'logoutForm'       => $this->createPanelActionForm('logout')->createView(),
-            'backupForms'      => $this->createBackupFormViews($backups),
-        ]));
+        return $this->renderIndex($this->messages($error, $success));
+    }
+
+    /**
+     * Create-backup form (page/form). It posts to the panel index (action=create).
+     */
+    #[Route('/create', name: 'nowo_site_backup_create', methods: ['GET'])]
+    public function create(Request $request): Response
+    {
+        if (($response = $this->guard($request)) instanceof Response) {
+            return $response;
+        }
+
+        return $this->view->render('create', [
+            'page'     => $this->pages->create($this->createCreateForm()->createView()),
+            'messages' => [],
+        ]);
+    }
+
+    /**
+     * No-JS restore confirmation (page/confirm, type-to-confirm with the backup id), the fallback of the dialog.
+     */
+    #[Route('/restore/{id}', name: 'nowo_site_backup_restore_confirm', requirements: ['id' => '[^/]+'], methods: ['GET'])]
+    public function restoreConfirm(Request $request, string $id): Response
+    {
+        return $this->confirmPage($request, 'restore', $id);
+    }
+
+    /**
+     * No-JS delete confirmation (page/confirm), the fallback of the dialog.
+     */
+    #[Route('/delete/{id}', name: 'nowo_site_backup_delete_confirm', requirements: ['id' => '[^/]+'], methods: ['GET'])]
+    public function deleteConfirm(Request $request, string $id): Response
+    {
+        return $this->confirmPage($request, 'delete', $id);
     }
 
     #[Route('/progress.json', name: 'nowo_site_backup_progress', methods: ['GET'])]
@@ -145,6 +190,56 @@ final class SiteBackupPanelController
     #[Route('/history', name: 'nowo_site_backup_history', methods: ['GET'])]
     public function history(Request $request): Response
     {
+        if (($response = $this->guard($request)) instanceof Response) {
+            return $response;
+        }
+
+        return $this->view->render('history', [
+            'page'     => $this->pages->history($this->manager->history(100)),
+            'messages' => [],
+        ]);
+    }
+
+    /**
+     * @param array<string, list<string>> $messages
+     */
+    private function renderIndex(array $messages): Response
+    {
+        $backups  = array_values(array_filter($this->manager->listBackups(), static fn (mixed $b): bool => $b instanceof BackupArtifact));
+        $progress = $this->manager->getRestoreProgress();
+
+        return $this->view->render('index', [
+            'page'          => $this->pages->index($backups, $this->createBackupFormViews($backups), $this->createPanelActionForm('logout')->createView()),
+            'messages'      => $messages,
+            'progress'      => $progress,
+            'clear_restore' => new Action('custom', SiteBackupView::label('panel.index.clear_status'), $this->pathPrefix, method: 'POST', icon: 'x-circle', attributes: ['data-testid' => 'nowo-sbb-clear-restore'], form: $this->createPanelActionForm('clear_restore')->createView()),
+        ]);
+    }
+
+    /**
+     * @param 'delete'|'restore' $kind
+     */
+    private function confirmPage(Request $request, string $kind, string $id): Response
+    {
+        if (($response = $this->guard($request)) instanceof Response) {
+            return $response;
+        }
+
+        if (!$this->manager->getBackup($id) instanceof BackupArtifact) {
+            return new Response($this->message('panel.error.backup_not_found', 'Backup not found.'), Response::HTTP_NOT_FOUND);
+        }
+
+        return $this->view->render($kind . '_confirm', [
+            'page'     => $this->pages->confirm($kind, $id, $this->createPanelActionForm($kind, $id)->createView()),
+            'messages' => [],
+        ]);
+    }
+
+    /**
+     * Role check + password gate of the pages other than the index (the index shows the login form itself).
+     */
+    private function guard(Request $request): ?Response
+    {
         if (($response = $this->denyUnlessRoleAccess()) instanceof Response) {
             return $response;
         }
@@ -153,10 +248,25 @@ final class SiteBackupPanelController
             return new RedirectResponse($this->pathPrefix);
         }
 
-        return new Response($this->twig->render($this->templates['panel_history'], [
-            'history'    => $this->manager->history(100),
-            'pathPrefix' => $this->pathPrefix,
-        ]));
+        return null;
+    }
+
+    /**
+     * Messages of the last POST for the UiKit flashes partial ({@code flashes} input).
+     *
+     * @return array<string, list<string>>
+     */
+    private function messages(?string $error, ?string $success): array
+    {
+        $messages = [];
+        if (is_string($error) && $error !== '') {
+            $messages['error'] = [$error];
+        }
+        if (is_string($success) && $success !== '') {
+            $messages['success'] = [$success];
+        }
+
+        return $messages;
     }
 
     private function login(Request $request): Response
@@ -188,15 +298,17 @@ final class SiteBackupPanelController
             }
         }
 
-        $response = new Response($this->twig->render($this->templates['panel_login'], [
-            'pathPrefix'        => $this->pathPrefix,
-            'error'             => $error,
-            'protectionEnabled' => $this->accessGate->isProtectionEnabled(),
-            'misconfigured'     => $this->accessGate->isMisconfigured(),
-            'csrfToken'         => $this->csrfTokenManager?->getToken('nowo_site_backup_login')->getValue(),
-            'loginForm'         => $loginForm->createView(),
-            'throttled'         => $retryAfter !== null,
-        ]), $error || $this->accessGate->isMisconfigured() ? 401 : 200);
+        $misconfigured = $this->accessGate->isMisconfigured();
+        $protected     = $this->accessGate->isProtectionEnabled();
+        $pageError     = $misconfigured
+            ? new Label('panel.login.misconfigured', SiteBackupView::BUNDLE, ['%option%' => 'security.password_hash', '%command%' => 'nowo:site-backup:hash-password'])
+            : $error;
+
+        $response = $this->view->render('login', [
+            'page'      => $this->pages->login(!$misconfigured && $protected ? $loginForm->createView() : null, $pageError, $protected),
+            'messages'  => [],
+            'throttled' => $retryAfter !== null,
+        ], $error || $misconfigured ? 401 : 200);
 
         if ($retryAfter !== null) {
             $response->setStatusCode(Response::HTTP_TOO_MANY_REQUESTS);
@@ -295,18 +407,14 @@ final class SiteBackupPanelController
     }
 
     /**
-     * @param array<int, object> $backups
+     * @param list<BackupArtifact> $backups
      *
-     * @return array<string, array<string, FormView>>
+     * @return array<string, array{verify: FormView, restore: FormView, delete: FormView}>
      */
     private function createBackupFormViews(array $backups): array
     {
         $views = [];
         foreach ($backups as $backup) {
-            if (!method_exists($backup, 'getId')) {
-                continue;
-            }
-
             $id         = $backup->getId();
             $views[$id] = [
                 'verify'  => $this->createPanelActionForm('verify', $id)->createView(),
@@ -366,17 +474,5 @@ final class SiteBackupPanelController
     private function formOptions(array $options = []): array
     {
         return array_merge(['csrf_protection' => $this->csrfTokenManager instanceof CsrfTokenManagerInterface], $options);
-    }
-
-    /**
-     * @param FormInterface<mixed>|null $submittedForm
-     */
-    private function resolveCreateFormView(?string $submittedAction, ?FormInterface $submittedForm): FormView
-    {
-        if ($submittedAction === 'create' && $submittedForm instanceof FormInterface) {
-            return $submittedForm->createView();
-        }
-
-        return $this->createCreateForm()->createView();
     }
 }

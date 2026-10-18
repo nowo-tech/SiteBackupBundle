@@ -26,6 +26,7 @@ panel:
   nav:
     panel: 'Paneel'
     history: 'Geschiedenis'
+    label: 'Site Backup-secties'
   login:
     page_title: 'Inloggen - Siteback-up'
     heading: 'Back-uppaneel'
@@ -35,6 +36,7 @@ panel:
     submit: 'Inloggen'
     invalid_password: 'Ongeldig wachtwoord.'
     too_many_attempts: 'Te veel inlogpogingen. Probeer het over %minutes% minuut/minuten opnieuw.'
+    intro: 'Voer het paneelwachtwoord in om back-ups te beheren.'
   index:
     page_title: 'Back-uppaneel'
     create_title: 'Back-up maken'
@@ -57,6 +59,7 @@ panel:
     restore_confirm: 'Deze back-up nu herstellen? Bezoekers zien de laadpagina.'
     delete_confirm: 'Back-up verwijderen?'
     logout: 'Uitloggen'
+    empty_hint: 'Maak de eerste volledige back-up van deze site.'
   history:
     page_title: 'Geschiedenis — Siteback-up'
     title: 'Geschiedenis'
@@ -66,6 +69,7 @@ panel:
     col_actor: 'Uitgevoerd door'
     col_message: 'Bericht'
     empty: 'Geen geschiedenis.'
+    intro: 'Aangemaakte, verwijderde en herstelde back-ups, nieuwste eerst.'
   flash:
     created: 'Back-up gemaakt: %id%'
     deleted: 'Back-up verwijderd: %id%'
@@ -76,6 +80,15 @@ panel:
   error:
     invalid_csrf: 'Ongeldig CSRF-token.'
     access_denied: 'Toegang geweigerd.'
+    backup_not_found: 'Back-up niet gevonden.'
+  create:
+    intro: 'Archiveert de geconfigureerde paden en de databasedump in een .tar.gz met controlesommen.'
+  confirm:
+    restore_title: 'Back-up %id% herstellen?'
+    restore_expected: 'Typ de back-up-id %value% om te bevestigen'
+    delete_message: 'Back-up %id% (archief en controlesommen) wordt uit de opslagmap verwijderd. Dit kan niet ongedaan worden gemaakt.'
+    restore_page_title: 'Back-up herstellen'
+    delete_page_title: 'Back-up verwijderen'
 setup:
   page_title:
     wizard: '%brand% - Installatie'
@@ -87,6 +100,7 @@ setup:
     continue: 'Doorgaan'
     retry: 'Opnieuw'
     running: 'Volgende installatiestap uitvoeren…'
+    progress: 'Voortgang van de installatie'
   bootstrap:
     prompt: 'Kies hoe deze site wordt opgestart'
     guided: 'Begeleide installatie (beheerder aanmaken)'
@@ -122,6 +136,7 @@ setup:
   database:
     save: 'DATABASE_URL opslaan'
     skip: 'Overslaan (bestaande env gebruiken)'
+    field_label: 'DATABASE_URL'
   error:
     invalid_csrf: 'Ongeldig CSRF-token.'
     invalid_request: 'Ongeldig installatieverzoek.'
@@ -150,3 +165,4 @@ setup:
     title: 'Installatie voltooid'
     body: 'De site is klaar. U kunt inloggen met het aangemaakte beheerdersaccount.'
     home: 'Naar de homepage'
+    step: 'Klaar'
