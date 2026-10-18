@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.21.1](#to-1211)
 - [To 1.21.0](#to-1210)
   - [Template contract](#template-contract)
   - [Configuration](#configuration)
@@ -99,6 +100,14 @@
   - [Breaking changes](#breaking-changes-1)
 
 ## Unreleased
+
+## To 1.21.1
+
+From **1.21.0**:
+
+```bash
+composer update nowo-tech/site-backup-bundle
+```
 
 Requires UiKit **^2.2** (`composer require nowo-tech/ui-kit-bundle:^2.2`). No configuration change. What hosts may
 notice:

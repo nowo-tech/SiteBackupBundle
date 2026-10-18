@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.21.1] - 2026-10-18](#1211---2026-10-18)
 - [[1.21.0] - 2026-10-18](#1210---2026-10-18)
 - [[1.20.0] - 2026-10-15](#1200---2026-10-15)
 - [[1.19.2] - 2026-10-13](#1192---2026-10-13)
@@ -52,6 +53,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [[1.0.0] - 2026-07-26](#100---2026-07-26)
 
 ## [Unreleased]
+
+## [1.21.1] - 2026-10-18
+
+Requires UiKit ^2.2 (wizard on the guest layout, progress partial, scripts partial); setup placeholders translated once. See [UPGRADING](UPGRADING.md#to-1211).
 
 ### Changed
 
@@ -680,7 +685,8 @@ First stable release of **Site Backup Bundle**.
 - Symfony `^7.0 || ^8.0` (CI / mandatory minors: **7.4**, **8.0**, **8.1**)
 - System `tar` required for archive create/extract
 
-[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.21.0...HEAD
+[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.21.1...HEAD
+[1.21.1]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.21.0...v1.21.1
 [1.21.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.20.0...v1.21.0
 [1.20.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.19.2...v1.20.0
 [1.19.1]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.19.0...v1.19.1
