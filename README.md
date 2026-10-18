@@ -10,13 +10,32 @@
 
 This bundle is **FrankenPHP worker mode friendly**.
 
+<table>
+  <tr>
+    <td align="center" width="50%">
+      <img src="docs/images/demo/panel-archives.webp" alt="Backup panel listing two archives with Verify, Restore and Delete actions after a backup was created" />
+      <br /><sub>Backup panel — archives with verify / restore / delete, UiKit page contract in the host layout</sub>
+    </td>
+    <td align="center" width="50%">
+      <img src="docs/images/demo/panel-restore-confirm.webp" alt="Restore confirmation dialog asking to type the backup id" />
+      <br /><sub>Type-to-confirm restore (CSRF-protected, no inline JavaScript)</sub>
+    </td>
+  </tr>
+  <tr>
+    <td align="center" colspan="2">
+      <img src="docs/images/demo/setup-wizard.webp" alt="Setup wizard at the bootstrap step with steps indicator, setup reasons and log" width="60%" />
+      <br /><sub>Cold-start setup wizard on the guest layout — renders before the app has a database schema or users</sub>
+    </td>
+  </tr>
+</table>
+
 ## Features
 - **Integral backup** — Configurable include paths, exclude patterns, optional `database_dump_command`, `.tar.gz` + sidecar metadata.
 - **Integrity** — Per-file SHA-256 in `MANIFEST.json` plus archive SHA-256; `verify` before restore.
 - **Safe restore** — Validate → extract to staging → apply with protected paths → progress JSON; `var/site-backup/` never overwritten mid-restore.
 - **Loading page** — While restore is active, `kernel.request` returns **HTTP 503** with a progress UI (polls `/_site_backup/progress.json`); panel stays reachable.
 - **Setup wizard** — Cold start / post-restore: bootstrap mode (guided vs full SQL), DB, migrations/schema, YAML **tabs** + checkers, `advance_mode`, idempotent loaders, super-admin, optional sample data; durable progress (`filesystem` / `doctrine` / `cache` / `cache_doctrine` / `chain`); MySQL **cold-start schema gate** (`setup.cold_start.require_application_tables`) — see [docs/SETUP-WIZARD.md](docs/SETUP-WIZARD.md).
-- **Admin panel** — Create / verify / restore / delete under `/_site_backup` (password gate + CSRF). Password attempts are rate-limited per client IP (`security.login_throttle`, on by default: friendly HTTP 429 + `Retry-After`) and the session id is rotated after login.
+- **Admin panel** — Create / verify / restore (type-to-confirm) / delete under `/_site_backup` (password gate + CSRF), on the [UiKit page contract](docs/TEMPLATES.md): themed once with `nowo_ui_kit`, rendered in your admin / guest layouts. Password attempts are rate-limited per client IP (`security.login_throttle`, on by default: friendly HTTP 429 + `Retry-After`) and the session id is rotated after login.
 - **CLI** — `create`, `list`, `verify`, `restore`, `setup`, `setup-status`, `setup-reset`, `hash-password`, `db-dump` (built-in `database_dump_command`: mysqldump from `DATABASE_URL`, password via `MYSQL_PWD`).
 - **Worker-friendly performance** — per-worker TTL memos (`setup.worker_memo`) so schema probes and the progress-table DDL do not run on every FrankenPHP request; opt-in `bump_time_limit` for long setup / panel requests.
 - **Production hardening** — opt-in `security_guard` refuses empty / placeholder setup token, panel hash and `APP_SECRET` outside dev/test; templates carry the request `csp_nonce` and use no inline event handlers.
@@ -47,8 +66,10 @@ nowo_site_backup:
     backup:
         include_paths: [config, public, templates, src, composer.json, composer.lock]
         database_dump_command: 'php %kernel.project_dir%/bin/console nowo:site-backup:db-dump --no-debug'
-    panel:
+    web_ui:
         path_prefix: '/_site_backup'
+        # layout_template: null         # null = nowo_ui_kit.layouts.admin (panel pages)
+        # guest_layout_template: null   # null = nowo_ui_kit.layouts.guest (sign-in + setup wizard; no DB-backed Twig)
     security:
         password_protection: true
         password_hash: '%env(SITE_BACKUP_PASSWORD_HASH)%'
@@ -101,6 +122,7 @@ make release-check
 - [Configuration](docs/CONFIGURATION.md)
 - [PSR evaluation (REQ-CS-007)](docs/PSR.md)
 - [Usage](docs/USAGE.md)
+- [Templates (UiKit page contract)](docs/TEMPLATES.md)
 - [Contributing](docs/CONTRIBUTING.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Changelog](docs/CHANGELOG.md)

@@ -1,12 +1,14 @@
 <!DOCTYPE html>
-<html lang="{{ app.request.locale|default('en') }}"
-      class="nowo-ui-root nowo-ui-css-{{ nowo_site_backup_css_framework|default('custom') }}"
-      data-css-framework="{{ nowo_site_backup_css_framework|default('custom') }}">
+<html lang="{{ app.request.locale|default('en') }}" class="nowo-ui-root"{% block html_attributes %}{% endblock %}>
 <head>
     <meta charset="utf-8">
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>{% block title %}Site Backup Bundle demo{% endblock %}</title>
     <style>
+        /* Demo chrome in the "base" cascade layer, below the UiKit kit (layer nowo-ui): host link / button colours
+           here do not repaint UiKit buttons (REQ-UI-003, UiKit PAGE_CONTRACT "Cascade layers"). */
+        @layer theme, base, nowo-ui, components, utilities;
+        @layer base {
         :root {
             --demo-bg: #f1f5f9;
             --demo-ink: #0f172a;
@@ -57,6 +59,11 @@
         }
         .status-ok { color: #15803d; }
         .status-warn { color: #b45309; }
+        .demo-page { margin-top: .5rem; }
+        .demo-guest { max-width: 40rem; margin: 0 auto; }
+        .demo-gate-escape { margin: 0 0 1rem; font-size: .78rem; letter-spacing: .04em; text-transform: uppercase; color: #64748b; }
+        .demo-gate-escape .btn { padding: .2rem .5rem; font-size: .8rem; text-transform: none; }
+        }
     </style>
     {% block stylesheets %}{% endblock %}
 </head>

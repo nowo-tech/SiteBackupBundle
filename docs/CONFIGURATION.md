@@ -20,7 +20,12 @@ Root key: `nowo_site_backup`.
 | `security_guard.extra_secrets` | `[]` | (v1.20+) More secrets: `{label, value: '%env(default::MERCURE_JWT_SECRET)%', min_length: 32, forbidden: ['…'], required: false}` — empty values are skipped unless `required` |
 | `security_guard.dsn_credentials` | `[]` | (v1.20+) DSNs that must carry a password: `{label, value: '%env(default::MESSENGER_TRANSPORT_DSN)%', schemes: [redis, rediss, amqp, amqps], forbidden_credentials: ['guest:guest'], password_fallback: '%env(default::REDIS_PASSWORD)%'}` — password from userinfo, `?auth=` or a non-empty `password_fallback`; other schemes (doctrine://, sync://) are skipped |
 | `security_guard.skip_console_commands` | `cache:clear`, `cache:warmup`, `assets:install`, `nowo:site-backup:hash-password` | Image builds warm the cache without runtime secrets; `hash-password` generates the hash |
-| `css_framework` | `custom` | Host CSS stack hint (REQ-UI-001): `bootstrap5`, `bootstrap`, `bootstrap4`, `tabler`, `tailwind`, `foundation`, `custom`, `none`. Twig global `nowo_site_backup_css_framework`. Demo uses semantic `nowo-ui-*` (`custom`). |
+| `css_framework` | `null` | **Deprecated (1.21)**: set `nowo_ui_kit.css_framework`. When set here (and not on UiKit) it is still seeded into `nowo_ui_kit.css_framework` / `icon_set`. Twig global `nowo_site_backup_css_framework` (deprecated). |
+| `web_ui.enabled` | `true` | (1.21, REQ-UI-003) Register the backup panel (controller + routes). With `false` no panel route is registered (404); the restore loading page keeps working (meta refresh). Alias: `panel.enabled` (deprecated) |
+| `web_ui.path_prefix` | `/_site_backup` | Prefix of the panel routes (`/`, `/history`, `/create`, `/restore/{id}`, `/delete/{id}`, `/progress.json`); auto-excluded from the loading page and the setup gate. Alias: `panel.path_prefix` (deprecated). Parameter `nowo.site_backup.panel.path_prefix` keeps the value |
+| `web_ui.layout_template` | `null` | Layout of the panel pages instead of `nowo_ui_kit.layouts.admin` (null = UiKit). Must render the UiKit canonical blocks; a 1.x layout without `nowo_ui_content` is bridged (deprecated). Aliases: `panel.layout_template`, `templates.panel_layout` (deprecated; the removed bundle layout maps to `null`) |
+| `web_ui.guest_layout_template` | `null` | Layout of the guest pages (panel sign-in, setup wizard, setup token) instead of `nowo_ui_kit.layouts.guest`. **Renders before the app has a database**: no DB-backed Twig in it. Aliases: `setup.layout_template`, `templates.setup_layout` (deprecated) |
+| `web_ui.templates.<page>` | `{}` | Per-page template override: `index`, `history`, `create`, `restore_confirm`, `delete_confirm`, `login`, `setup_wizard`, `setup_token`, `setup_done`, `restore_page` — see [TEMPLATES.md](TEMPLATES.md). Aliases: `templates.panel_index` → `index`, `panel_login` → `login`, `panel_history` → `history`, `setup_wizard`, `setup_token`, `setup_done`, `restore_page` (deprecated) |
 | `backup.include_paths` | config, public, templates, … | Relative to `kernel.project_dir`. **`[]` or `["."]` = entire project** (minus `exclude_patterns`). Omitting the key keeps the selective defaults. |
 | `backup.exclude_patterns` | cache/log/vendor/… | `fnmatch` against relative paths |
 | `backup.storage_dir` | `%kernel.project_dir%/var/site-backup/archives` | Archives + `.meta.json`. v1.19+: wherever it lives inside the project it is never packed into an archive (no nested archives) nor overwritten by a restore |
@@ -30,16 +35,14 @@ Root key: `nowo_site_backup`.
 | `restore.stale_after_seconds` | `null` (= 2 × `process_timeout`) | (v1.19+) An *active* restore whose progress was not updated for this many seconds is treated as abandoned (worker killed / crashed mid-restore): the loading page (and its 503) stops being served, `progress.json` reports `active: false` and a new restore may start (its log records the abandoned one). `0` = never (pre-1.19: a dead worker kept the site in 503 until the progress file was edited). Since the next release a running restore writes heartbeats during archive hashing, extraction and file apply (at most every 5 s, or every third of this value when smaller), so this is the time since the last heartbeat, not the length of a single step |
 | `storage.history_file` | `%kernel.project_dir%/var/site-backup/history.jsonl` | Backup / restore / delete history (JSON lines) shown on the panel history page. v1.19+: excluded from archives and never overwritten by a restore |
 | `exclusions.paths` | `[]` | Exact request paths (`getPathInfo()`) that are never replaced by the loading page while a restore runs |
-| `exclusions.path_prefixes` | `[]` | Path prefixes never replaced by the loading page. `panel.path_prefix` and `setup.path_prefix` are always added |
+| `exclusions.path_prefixes` | `[]` | Path prefixes never replaced by the loading page nor redirected by the setup gate. `web_ui.path_prefix`, `setup.path_prefix` and (1.21) `/_wdt/`, `/_profiler/` are always added |
 | `exclusions.routes` | `[]` | Route names (`_route`) never replaced by the loading page (see also the `#[ExcludeFromRestore]` attribute) |
 | `exclusions.patterns` | `[]` | Path patterns: a regex when it starts with `#` or `~`, otherwise an `fnmatch` glob. With `setup.locale.in_path` ≠ `never` a `/{locale}{setup.path_prefix}` regex is added (locales are `preg_quote`d) |
 | `exclusions.ips` | `[]` | Client IPs / CIDR ranges (`IpUtils::checkIp`) that keep reaching the application during a restore (ops checks) |
-| `panel.enabled` | `true` | Register the backup panel (controller + routes). v1.19+: with `false` the imported `routes.yaml` registers no panel route (404) instead of routes pointing at the removed controller (500). The restore loading page keeps working (it falls back to its meta refresh) |
-| `panel.path_prefix` | `/_site_backup` | Auto-excluded from loading page; prefix of the panel routes (`/`, `/progress.json`, `/history`) |
-| `panel.layout_template` | `null` (bundle `panel/layout.html.twig`) | Host Twig shell; Twig global `nowo_site_backup_panel_layout_template`; blocks `nowo_ui_content` / `nowo_site_backup_panel_content` |
-| `templates.panel_layout` | `@NowoSiteBackupBundle/panel/layout.html.twig` | Same as `panel.layout_template` when set |
-| `panel.row_actions_display` | `text` | v1.18+: archive row actions (Verify / Restore / Delete): `text` (pre-1.18 markup), `icon`, `icon_text`, or `kit` (follow UiKit `row_actions_display`, global `nowo_ui_kit_row_actions_display`). Twig global `nowo_site_backup_row_actions_display` |
-| `panel.extra_classes.card` / `panel.extra_classes.table` / `panel.extra_classes.button` / `panel.extra_classes.input` | `''` | v1.18+: classes appended to panel cards, tables, buttons and inputs (login, index, history). Twig global `nowo_site_backup_panel_classes` |
+| `panel.enabled` / `panel.path_prefix` | — | **Deprecated aliases** of `web_ui.enabled` / `web_ui.path_prefix` (the canonical key wins when both are set) |
+| `panel.layout_template` | — | **Deprecated alias** of `web_ui.layout_template` |
+| `panel.row_actions_display` | `null` | **Deprecated (1.21)**: row actions follow `nowo_ui_kit.row_actions_display`. `text` \| `icon` \| `icon_text` still force the display of Verify / Restore / Delete; `kit` / `null` = UiKit |
+| `panel.extra_classes.card` / `.table` / `.button` / `.input` | `''` | **Deprecated (1.21)**: bridged into `nowo_ui_kit.theme.bundles.NowoSiteBackupBundle.classes` (`card` → `card`, `table` → `table`, `input` → `input`, `button` → `btn_primary`, `btn_secondary`, `action`); your own `theme.bundles` config wins |
 | `security.access_roles` | `[ROLE_ADMIN]` | REQ-UI-002: at least one role grants panel access when `allow_unauthenticated` is false |
 | `security.access_checker` | `null` | Optional service id implementing `SiteBackupAccessCheckerInterface` |
 | `security.allow_unauthenticated` | `false` | DEV/DEMO only: skip Symfony role check (password gate may still apply). Requires SecurityBundle when `false` and panel is enabled |
@@ -52,9 +55,7 @@ Root key: `nowo_site_backup`.
 | `security.login_throttle.policy` | `fixed_window` | `fixed_window` \| `sliding_window` |
 | `security.login_throttle.limiter` | `null` | Host `RateLimiterFactoryInterface` service id (e.g. `limiter.site_backup_login` from `framework.rate_limiter`). When set, `limit` / `interval` / `policy` / `cache_pool` are ignored |
 | `security.login_throttle.cache_pool` | `null` | PSR-6 pool for the built-in limiter (`nowo_site_backup.login_limiter`). `null` = `cache.rate_limiter`, else `cache.app`; none available → `LogicException` at container compile time. Use a shared pool (Redis) with several app servers |
-| `templates.restore_page` | `@NowoSiteBackupBundle/restore/page.html.twig` | Public restore loading page (variables `progress`, `defaultMessage`, `progressUrl`) |
-| `templates.panel_index` / `templates.panel_login` / `templates.panel_history` | `@NowoSiteBackupBundle/panel/{index,login,history}.html.twig` | Panel pages |
-| `templates.setup_wizard` / `templates.setup_admin` / `templates.setup_sample` / `templates.setup_database` / `templates.setup_done` / `templates.setup_token` | `@NowoSiteBackupBundle/setup/{wizard,admin,sample_data,database,done,token}.html.twig` | Setup wizard pages (layout: `setup.layout_template` / `templates.setup_layout`) |
+| `templates.*` | `null` | **Deprecated (1.21)**: `restore_page`, `panel_index`, `panel_login`, `panel_history`, `setup_wizard`, `setup_done`, `setup_token` map to `web_ui.templates.*`; `panel_layout` / `setup_layout` to the `web_ui` layouts; `setup_admin` / `setup_sample` / `setup_database` have no effect (the steps render inside `setup/wizard.html.twig`) |
 | `setup.setup_token` | `null` | Shared secret for `/_setup` (`?token=` or `X-Setup-Token`), also required by `/_setup/api/progress` and `/_setup/api/advance`. **Mandatory on any internet-facing host**: with `null` anyone who reaches the host before setup completes can drive the wizard (DATABASE_URL, admin user, SQL import). Enforce it with `security_guard.enabled: true` |
 | `setup.enabled` | `true` | Register the setup wizard (controller, routes, request gate). `false` = no `/_setup` routes |
 | `setup.brand_name` | `Site Setup` | Brand shown in the wizard title / header |
@@ -63,8 +64,7 @@ Root key: `nowo_site_backup`.
 | `setup.locale.default` | `en` | Default `{_locale}` for localized setup routes |
 | `setup.locale.enabled` | `[en]` | Allowed locale codes |
 | `setup.locale.unlocalized` | `redirect` | When `in_path: both`: `serve` or `redirect` bare `/_setup`. With `serve`, `UnlocalizedDefaultLocaleSubscriber` re-applies `setup.locale.default` each request (stale route-cache / image-vs-runtime env). |
-| `setup.layout_template` | `null` (bundle `setup/layout.html.twig`) | Host Twig shell; Twig global `nowo_site_backup_setup_layout_template`; blocks `nowo_ui_content` / `nowo_site_backup_content` |
-| `templates.setup_layout` | `@NowoSiteBackupBundle/setup/layout.html.twig` | Same as `setup.layout_template` when set |
+| `setup.layout_template` | — | **Deprecated alias** of `web_ui.guest_layout_template` |
 | `setup.progress_storage` | `filesystem` | `filesystem` (JSON `setup.progress_file`) \| `doctrine` (DBAL `progress_table`) \| `chain` (JSON + DB, prefer DB on load) \| `cache` (PSR-6 pool) \| `cache_doctrine` (cache + DB, prefer DB on load) |
 | `setup.progress_table` | `nowo_site_backup_setup_progress` | DBAL table for doctrine/chain (runtime DDL — not Symfony Migrations) |
 | `setup.progress_step_rows` | `true` | Upsert per-step journal when doctrine/chain (disabled automatically for filesystem) |
@@ -147,7 +147,6 @@ nowo_site_backup:
             mysql_password: '%env(MYSQL_PASSWORD)%'
             mysql_database: '%env(MYSQL_DATABASE)%'
     process_timeout: 900
-    css_framework: bootstrap5   # or: tailwind | foundation | custom | tabler | …
     backup:
         # Selective paths (default behaviour when the key is omitted):
         include_paths: [config, public/uploads, templates, src, composer.json]

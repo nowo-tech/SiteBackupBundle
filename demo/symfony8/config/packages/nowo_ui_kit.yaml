@@ -1,3 +1,17 @@
+# UiKit page contract (REQ-UI-003): one host layout pair and one theme for every bundle page.
+# The Site Backup panel uses the admin layout, the panel sign-in and the setup wizard the guest layout.
 nowo_ui_kit:
-    css_framework: custom
-    icon_set: bootstrap-icons
+    css_framework: none
+    icon_set: none
+    row_actions_display: text
+    layouts:
+        admin: 'layouts/admin.html.twig'
+        guest: 'layouts/guest.html.twig'
+    theme:
+        tokens:
+            primary: '#2563eb'
+            primary-contrast: '#ffffff'
+            surface: '#ffffff'
+            surface-muted: '#f1f5f9'
+            border: '#e2e8f0'
+            radius: '0.6rem'

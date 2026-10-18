@@ -462,33 +462,35 @@ Routes are registered by `SetupRouteLoader` (type `nowo_site_backup_setup`) inst
 REQ-TWIG-005: bundle setup partials now use Symfony Forms end-to-end. If you override setup wizard partials or provide a custom waiting-input template, keep the form shell on `form_*` helpers and preserve the flat request field names expected by setup steps (`action`, `bootstrap_mode`, `database_url`, `email`, `password`, `sql_import_path`, ...).
 
 
-**Prefer `setup.layout_template`** (REQ-TWIG-001 / REQ-UI-001): keep wizard/done/token markup in the package; only supply a host chrome shell that defines block `nowo_site_backup_content` (and optionally `nowo_ui_content`). Pages extend Twig global `nowo_site_backup_setup_layout_template`.
+**Layout and theme (1.21+, REQ-UI-003).** The wizard, done and token pages are UiKit scaffolds (`page/wizard`,
+`page/auth`) on the **guest layout**: `nowo_ui_kit.layouts.guest` (default UiKit's own), or
+`nowo_site_backup.web_ui.guest_layout_template` for a different one. The wizard renders before the application has a
+database, schema or users — the guest layout must not need database services (the bundle's view classes use none).
+Theme it once in `nowo_ui_kit.theme` (tokens, slot classes). `setup.layout_template` / `templates.setup_layout` are
+deprecated aliases; a 1.x layout that only renders `nowo_site_backup_content` is wrapped by a deprecated bridge.
 
 ```yaml
-nowo_site_backup:
-    setup:
-        layout_template: 'kit/site_backup_setup_layout.html.twig'
-    panel:
-        layout_template: 'kit/site_backup_panel_layout.html.twig'
+nowo_ui_kit:
+    layouts:
+        guest: 'layouts/guest.html.twig'   # no DB-backed Twig here
 ```
 
-Optional file overrides still live under `templates/bundles/NowoSiteBackupBundle/` — an override **replaces** the package file entirely (upstream edits will not apply until you delete or merge the fork). Prefer CSS on `.nowo-site-backup-setup` over forking form partials.
-
-| Subpath | Role |
+| Template | Role |
 | --- | --- |
-| `setup/layout.html.twig` | Default standalone setup chrome (`nowo-ui-*` + `--nowo-sbb-*`) |
-| `setup/wizard.html.twig` | Wizard content (`setup_body`) — extends `nowo_site_backup_setup_layout_template` |
+| `setup/wizard.html.twig` | `page/wizard`: steps + "Done", data block `nowo_ui_wizard_step` (progress, reasons, error, step form, log) |
 | `setup/_bootstrap_form.html.twig` | Guided vs full-database choice |
 | `setup/_admin_form.html.twig` | Super-admin form |
 | `setup/_sample_form.html.twig` | Sample-data opt-in |
 | `setup/_database_form.html.twig` | DATABASE_URL form (hides Skip when connection failed) |
-| `setup/_continue_form.html.twig` | Generic Continuar (custom tabs without `template`) |
-| `setup/done.html.twig` | Success |
-| `setup/token.html.twig` | Setup token gate |
-| `panel/layout.html.twig` | Default standalone panel chrome |
-| `panel/index.html.twig` / `history` / `login` | Panel pages — extend `nowo_site_backup_panel_layout_template` |
+| `setup/_continue_form.html.twig` | Generic Continue (custom tabs without `template`) |
+| `setup/done.html.twig` | `page/wizard` with the "Done" step current |
+| `setup/token.html.twig` | `page/auth`: setup token gate (HTTP 403) |
 
-See also [USAGE.md](USAGE.md) — Template overrides.
+A custom tab `template` is included inside `nowo_ui_wizard_step` with `form` (the step form) and the wizard context
+(`progress`, `currentStep`, `reasons`, …); use the UiKit slots (`nowo_ui_class('form_actions')`, `btn_primary`…) in it.
+Per-page overrides: `web_ui.templates.setup_wizard|setup_done|setup_token` — see [TEMPLATES.md](TEMPLATES.md).
+
+See also [USAGE.md](USAGE.md#web-ui-on-the-uikit-page-contract-req-ui-003-121).
 
 
 ## CLI

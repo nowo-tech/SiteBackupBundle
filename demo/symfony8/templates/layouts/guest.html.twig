@@ -1,0 +1,17 @@
+{#
+  Demo guest layout (nowo_ui_kit.layouts.guest): panel sign-in and setup wizard. Same canonical blocks as the admin
+  bridge without navigation. It renders before the app has a database (setup wizard): no DB-backed Twig here.
+#}
+{% extends 'layouts/admin.html.twig' %}
+
+{% block nowo_ui_navigation %}{% endblock %}
+
+{% block body %}
+    {% if app.request.pathInfo matches '{_setup}' %}
+        <form class="demo-gate-escape" method="post" action="{{ path('demo_force_setup_off') }}">
+            <input type="hidden" name="_csrf_token" value="{{ csrf_token('demo_force_setup') }}">
+            Demo gate escape: <button type="submit" class="btn btn--ghost">Clear force-setup flag</button>
+        </form>
+    {% endif %}
+    <div class="demo-guest">{{ parent() }}</div>
+{% endblock %}

@@ -3,7 +3,7 @@
 SHELL := /bin/bash
 COMPOSE ?= $(shell docker compose version >/dev/null 2>&1 && echo "docker compose" || echo "docker-compose")
 
-.PHONY: help up down build install shell logs test cache-clear update-bundle ensure-up verify
+.PHONY: help up down build install shell logs test cache-clear update-bundle ensure-up verify test-e2e demo-screenshots
 
 BUNDLE_ROOT := $(abspath $(dir $(lastword $(MAKEFILE_LIST)))/../..)
 SERVICE_PHP := php
@@ -16,6 +16,8 @@ help:
 	@echo "  make test          Run PHPUnit smoke tests"
 	@echo "  make verify        HTTP healthcheck on PORT"
 	@echo "  make update-bundle Sync path-repo bundle + clear cache"
+	@echo "  make test-e2e      Playwright e2e of the panel and setup wizard (REQ-DEMO-013)"
+	@echo "  make demo-screenshots  Refresh docs/images/demo/*.webp (run on a fresh demo: captures the wizard)"
 	@echo ""
 
 up:
@@ -70,6 +72,31 @@ verify: ensure-up
 	code=$$(curl -s -o /dev/null -w "%{http_code}" "http://127.0.0.1:$$PORT/" 2>/dev/null || echo "000"); \
 	if [ "$$code" != "200" ] && [ "$$code" != "302" ]; then echo "Healthcheck failed: $$code"; exit 1; fi; \
 	echo "Healthcheck OK ($$code)"
+
+# REQ-DEMO-013: Playwright e2e + WebP screenshots (official Playwright image, same version as e2e/package.json).
+PLAYWRIGHT_IMAGE ?= mcr.microsoft.com/playwright:v1.58.2-jammy
+
+test-e2e: ensure-up
+	@mkdir -p e2e/node_modules
+	@PORT=$$(grep -E '^PORT=' .env 2>/dev/null | cut -d= -f2); PORT=$${PORT:-8056}; \
+	docker run --rm --network host \
+		-v "$(CURDIR)/e2e:/e2e" -w /e2e \
+		-e DEMO_BASE_URL=http://127.0.0.1:$$PORT \
+		$(PLAYWRIGHT_IMAGE) \
+		bash -lc 'npm install --no-fund --no-audit && npx playwright test --project=chromium'
+
+demo-screenshots: ensure-up
+	@mkdir -p ../../docs/images/demo e2e/node_modules
+	@PORT=$$(grep -E '^PORT=' .env 2>/dev/null | cut -d= -f2); PORT=$${PORT:-8056}; \
+	docker run --rm --network host \
+		-v "$(CURDIR)/e2e:/e2e" \
+		-v "$(CURDIR)/../../docs/images/demo:/screenshots" \
+		-w /e2e \
+		-e DEMO_BASE_URL=http://127.0.0.1:$$PORT \
+		-e SCREENSHOT_DIR=/screenshots \
+		$(PLAYWRIGHT_IMAGE) \
+		bash -lc 'npm install --no-fund --no-audit && npx playwright test --project=screenshots && node scripts/to-webp.mjs /screenshots'
+	@echo "Screenshots written under docs/images/demo/ (WebP)"
 
 # REQ-MAKE-008: update-deps
 # Optional: monorepo helper absent on standalone GitHub Actions checkout (REQ-MAKE-009).

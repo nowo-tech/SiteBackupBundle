@@ -1,7 +1,5 @@
 nowo_site_backup:
     enabled: true
-    # Host CSS stack hint (Twig global nowo_site_backup_css_framework) — REQ-UI-001 / v1.6
-    css_framework: custom
     # Translation id (NowoSiteBackupBundle). Demo overrides copy in translations/.
     default_message: restore.page.message
     process_timeout: 300
@@ -17,17 +15,17 @@ nowo_site_backup:
             - 'var/site-backup/*'
             - 'vendor/*'
         storage_dir: '%kernel.project_dir%/var/site-backup/archives'
-    panel:
+    # REQ-UI-003 (v1.21+): pages extend the UiKit scaffolds inside nowo_ui_kit.layouts.admin / .guest
+    # (templates/layouts/*.html.twig); theme them once in nowo_ui_kit.theme.
+    web_ui:
         path_prefix: '/_site_backup'
-        # Brand panel chrome without forking panel/*.html.twig (v1.5+)
-        layout_template: 'kit/site_backup_panel_layout.html.twig'
     security:
         # Demo: password gate only (no SecurityBundle). Never copy allow_unauthenticated to production.
         allow_unauthenticated: true
         access_roles: [ROLE_ADMIN]
         password_protection: true
-        # Demo only — password: password (Laravel sample hash; regenerate for real apps)
-        password_hash: '$2y$13$92IXUNpkjO0rOQ5byMi.Ye4oKoEa3Ro9llC/.og/at2.uheWG/igi'
+        # Demo only — password: password (bcrypt; php bin/console nowo:site-backup:hash-password for real apps)
+        password_hash: '$2y$12$pZSjMQUyqEUkrIvJpy6W0OC1ing/H8TocG8fhtafpH6.vfcd39wJK'
     exclusions:
         paths: ['/health']
         # /demo/* stays reachable while the custom force-setup detector holds the gate
@@ -40,8 +38,6 @@ nowo_site_backup:
         # Survive wiping var/ once DB exists (v1.2+)
         progress_storage: chain
         admin_provisioner: App\Setup\AdminUserProvisioner
-        # Host setup chrome without forking wizard/done/token (v1.4 / v1.5)
-        layout_template: 'kit/site_backup_setup_layout.html.twig'
         # Locale-in-path (v1.7) — /{_locale}/_setup + bare /_setup → redirect
         locale:
             in_path: both

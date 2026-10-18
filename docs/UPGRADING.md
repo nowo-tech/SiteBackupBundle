@@ -3,6 +3,8 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+  - [Template contract](#template-contract)
+  - [Configuration](#configuration)
 - [To 1.20.0](#to-1200)
 - [To 1.19.2](#to-1192)
 - [To 1.19.1](#to-1191)
@@ -96,6 +98,88 @@
   - [Breaking changes](#breaking-changes-1)
 
 ## Unreleased
+
+The panel and setup pages move to the UiKit 2.1 page contract (REQ-UI-003). Steps:
+
+```bash
+composer require nowo-tech/ui-kit-bundle:^2.1
+composer update nowo-tech/site-backup-bundle
+php bin/console cache:clear
+```
+
+1. Point `nowo_ui_kit.layouts.admin` and `.guest` at your layouts (or one-file bridges into your base layout) that
+   render the UiKit canonical blocks (`nowo_ui_document_title`, `nowo_ui_head`, `nowo_ui_styles`, `nowo_ui_navigation`
+   (admin), `nowo_ui_page_header`, `nowo_ui_flashes`, `nowo_ui_content`, `nowo_ui_modals`, `nowo_ui_scripts`), load
+   `nowo-ui.css` + `nowo_ui_tokens()` and the UiKit scripts (`nowo-ui-confirm.js` for the restore / delete dialogs).
+   Example: UiKit `docs/PAGE_CONTRACT.md#example-host-integration` or `demo/symfony8/templates/layouts/`.
+2. **The guest layout renders the setup wizard on a cold start** (no database, no schema, no users): it must not call
+   database-backed Twig (user menus, DB navigation). Use UiKit's guest layout or a minimal bridge if yours does.
+3. Remove `panel.layout_template` / `setup.layout_template` (or move them to `web_ui.layout_template` /
+   `web_ui.guest_layout_template` only to give these pages other layouts — they must render the same blocks).
+4. Move the deprecated keys below and delete page copies under `templates/bundles/NowoSiteBackupBundle/`.
+
+### Template contract
+
+What hosts may notice:
+
+- **Pages → scaffolds.** `panel/index` and `panel/history` extend `@NowoUiKit/page/list.html.twig`, new
+  `panel/create` extends `page/form`, new `panel/confirm` extends `page/confirm`, `panel/login` and `setup/token` extend
+  `page/auth`, `setup/wizard` and `setup/done` extend `page/wizard`. Each page receives `page` (UiKit view model) plus
+  the context listed in [TEMPLATES.md](TEMPLATES.md). The 1.x panel variables (`backups`, `history`, `error`,
+  `success`, `csrfToken`, `createForm`, `clearRestoreForm`, `logoutForm`, `backupForms`, `loginForm`,
+  `protectionEnabled`, `misconfigured`, `pathPrefix`) are gone (`messages`, `progress`, `clear_restore`, `path_prefix`,
+  `throttled` remain); the setup pages keep `progress`, `steps`, `currentStep`, `reasons`, `error`, `wizardForm`,
+  `advanceMode`, `progressUrl`, `pathPrefix`, `brandName` (`tokenForm` is `page.form`).
+- **Removed templates:** `panel/layout.html.twig`, `panel/_flashes.html.twig`, `setup/layout.html.twig`,
+  `setup/_styles.html.twig`, `setup/admin.html.twig`, `setup/database.html.twig`, `setup/sample_data.html.twig`.
+  New: `_messages.html.twig`, `panel/_restore_status.html.twig`, `panel/create.html.twig`, `panel/confirm.html.twig`,
+  `panel/_legacy_layout.html.twig` and `setup/_legacy_layout.html.twig` (deprecated bridges).
+- **Blocks:** the `nowo_site_backup_*` blocks are gone. Overrides move to the UiKit data blocks or to the theme:
+
+  | 1.x block | 1.21 |
+  | --- | --- |
+  | `nowo_site_backup_panel_content`, `nowo_site_backup_content` (in your layout) | `nowo_ui_content` (render the canonical blocks; 1.x layouts with only these blocks are bridged, deprecated) |
+  | `nowo_site_backup_html_lang`, `_html_class`, `_body_class`, `_panel_styles`, `_panel_brand`, `_panel_nav`, `_theme_tokens`, `_styles`, `_brand`, `_logo` | your layout + `nowo_ui_kit.theme.tokens`; the Backups \| History nav is `page.header.tabs` |
+  | `nowo_site_backup_create_section` | the create page (`panel/create`, `nowo_ui_form_body`) |
+  | `nowo_site_backup_restore_section` | `panel/_restore_status.html.twig` in `nowo_ui_flashes` |
+  | `nowo_site_backup_archives_section`, `nowo_site_backup_row_actions`, `nowo_site_backup_history_row`, `nowo_site_backup_history_heading` | `nowo_ui_list_row` (cells), `nowo_ui_list_head`, `nowo_ui_list_after`; row actions from the view model (`row_actions` partial / slots) |
+  | `nowo_site_backup_logout`, `nowo_site_backup_confirm_script` | header action / UiKit confirm `<dialog>` (`nowo-ui-confirm.js`) |
+  | `nowo_site_backup_login_*` | `nowo_ui_auth_fields`, `nowo_ui_auth_actions`, `nowo_ui_auth_footer` |
+  | `nowo_site_backup_token_*` | `nowo_ui_auth_footer` (how-to), `page/auth` regions |
+  | `setup_body`, `nowo_site_backup_title` | `nowo_ui_wizard_step`, `nowo_ui_document_title` |
+
+- **Confirmations:** the `data-nowo-confirm` attribute and its `window.confirm()` listener are gone. Restore opens the
+  UiKit confirm dialog and asks to type the backup id; delete opens the confirm dialog. Without JavaScript the
+  `<noscript>` links open `GET {path_prefix}/restore/{id}` and `GET {path_prefix}/delete/{id}` (POST with CSRF).
+- **Create:** the inline create form moved to `GET {path_prefix}/create` (header action "Create backup"); it still
+  POSTs `action=create` to the panel index. A failed create answers 422 with the form.
+- **Restore status** shows only once a restore ran (phase ≠ idle), above the archives, with "Clear status".
+- **Markup / test ids:** new `data-testid` values `nowo-sbb-archives`, `nowo-sbb-create`, `nowo-sbb-create-form`,
+  `nowo-sbb-logout`, `nowo-sbb-verify`, `nowo-sbb-restore`, `nowo-sbb-delete`, `nowo-sbb-restore-status`,
+  `nowo-sbb-restore-confirm`, `nowo-sbb-delete-confirm`, `nowo-sbb-history`, `nowo-sbb-login`, `nowo-sbb-setup-wizard`,
+  `nowo-sbb-setup-done`, `nowo-sbb-setup-reasons`, `nowo-sbb-setup-log`, `nowo-sbb-nav-panel`, `nowo-sbb-nav-history`;
+  kept `nowo-sbb-token-gate`; `data-phase` on the restore status and the wizard root. The auto-advance form id is
+  `nowo-sbb-auto-advance` (was `auto-advance`).
+- **Classes:** markup carries `nowo-ui-*` classes plus the theme slot classes of `nowo_ui_kit.css_framework`; the
+  1.x `card`, `danger`, `flash ok|err`, `steps span.on|done`, `bar`, `warn`, `log`, `actions`, `secondary` classes are
+  gone.
+- **Translations:** new keys `panel.nav.label`, `panel.index.empty_hint`, `panel.history.intro`, `panel.create.intro`,
+  `panel.confirm.*`, `panel.login.intro`, `panel.error.backup_not_found`, `setup.wizard.progress`,
+  `setup.database.field_label`, `setup.done.step` — add them if you override the `NowoSiteBackupBundle` domain.
+- **Restore loading page** (`restore/page.html.twig`) is unchanged: it stays a self-contained page.
+
+### Configuration
+
+| 1.x key | 1.21 | Action |
+| --- | --- | --- |
+| `panel.enabled`, `panel.path_prefix` | deprecated aliases | `web_ui.enabled`, `web_ui.path_prefix` (the canonical key wins); parameter `nowo.site_backup.panel.path_prefix` keeps the value |
+| `panel.layout_template`, `templates.panel_layout` | deprecated aliases | `web_ui.layout_template` (null = `nowo_ui_kit.layouts.admin`; the 1.x default `@NowoSiteBackupBundle/panel/layout.html.twig` maps to null) |
+| `setup.layout_template`, `templates.setup_layout` | deprecated aliases | `web_ui.guest_layout_template` (null = `nowo_ui_kit.layouts.guest`). Now also used by the panel sign-in |
+| `templates.panel_index`, `panel_login`, `panel_history`, `setup_wizard`, `setup_token`, `setup_done`, `restore_page` | deprecated aliases | `web_ui.templates.index`, `login`, `history`, `setup_wizard`, `setup_token`, `setup_done`, `restore_page` |
+| `templates.setup_admin`, `setup_sample`, `setup_database` | deprecated, no effect | the steps render inside `setup/wizard.html.twig` |
+| `css_framework` (root) | deprecated (default `null`) | set `nowo_ui_kit.css_framework`; when set here it is still seeded into UiKit. **Changed:** without it the bundle no longer forces `custom` on UiKit |
+| `panel.row_actions_display` | deprecated (default `null`) | `nowo_ui_kit.row_actions_display`; `text` \| `icon` \| `icon_text` still force the Verify / Restore / Delete display (`kit` = UiKit) |
+| `panel.extra_classes` | deprecated, bridged | prepended into `nowo_ui_kit.theme.bundles.NowoSiteBackupBundle.classes`: `card` → `card`, `table` → `table`, `input` → `input`, `button` → `btn_primary`, `btn_secondary`, `action` (appended to the framework defaults, as in 1.x). Your own `theme.bundles` config wins |
 
 ## To 1.20.0
 

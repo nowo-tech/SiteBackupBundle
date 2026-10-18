@@ -13,7 +13,7 @@ make -C demo help
 make -C demo up-symfony8
 ```
 
-- Panel: `/_site_backup` (demo password: `password`) — host `panel.layout_template`
+- Panel: `/_site_backup` (demo password: `password`) — UiKit scaffolds in the demo host layouts (`templates/layouts/`)
 - Setup wizard: `/_setup` redirects to `/en/_setup` (`locale.in_path: both`); also `/es/_setup`
 - Fresh install reset: `php bin/console nowo:site-backup:setup-reset --mark-required=fresh_install -y`
 - Custom tab profile: `… --mark-required=demo_features -y` then `/_setup?profile=demo_features`

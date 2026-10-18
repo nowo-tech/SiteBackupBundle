@@ -1,0 +1,36 @@
+{#
+  Demo host layout — the one-file bridge of REQ-UI-003 (nowo_ui_kit.layouts.admin): extends the demo base and
+  renders every UiKit canonical block. The Site Backup panel pages (UiKit scaffolds) render inside it; no bundle
+  layout, no CDN.
+#}
+{% extends 'base.html.twig' %}
+
+{% block html_attributes %}{% if nowo_ui_theme.hasTokens() %} data-nowo-ui-host-tokens{% endif %}{% endblock %}
+
+{% block title %}{% block nowo_ui_document_title %}{% endblock %} · Site Backup Demo{% endblock %}
+
+{% block stylesheets %}
+    <link rel="stylesheet" href="{{ asset('css/nowo-ui.css', 'nowo_ui_kit') }}">
+    {{ nowo_ui_tokens() }}
+    {% block nowo_ui_head %}{% endblock %}
+    {% block nowo_ui_styles %}{% endblock %}
+{% endblock %}
+
+{% block body %}
+    {% block nowo_ui_navigation %}{% endblock %}
+    <main id="nowo-ui-content" class="demo-page"{% if nowo_ui_bundle|default(null) %} data-nowo-ui-bundle="{{ nowo_ui_bundle }}"{% endif %}>
+        {% block nowo_ui_page_header %}{% endblock %}
+        {% block nowo_ui_flashes %}
+            {{ include(nowo_ui_partial('flashes', nowo_ui_bundle|default(null)), {bundle: nowo_ui_bundle|default(null)}) }}
+        {% endblock %}
+        {% block nowo_ui_content %}{% endblock %}
+    </main>
+    {% block nowo_ui_modals %}{% endblock %}
+{% endblock %}
+
+{% block javascripts %}
+    {% for _script in ['nowo-ui-confirm', 'nowo-ui-dialog', 'nowo-ui-toast'] %}
+        <script src="{{ asset('js/' ~ _script ~ '.js', 'nowo_ui_kit') }}" defer></script>
+    {% endfor %}
+    {% block nowo_ui_scripts %}{% endblock %}
+{% endblock %}

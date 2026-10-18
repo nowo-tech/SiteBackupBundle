@@ -4,9 +4,9 @@
 
 {% block body %}
     <h1>Site Backup Bundle — demo</h1>
-    <p>Showcases recent bundle features (layouts, CSS hint, locale-in-path, custom gate detector, custom tab checker).</p>
+    <p>Showcases the bundle features: backup panel and setup wizard on the UiKit page contract (host layouts + theme), locale-in-path, custom gate detector, custom tab checker.</p>
     <p>
-        <span class="pill">css_framework={{ css_framework }}</span>
+        <span class="pill">nowo_ui_kit.css_framework={{ css_framework }}</span>
         <span class="pill">locale.in_path=both</span>
         <span class="pill">progress_storage=chain</span>
     </p>
@@ -14,7 +14,7 @@
     <section class="card">
         <h2>Quick links</h2>
         <ul>
-            <li><a href="/_site_backup">Backup panel</a> (password: <code>password</code>) — host <code>panel.layout_template</code></li>
+            <li><a href="/_site_backup">Backup panel</a> (password: <code>password</code>) — UiKit scaffolds inside <code>layouts/admin.html.twig</code></li>
             <li><a href="/_setup">Setup wizard</a> (bare URL redirects to <code>/en/_setup</code>)</li>
             <li><a href="/es/_setup">Setup in Spanish path</a></li>
             <li>CLI: <code>php bin/console nowo:site-backup:create -l demo</code></li>
@@ -74,8 +74,7 @@
     <section class="card">
         <h2>Feature map</h2>
         <ul>
-            <li><strong>1.5</strong> — <code>setup</code>/<code>panel.layout_template</code> + Twig globals + <code>nowo-ui-*</code></li>
-            <li><strong>1.6</strong> — <code>css_framework</code> → <code>nowo_site_backup_css_framework</code> / <code>data-css-framework</code></li>
+            <li><strong>1.21</strong> — REQ-UI-003 page contract: <code>page/list</code>, <code>page/form</code>, <code>page/confirm</code> (type-to-confirm restore), <code>page/auth</code>, <code>page/wizard</code>; <code>web_ui.*</code> keys</li>
             <li><strong>1.7</strong> — <code>setup.locale.in_path: both</code> (en/es)</li>
             <li><strong>1.8</strong> — <code>#[AsSetupNeedDetector]</code> (toggle above)</li>
         </ul>

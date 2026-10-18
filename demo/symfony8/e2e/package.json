@@ -1,0 +1,16 @@
+{
+  "name": "nowo-site-backup-demo-e2e",
+  "private": true,
+  "version": "1.0.0",
+  "description": "Playwright e2e + screenshots of the Site Backup panel and setup wizard on the UiKit page contract (REQ-UI-003, REQ-DEMO-013)",
+  "scripts": {
+    "test": "playwright test",
+    "test:screenshots": "playwright test --project=screenshots",
+    "install-browsers": "playwright install chromium",
+    "to-webp": "node scripts/to-webp.mjs"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.58.2",
+    "sharp": "^0.34.4"
+  }
+}

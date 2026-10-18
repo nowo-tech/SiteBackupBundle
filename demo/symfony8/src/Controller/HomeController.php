@@ -26,7 +26,7 @@ final class HomeController extends AbstractController
     public function __construct(
         #[Autowire('%kernel.project_dir%')]
         private readonly string $projectDir,
-        #[Autowire('%nowo.site_backup.css_framework%')]
+        #[Autowire('%nowo_ui_kit.css_framework%')]
         private readonly string $cssFramework,
         private readonly ?CsrfTokenManagerInterface $csrfTokenManager = null,
     ) {

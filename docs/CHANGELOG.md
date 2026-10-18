@@ -52,6 +52,56 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **UiKit 2.1 page contract (REQ-UI-003).** The panel and setup pages extend UiKit scaffolds and are themed once in
+  `nowo_ui_kit` for every Nowo bundle: archives and history → `page/list`, new create-backup page → `page/form`
+  (`GET {path_prefix}/create`), new no-JS restore / delete confirmations → `page/confirm`
+  (`GET {path_prefix}/restore/{id}`, `GET {path_prefix}/delete/{id}`), panel sign-in and setup token → `page/auth`
+  (guest layout), setup wizard and done → `page/wizard` (guest layout, final "Done" step). View models are built by
+  `View\PanelPages` / `View\SetupPages` and rendered by `View\SiteBackupView` (no database service: the wizard renders
+  before the app has a schema or users). See [TEMPLATES.md](TEMPLATES.md).
+- **Type-to-confirm restore.** Restoring an archive asks to type its id in the UiKit confirm dialog (and on the no-JS
+  confirm page); delete uses the UiKit confirm dialog. Both keep their CSRF forms.
+- Canonical keys `web_ui.enabled`, `web_ui.path_prefix`, `web_ui.layout_template` (admin pages, null = UiKit),
+  `web_ui.guest_layout_template` (sign-in + setup, null = UiKit) and `web_ui.templates.<page>`.
+- Panel area navigation (Backups | History) as `PageHeader::tabs`, published to the UiKit area-nav registry as area
+  `site_backup` (`SiteBackupView` implements `AreaNavProviderInterface`).
+- Contract tests on UiKit `PageContractTestCase` (English and German catalogues), controller flow tests (panel, and the
+  setup wizard without any database), demo Playwright e2e + WebP screenshots (`make -C demo/symfony8 test-e2e`,
+  `demo-screenshots`).
+
+### Changed
+
+- Requires `nowo-tech/ui-kit-bundle` `^2.1`.
+- Pages render inside `nowo_ui_kit.layouts.admin` / `.guest` instead of the bundle's standalone layouts; restore status
+  and POST results render through the UiKit flash slots; row actions are UiKit `Action`s (`nowo_ui_kit.row_actions_display`).
+- Form types carry their labels / help / placeholders (`translation_domain: NowoSiteBackupBundle`).
+- Without the deprecated root `css_framework`, the bundle no longer seeds `nowo_ui_kit.css_framework: custom` /
+  `icon_set` (UiKit defaults apply).
+- A failed create (CSRF / archiver error) re-renders the create form with HTTP 422.
+
+### Deprecated
+
+- `panel.enabled`, `panel.path_prefix`, `panel.layout_template`, `setup.layout_template`, `templates.*` (aliases of the
+  `web_ui` keys; `templates.setup_admin|setup_sample|setup_database` have no effect), root `css_framework`,
+  `panel.row_actions_display` (use `nowo_ui_kit`), `panel.extra_classes` (bridged into
+  `nowo_ui_kit.theme.bundles.NowoSiteBackupBundle.classes`), the Twig globals `nowo_site_backup_*_layout_template`,
+  `nowo_site_backup_css_framework`, `nowo_site_backup_row_actions_display`, `nowo_site_backup_panel_classes`, and the
+  1.x layout bridges `panel/_legacy_layout.html.twig` / `setup/_legacy_layout.html.twig`. Removed in 2.0.
+
+### Removed
+
+- Templates `panel/layout.html.twig`, `panel/_flashes.html.twig`, `setup/layout.html.twig`, `setup/_styles.html.twig`,
+  `setup/admin.html.twig`, `setup/database.html.twig`, `setup/sample_data.html.twig`, the `data-nowo-confirm` listener
+  and the inline `<style>` blocks of the panel / setup pages (the restore loading page keeps its own).
+
+### Fixed
+
+- The setup and restore gates no longer redirect the Symfony toolbar / profiler (`/_wdt/`, `/_profiler/`): the toolbar
+  of every gated page embedded the wizard page.
+- Demo: the panel password hash (`password`) was invalid.
+
 ## [1.20.0] - 2026-10-15
 
 ### Added

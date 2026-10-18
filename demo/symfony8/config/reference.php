@@ -1063,8 +1063,30 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *         forbidden_app_secrets?: list<scalar|Param|null>,
  *         app_secret_min_length?: int|Param, // Default: 16
  *         skip_console_commands?: list<scalar|Param|null>,
+ *         check_password_hash_shape?: bool|Param, // v1.20+: refuse a panel password_hash that password_get_info() does not recognise (e.g. a bcrypt hash cut by Docker Compose "$" interpolation). // Default: true
+ *         extra_secrets?: list<array{ // Default: []
+ *             label?: scalar|Param|null,
+ *             value?: scalar|Param|null, // Usually an env placeholder, e.g. %env(default::MERCURE_JWT_SECRET)%. // Default: null
+ *             min_length?: int|Param, // Default: 0
+ *             forbidden?: list<scalar|Param|null>,
+ *             required?: bool|Param, // Default: false
+ *         }>,
+ *         dsn_credentials?: list<array{ // Default: []
+ *             label?: scalar|Param|null,
+ *             value?: scalar|Param|null, // Usually an env placeholder, e.g. %env(default::MESSENGER_TRANSPORT_DSN)%. // Default: null
+ *             schemes?: list<scalar|Param|null>,
+ *             forbidden_credentials?: list<scalar|Param|null>,
+ *             password_fallback?: scalar|Param|null, // A non-empty value here also satisfies the password check (e.g. %env(default::REDIS_PASSWORD)% when REDIS_URL is built without it). // Default: null
+ *         }>,
  *     },
- *     css_framework?: "bootstrap"|"bootstrap4"|"bootstrap5"|"tailwind"|"foundation"|"custom"|"tabler"|"none"|Param, // Host CSS stack hint for setup/panel Web UI (REQ-UI-001). Twig global nowo_site_backup_css_framework. Demo default: custom (semantic nowo-ui-*). // Default: "custom"
+ *     css_framework?: "bootstrap"|"bootstrap4"|"bootstrap5"|"tailwind"|"foundation"|"custom"|"tabler"|"none"|Param|null, // Deprecated: The "nowo_site_backup.css_framework.css_framework" option is deprecated, set "nowo_ui_kit.css_framework" instead. // Deprecated since 1.21: set nowo_ui_kit.css_framework. When set here (and not on UiKit) it is still seeded into nowo_ui_kit.css_framework / icon_set. null = UiKit decides. // Default: null
+ *     web_ui?: array{ // REQ-UI-003 Web UI: the panel and setup pages extend the UiKit scaffolds; theme them once in nowo_ui_kit.theme.
+ *         enabled?: bool|Param, // Register the backup panel routes (/, /history, /create, /restore/{id}, /delete/{id}, /progress.json). // Default: true
+ *         path_prefix?: scalar|Param|null, // URL prefix of the backup panel. // Default: "/_site_backup"
+ *         layout_template?: scalar|Param|null, // Layout the panel scaffolds extend instead of nowo_ui_kit.layouts.admin (null = UiKit layout). It must render the UiKit canonical blocks; a 1.x layout without nowo_ui_content is bridged (deprecated). // Default: null
+ *         guest_layout_template?: scalar|Param|null, // Layout of the guest pages (panel login, setup wizard, setup token) instead of nowo_ui_kit.layouts.guest (null = UiKit layout). The setup wizard renders it before the app has a database: it must not need DB services. A 1.x layout without nowo_ui_content is bridged (deprecated). // Default: null
+ *         templates?: array<string, scalar|Param|null>,
+ *     },
  *     backup?: array{ // What is included in an integral backup.
  *         include_paths?: list<scalar|Param|null>,
  *         exclude_patterns?: list<scalar|Param|null>,
@@ -1077,11 +1099,11 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *         stale_after_seconds?: int|Param, // v1.19+: an active restore whose progress was not updated for this many seconds is treated as abandoned (dead worker / killed process): the loading page stops being served and a new restore may start. null = 2 × process_timeout; 0 = never (pre-1.19 behaviour). // Default: null
  *     },
  *     panel?: array{
- *         enabled?: bool|Param, // Default: true
- *         path_prefix?: scalar|Param|null, // Default: "/_site_backup"
- *         layout_template?: scalar|Param|null, // Host Twig layout for panel pages (global nowo_site_backup_panel_layout_template). Must define block nowo_ui_content / nowo_site_backup_panel_content. Default: bundle standalone panel layout. // Default: null
- *         row_actions_display?: "text"|"icon"|"icon_text"|"kit"|Param, // v1.18+: archive row actions (Verify / Restore / Delete) as text buttons (default, pre-1.18 markup), icon-only, icon + text, or "kit" to follow the UiKit global nowo_ui_kit_row_actions_display. Twig global nowo_site_backup_row_actions_display. // Default: "text"
- *         extra_classes?: array{ // v1.18+: extra CSS classes appended to panel markup (Twig global nowo_site_backup_panel_classes), so hosts do not fork templates only to add classes.
+ *         enabled?: bool|Param, // Deprecated: The "nowo_site_backup.panel.enabled.enabled" option is deprecated, use "nowo_site_backup.web_ui.enabled" instead. // Deprecated alias of web_ui.enabled.
+ *         path_prefix?: scalar|Param|null, // Deprecated: The "nowo_site_backup.panel.path_prefix.path_prefix" option is deprecated, use "nowo_site_backup.web_ui.path_prefix" instead. // Deprecated alias of web_ui.path_prefix.
+ *         layout_template?: scalar|Param|null, // Deprecated: The "nowo_site_backup.panel.layout_template.layout_template" option is deprecated, use "nowo_site_backup.web_ui.layout_template" (null = nowo_ui_kit.layouts.admin) instead. // Deprecated alias of web_ui.layout_template.
+ *         row_actions_display?: "text"|"icon"|"icon_text"|"kit"|Param|null, // Deprecated: The "nowo_site_backup.panel.row_actions_display.row_actions_display" option is deprecated, set "nowo_ui_kit.row_actions_display" instead. // Deprecated since 1.21: archive row actions follow nowo_ui_kit.row_actions_display. text | icon | icon_text still force a display on the Verify / Restore / Delete actions; kit / null = UiKit. // Default: null
+ *         extra_classes?: array{ // Deprecated: The "nowo_site_backup.panel.extra_classes.extra_classes" option is deprecated, use "nowo_ui_kit.theme.bundles.NowoSiteBackupBundle.classes" (UiKit theme slots) instead. // Deprecated since 1.21: bridged into nowo_ui_kit.theme.bundles.NowoSiteBackupBundle.classes (card → card, table → table, input → input, button → btn_primary, btn_secondary and action).
  *             card?: scalar|Param|null, // Default: ""
  *             table?: scalar|Param|null, // Default: ""
  *             button?: scalar|Param|null, // Default: ""
@@ -1114,24 +1136,24 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *     storage?: array{
  *         history_file?: scalar|Param|null, // Default: "%kernel.project_dir%/var/site-backup/history.jsonl"
  *     },
- *     templates?: array{
- *         restore_page?: scalar|Param|null, // Default: "@NowoSiteBackupBundle/restore/page.html.twig"
- *         panel_layout?: scalar|Param|null, // Default: "@NowoSiteBackupBundle/panel/layout.html.twig"
- *         panel_index?: scalar|Param|null, // Default: "@NowoSiteBackupBundle/panel/index.html.twig"
- *         panel_login?: scalar|Param|null, // Default: "@NowoSiteBackupBundle/panel/login.html.twig"
- *         panel_history?: scalar|Param|null, // Default: "@NowoSiteBackupBundle/panel/history.html.twig"
- *         setup_wizard?: scalar|Param|null, // Default: "@NowoSiteBackupBundle/setup/wizard.html.twig"
- *         setup_layout?: scalar|Param|null, // Twig layout extended by setup wizard/done/token. Prefer setup.layout_template. // Default: "@NowoSiteBackupBundle/setup/layout.html.twig"
- *         setup_admin?: scalar|Param|null, // Default: "@NowoSiteBackupBundle/setup/admin.html.twig"
- *         setup_sample?: scalar|Param|null, // Default: "@NowoSiteBackupBundle/setup/sample_data.html.twig"
- *         setup_database?: scalar|Param|null, // Default: "@NowoSiteBackupBundle/setup/database.html.twig"
- *         setup_done?: scalar|Param|null, // Default: "@NowoSiteBackupBundle/setup/done.html.twig"
- *         setup_token?: scalar|Param|null, // Default: "@NowoSiteBackupBundle/setup/token.html.twig"
+ *     templates?: array{ // Deprecated since 1.21: per-page templates moved to web_ui.templates.<page>, layouts to web_ui.layout_template / guest_layout_template.
+ *         restore_page?: scalar|Param|null, // Deprecated: The "nowo_site_backup.templates.restore_page.restore_page" option is deprecated, use "nowo_site_backup.web_ui.templates.restore_page" instead. // Default: null
+ *         panel_layout?: scalar|Param|null, // Deprecated: The "nowo_site_backup.templates.panel_layout.panel_layout" option is deprecated, use "nowo_site_backup.web_ui.layout_template" instead. // Default: null
+ *         panel_index?: scalar|Param|null, // Deprecated: The "nowo_site_backup.templates.panel_index.panel_index" option is deprecated, use "nowo_site_backup.web_ui.templates.index" instead. // Default: null
+ *         panel_login?: scalar|Param|null, // Deprecated: The "nowo_site_backup.templates.panel_login.panel_login" option is deprecated, use "nowo_site_backup.web_ui.templates.login" instead. // Default: null
+ *         panel_history?: scalar|Param|null, // Deprecated: The "nowo_site_backup.templates.panel_history.panel_history" option is deprecated, use "nowo_site_backup.web_ui.templates.history" instead. // Default: null
+ *         setup_wizard?: scalar|Param|null, // Deprecated: The "nowo_site_backup.templates.setup_wizard.setup_wizard" option is deprecated, use "nowo_site_backup.web_ui.templates.setup_wizard" instead. // Default: null
+ *         setup_layout?: scalar|Param|null, // Deprecated: The "nowo_site_backup.templates.setup_layout.setup_layout" option is deprecated, use "nowo_site_backup.web_ui.guest_layout_template" instead. // Default: null
+ *         setup_admin?: scalar|Param|null, // Deprecated: The "nowo_site_backup.templates.setup_admin.setup_admin" option is deprecated, it has no effect (the setup steps render inside setup/wizard.html.twig). // Default: null
+ *         setup_sample?: scalar|Param|null, // Deprecated: The "nowo_site_backup.templates.setup_sample.setup_sample" option is deprecated, it has no effect (the setup steps render inside setup/wizard.html.twig). // Default: null
+ *         setup_database?: scalar|Param|null, // Deprecated: The "nowo_site_backup.templates.setup_database.setup_database" option is deprecated, it has no effect (the setup steps render inside setup/wizard.html.twig). // Default: null
+ *         setup_done?: scalar|Param|null, // Deprecated: The "nowo_site_backup.templates.setup_done.setup_done" option is deprecated, use "nowo_site_backup.web_ui.templates.setup_done" instead. // Default: null
+ *         setup_token?: scalar|Param|null, // Deprecated: The "nowo_site_backup.templates.setup_token.setup_token" option is deprecated, use "nowo_site_backup.web_ui.templates.setup_token" instead. // Default: null
  *     },
  *     setup?: array{ // Cold-start / post-restore setup wizard.
  *         enabled?: bool|Param, // Default: true
  *         path_prefix?: scalar|Param|null, // Default: "/_setup"
- *         layout_template?: scalar|Param|null, // Host Twig layout for setup pages (extends pattern like CookieConsent layout_template). Must define block nowo_site_backup_content. Default uses the bundle standalone layout. // Default: null
+ *         layout_template?: scalar|Param|null, // Deprecated: The "nowo_site_backup.setup.layout_template.layout_template" option is deprecated, use "nowo_site_backup.web_ui.guest_layout_template" (null = nowo_ui_kit.layouts.guest) instead. // Deprecated alias of web_ui.guest_layout_template.
  *         require_done_marker?: bool|Param, // When true, missing setup.done forces the wizard (fresh clones). Default false so adding the bundle does not lock existing apps. // Default: false
  *         short_circuit_when_done?: bool|Param, // When true (default), SetupNeedEvaluator skips all detectors if setup.done exists or DurableSetupDoneStoreInterface::isDone() is true. Set false if a host detector must re-open the gate after done. // Default: true
  *         reopen_when_detector_requires?: bool|Param, // When true (v1.15+), short_circuit_when_done no longer hides detectors: if setup.done / the durable store says complete but a tagged SetupNeedDetector still requires setup, setup.done and the durable store are cleared and progress is reset so the wizard can run again (SetupWizardReopener). Default false (BC). Costs one detector pass per request (the Doctrine detectors reuse a healthy answer for setup.worker_memo.schema_probe_ttl). // Default: false
@@ -1248,6 +1270,7 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *             }>,
  *         }>,
  *     },
+ *     ...<string, mixed>
  * }
  * @psalm-type NowoUiKitConfig = array{
  *     css_framework?: "bootstrap"|"bootstrap5"|"bootstrap4"|"tailwind"|"foundation"|"custom"|"tabler"|"none"|Param, // Host CSS stack: bootstrap5|bootstrap4|tailwind|foundation|custom|none|tabler (bootstrap alias → bootstrap5). // Default: "bootstrap5"
@@ -1261,6 +1284,93 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *         cache_ttl?: int|Param, // Seconds to cache the GitHub answer (cache.app). Default 12h. // Default: 43200
  *         default_branch?: scalar|Param|null, // Branch used as compare target when the installed version is already the latest. // Default: "main"
  *         user_agent?: scalar|Param|null, // User-Agent sent to api.github.com. // Default: "nowo-ui-kit-release-check"
+ *     },
+ *     route_links?: array{ // Route (or route prefix) → link map read by nowo_ui_route_link(), e.g. for the page-edge "manual" tab (partials/_edge_tab.html.twig). A prefix matches the route itself or any route starting with "<prefix>_"; the longest prefix wins.
+ *         base_url?: scalar|Param|null, // Prepended to every relative path (paths starting with "/", "//", "http://" or "https://" are used as is). // Default: ""
+ *         default_testid?: scalar|Param|null, // testid returned for entries without their own. // Default: null
+ *         routes?: array<string, Param|string|array{ // Default: []
+ *             path?: scalar|Param|null,
+ *             testid?: scalar|Param|null, // Default: null
+ *         }>,
+ *     },
+ *     appearance?: array{ // Optional site appearance SPI (presets, --nowo-ui-* token emitter, Twig functions). Off by default.
+ *         enabled?: bool|Param, // Default: false
+ *         provider?: scalar|Param|null, // Service id implementing AppearanceProviderInterface (host storage). Null = the config defaults below. // Default: null
+ *         defaults?: array{
+ *             brand_name?: scalar|Param|null, // Default: ""
+ *             brand_eyebrow?: scalar|Param|null, // Default: ""
+ *             preset?: scalar|Param|null, // Preset whose light colours are the default. // Default: "slate"
+ *             preset_dark?: scalar|Param|null, // Preset whose dark colours are the default. // Default: "midnight"
+ *             corner_style?: "sharp"|"soft"|"rounded"|Param, // Default: "soft"
+ *             border_strength?: "subtle"|"medium"|"strong"|Param, // Default: "medium"
+ *             footer_fixed?: bool|Param, // Default: false
+ *         },
+ *         presets?: array<string, array{ // Default: []
+ *             mode?: "light"|"dark"|Param, // Default: "light"
+ *             light?: array{
+ *                 accent?: scalar|Param|null,
+ *                 accent_deep?: scalar|Param|null,
+ *                 danger?: scalar|Param|null,
+ *                 warn?: scalar|Param|null,
+ *                 paper?: scalar|Param|null,
+ *                 ink?: scalar|Param|null,
+ *                 surface?: scalar|Param|null,
+ *             },
+ *             dark?: array{
+ *                 accent?: scalar|Param|null,
+ *                 accent_deep?: scalar|Param|null,
+ *                 danger?: scalar|Param|null,
+ *                 warn?: scalar|Param|null,
+ *                 paper?: scalar|Param|null,
+ *                 ink?: scalar|Param|null,
+ *                 surface?: scalar|Param|null,
+ *             },
+ *         }>,
+ *         builtin_presets?: list<scalar|Param|null>,
+ *         kit_tokens?: bool|Param, // Emit the --nowo-ui-* tokens. False = only the token_aliases are written. // Default: true
+ *         token_aliases?: array<string, list<scalar|Param|null>>,
+ *         selectors?: array{ // Selectors of the three emitted blocks.
+ *             root?: scalar|Param|null, // Default: ":root"
+ *             light?: scalar|Param|null, // Default: ":root, [data-theme=\"light\"]"
+ *             dark?: scalar|Param|null, // Default: "[data-theme=\"dark\"]"
+ *         },
+ *         shadow_rgb_fallback?: scalar|Param|null, // --nowo-ui-shadow-rgb when the light ink colour is not hex ("r g b"). // Default: "15 23 42"
+ *     },
+ *     layouts?: array{ // Layouts the page scaffolds extend (Twig global nowo_ui_layout). Host layouts or one-file bridges must render the canonical nowo_ui_* blocks.
+ *         admin?: scalar|Param|null, // Default: "@NowoUiKit/layout/admin.html.twig"
+ *         guest?: scalar|Param|null, // Default: "@NowoUiKit/layout/guest.html.twig"
+ *     },
+ *     breadcrumbs?: array{ // Page header breadcrumbs: BreadcrumbKit (breadcrumb_render) when installed and enabled here, else the plain trail from PageHeader::breadcrumbs.
+ *         breadcrumb_kit?: bool|Param, // Use BreadcrumbKit when its breadcrumb_render() Twig function exists. // Default: true
+ *         collection?: scalar|Param|null, // BreadcrumbKit collection code (null = its default collection). PageHeader::breadcrumbCollection overrides it. // Default: null
+ *     },
+ *     theme?: array{ // Global theme (REQ-UI-003): semantic slot classes / attributes, partial overrides and --nowo-ui-* tokens, configured once for every bundle.
+ *         framework_defaults?: bool|Param, // false = slots print the semantic nowo-ui-* class and the host classes only (no UiKit framework defaults such as btn / badge / card). Per slot: classes.<slot>: {value: …, framework_defaults: false}. // Default: true
+ *         classes?: array<string, mixed>,
+ *         attributes?: array<string, array<string, mixed>>,
+ *         partials?: array<string, scalar|Param|null>,
+ *         tokens?: array<string, mixed>,
+ *         tokens_dark?: array<string, mixed>,
+ *         confirm_message_in_header?: bool|Param, // Confirm dialogs and the full-page confirm render the message inside the header, under the title (hosts whose dialog header is title + message). View\Confirm::messageInHeader wins when set. // Default: false
+ *         bundles?: array<string, array{ // Default: []
+ *             framework_defaults?: bool|Param, // Override of theme.framework_defaults for this bundle (unset = inherit).
+ *             classes?: array<string, mixed>,
+ *             attributes?: array<string, array<string, mixed>>,
+ *             partials?: array<string, scalar|Param|null>,
+ *             tokens?: array<string, mixed>,
+ *             tokens_dark?: array<string, mixed>,
+ *             pages?: array<string, array{ // Default: []
+ *                 framework_defaults?: bool|Param, // Override of theme.framework_defaults for this page type (unset = inherit).
+ *                 classes?: array<string, mixed>,
+ *                 attributes?: array<string, array<string, mixed>>,
+ *             }>,
+ *         }>,
+ *         pages?: array<string, array{ // Default: []
+ *             framework_defaults?: bool|Param, // Override of theme.framework_defaults for this page type (unset = inherit).
+ *             classes?: array<string, mixed>,
+ *             attributes?: array<string, array<string, mixed>>,
+ *             header_actions_in_filters?: bool|Param, // list only: render the page-header actions at the end of the filter row instead of the page header (ListPage::headerActionsInFilters wins when set; unset = false).
+ *         }>,
  *     },
  * }
  * @psalm-type ConfigType = array{
