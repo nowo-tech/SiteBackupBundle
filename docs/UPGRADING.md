@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.21.2](#to-1212)
 - [To 1.21.1](#to-1211)
 - [To 1.21.0](#to-1210)
   - [Template contract](#template-contract)
@@ -100,6 +101,14 @@
   - [Breaking changes](#breaking-changes-1)
 
 ## Unreleased
+
+## To 1.21.2
+
+From **1.21.1**:
+
+```bash
+composer update nowo-tech/site-backup-bundle
+```
 
 ## To 1.21.1
 
