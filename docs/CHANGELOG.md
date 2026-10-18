@@ -67,6 +67,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   2.0 `flashes` input is deprecated in UiKit 2.2).
 - Demo: the host layout prints the UiKit runtimes through the UiKit `scripts` partial (the hand-kept list lacked
   `modal`, `tabs` and `theme`).
+- README / docs screenshots re-captured on UiKit 2.2 (`docs/images/demo/*.webp`, REQ-DEMO-013).
 
 ### Fixed
 
