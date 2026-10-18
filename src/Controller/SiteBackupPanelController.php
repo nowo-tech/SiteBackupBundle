@@ -212,7 +212,7 @@ final class SiteBackupPanelController
             'page'          => $this->pages->index($backups, $this->createBackupFormViews($backups), $this->createPanelActionForm('logout')->createView()),
             'messages'      => $messages,
             'progress'      => $progress,
-            'clear_restore' => new Action('custom', SiteBackupView::label('panel.index.clear_status'), $this->pathPrefix, method: 'POST', icon: 'x-circle', attributes: ['data-testid' => 'nowo-sbb-clear-restore'], form: $this->createPanelActionForm('clear_restore')->createView()),
+            'clear_restore' => new Action('custom', SiteBackupView::label('panel.index.clear_status'), $this->view->indexUrl(), method: 'POST', attributes: ['data-testid' => 'nowo-sbb-clear-restore'], form: $this->createPanelActionForm('clear_restore')->createView()),
         ]);
     }
 
@@ -427,11 +427,13 @@ final class SiteBackupPanelController
     }
 
     /**
+     * Posted to the panel index (action=create), also when rendered on the create page.
+     *
      * @return FormInterface<mixed>
      */
     private function createCreateForm(): FormInterface
     {
-        return $this->formFactory->createNamed('', CreateBackupType::class, null, $this->formOptions());
+        return $this->formFactory->createNamed('', CreateBackupType::class, null, $this->formOptions(['action' => $this->view->indexUrl()]));
     }
 
     /**

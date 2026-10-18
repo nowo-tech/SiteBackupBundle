@@ -143,7 +143,7 @@ final class PageFixtures
             'page'          => (new PanelPages(self::view($rowActionsDisplay)))->index($backups, $forms, self::actionForm('logout')),
             'messages'      => $messages,
             'progress'      => $progress ?? new RestoreProgress(),
-            'clear_restore' => new Action('custom', SiteBackupView::label('panel.index.clear_status'), self::PREFIX, method: 'POST', form: self::actionForm('clear_restore')),
+            'clear_restore' => new Action('custom', SiteBackupView::label('panel.index.clear_status'), self::PREFIX . '/', method: 'POST', form: self::actionForm('clear_restore')),
             'path_prefix'   => self::PREFIX,
         ];
     }

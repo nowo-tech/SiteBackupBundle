@@ -87,7 +87,7 @@ final class PageContractTest extends PageContractTestCase
         self::assertTrue($nav->items[1]->active);
         self::assertFalse($nav->items[0]->active);
 
-        $published = PageFixtures::view()->areaNav(SiteBackupView::AREA, ['current' => '/_site_backup']);
+        $published = PageFixtures::view()->areaNav(SiteBackupView::AREA, ['current' => '/_site_backup/']);
         self::assertNotNull($published);
         self::assertTrue($published->items[0]->active);
         self::assertNull(PageFixtures::view()->areaNav('other'));
@@ -97,11 +97,11 @@ final class PageContractTest extends PageContractTestCase
     {
         $restore = $this->renderPage(new PageFixture('@NowoSiteBackupBundle/panel/confirm.html.twig', PageFixtures::confirm('restore')))->html;
         self::assertStringContainsString('data-nowo-ui-page="confirm"', $restore);
-        self::assertStringContainsString('action="/_site_backup"', $restore);
+        self::assertStringContainsString('action="/_site_backup/"', $restore);
         self::assertStringContainsString('name="backup_id" value="20261018-101500-a1b2c3"', $restore);
         self::assertStringContainsString('value="token-nowo_site_backup_panel"', $restore);
         self::assertStringContainsString('required pattern="20261018-101500-a1b2c3"', $restore);
-        self::assertStringContainsString('href="/_site_backup"', $restore);
+        self::assertStringContainsString('href="/_site_backup/"', $restore);
 
         $delete = $this->renderPage(new PageFixture('@NowoSiteBackupBundle/panel/confirm.html.twig', PageFixtures::confirm('delete')))->html;
         self::assertStringContainsString('<input type="hidden" name="action" value="delete">', $delete);
@@ -211,6 +211,7 @@ final class PageContractTest extends PageContractTestCase
         self::assertSame(200, $form->getStatusCode());
         self::assertStringContainsString('name="label"', (string) $form->getContent());
         self::assertStringContainsString('placeholder="pre-deploy"', (string) $form->getContent());
+        self::assertStringContainsString('<form method="post" action="/_site_backup/" class="nowo-ui-form', (string) $form->getContent(), 'The create form posts to the panel index.');
 
         self::assertStringContainsString('data-nowo-ui-page="confirm"', (string) $panel->restoreConfirm($this->request('GET', [], $session), $backup->getId())->getContent());
         self::assertStringContainsString('value="delete"', (string) $panel->deleteConfirm($this->request('GET', [], $session), $backup->getId())->getContent());

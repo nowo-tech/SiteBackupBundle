@@ -457,6 +457,14 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             $prefixes[] = $setupPrefix;
         }
 
+        // v1.21: the Symfony toolbar / profiler are never site content; the setup gate redirected their XHRs, so the
+        // toolbar of every gated page embedded the wizard page.
+        foreach (['/_wdt/', '/_profiler/'] as $toolPrefix) {
+            if (!in_array($toolPrefix, $prefixes, true)) {
+                $prefixes[] = $toolPrefix;
+            }
+        }
+
         $patterns = array_values($exclusions['patterns'] ?? []);
 
         $localeConfig  = $config['setup']['locale'] ?? [];

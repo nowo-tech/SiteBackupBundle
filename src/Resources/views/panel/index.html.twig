@@ -17,10 +17,10 @@
     {% set _b = page.bundle %}
     <td class="{{ nowo_ui_class('table_cell', _b) }}" data-label="{{ 'panel.index.col_id'|trans({}, _b) }}"><code class="{{ nowo_ui_class('code', _b) }}">{{ row.id }}</code></td>
     <td class="{{ nowo_ui_class('table_cell', _b) }}" data-label="{{ 'panel.index.col_created'|trans({}, _b) }}"><time datetime="{{ row.createdAt|date('c') }}">{{ row.createdAt|date('Y-m-d H:i') }}</time></td>
-    <td class="{{ nowo_ui_class('table_cell', _b) }} nowo-ui-cell--end" data-label="{{ 'panel.index.col_size'|trans({}, _b) }}" data-nowo-ui-priority="2" data-bytes="{{ row.sizeBytes }}">{{ row.sizeBytes|number_format(0, '.', ' ') }} B</td>
     {% if row.label %}
-        <td class="{{ nowo_ui_class('table_cell', _b) }}" data-label="{{ 'panel.index.col_label'|trans({}, _b) }}" data-nowo-ui-priority="3">{{ row.label }}</td>
+        <td class="{{ nowo_ui_class('table_cell', _b) }}" data-label="{{ 'panel.index.col_label'|trans({}, _b) }}" data-nowo-ui-priority="2">{{ row.label }}</td>
     {% else %}
-        <td class="{{ nowo_ui_class('table_cell', _b) }} {{ nowo_ui_class('table_cell_muted', _b) }}" data-label="{{ 'panel.index.col_label'|trans({}, _b) }}" data-nowo-ui-priority="3">—</td>
+        <td class="{{ nowo_ui_class('table_cell', _b) }} {{ nowo_ui_class('table_cell_muted', _b) }}" data-label="{{ 'panel.index.col_label'|trans({}, _b) }}" data-nowo-ui-priority="2">—</td>
     {% endif %}
+    <td class="{{ nowo_ui_class('table_cell', _b) }} nowo-ui-cell--end" data-label="{{ 'panel.index.col_size'|trans({}, _b) }}" data-nowo-ui-priority="3" data-bytes="{{ row.sizeBytes }}">{{ row.sizeBytes|number_format(0, '.', ' ') }} B</td>
 {% endblock %}

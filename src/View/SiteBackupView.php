@@ -120,6 +120,15 @@ final readonly class SiteBackupView implements AreaNavProviderInterface
     }
 
     /**
+     * URL of the panel index route ({@code path_prefix} + "/", the route POST actions target: the prefix without the
+     * slash only redirects GET requests).
+     */
+    public function indexUrl(): string
+    {
+        return rtrim($this->pathPrefix, '/') . '/';
+    }
+
+    /**
      * Normalises a configured layout: empty values and the removed 1.x bundle layouts mean "UiKit layout" (null).
      */
     public static function normalizeLayout(mixed $layout): ?string
@@ -187,7 +196,7 @@ final readonly class SiteBackupView implements AreaNavProviderInterface
         $prefix = rtrim($this->pathPrefix, '/');
 
         return new AreaNav([
-            new AreaNavItem(self::label('panel.nav.panel'), $prefix === '' ? '/' : $prefix, $current === 'panel', ['data-testid' => 'nowo-sbb-nav-panel']),
+            new AreaNavItem(self::label('panel.nav.panel'), $this->indexUrl(), $current === 'panel', ['data-testid' => 'nowo-sbb-nav-panel']),
             new AreaNavItem(self::label('panel.nav.history'), $prefix . '/history', $current === 'history', ['data-testid' => 'nowo-sbb-nav-history']),
         ], self::label('panel.nav.label'));
     }

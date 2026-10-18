@@ -128,6 +128,10 @@ final class SiteBackupExtensionTest extends TestCase
         $patterns = $matcher->getArgument('$patterns');
         self::assertNotEmpty($patterns);
         self::assertStringContainsString('en|es', $patterns[array_key_last($patterns)]);
+        /** @var list<string> $prefixes */
+        $prefixes = $matcher->getArgument('$pathPrefixes');
+        self::assertContains('/_wdt/', $prefixes, 'The setup / restore gates let the Symfony toolbar through.');
+        self::assertContains('/_profiler/', $prefixes);
     }
 
     public function testDisabledPanelAndSetup(): void

@@ -64,7 +64,7 @@ final readonly class PanelPages
     {
         $actions = [new Action('create', SiteBackupView::label('panel.index.create_title'), $this->url('/create'), variant: 'primary', attributes: ['data-testid' => 'nowo-sbb-create'])];
         if ($logoutForm instanceof FormView) {
-            $actions[] = new Action('custom', SiteBackupView::label('panel.index.logout'), $this->view->pathPrefix, method: 'POST', icon: 'box-arrow-right', attributes: ['data-testid' => 'nowo-sbb-logout'], form: $logoutForm);
+            $actions[] = new Action('custom', SiteBackupView::label('panel.index.logout'), $this->view->indexUrl(), method: 'POST', attributes: ['data-testid' => 'nowo-sbb-logout'], form: $logoutForm);
         }
 
         $rowActions = [];
@@ -82,8 +82,8 @@ final readonly class PanelPages
             [
                 new Column('id', SiteBackupView::label('panel.index.col_id'), required: true),
                 new Column('createdAt', SiteBackupView::label('panel.index.col_created')),
-                new Column('sizeBytes', SiteBackupView::label('panel.index.col_size'), align: 'end', priority: 2),
-                new Column('label', SiteBackupView::label('panel.index.col_label'), priority: 3),
+                new Column('label', SiteBackupView::label('panel.index.col_label'), priority: 2),
+                new Column('sizeBytes', SiteBackupView::label('panel.index.col_size'), align: 'end', priority: 3),
             ],
             $backups,
             rowActions: static fn (BackupArtifact $backup): array => $rowActions[$backup->getId()] ?? [],
@@ -123,7 +123,7 @@ final readonly class PanelPages
             new PageHeader(SiteBackupView::label('panel.index.create_title'), SiteBackupView::label('panel.create.intro'), tabs: $this->view->nav('panel')),
             $form,
             SiteBackupView::label('panel.index.create_submit'),
-            $this->view->pathPrefix,
+            $this->view->indexUrl(),
             bundle: SiteBackupView::BUNDLE,
             layout: $this->view->layout(),
             attributes: ['data-testid' => 'nowo-sbb-create-form'],
@@ -142,8 +142,8 @@ final readonly class PanelPages
         return new ConfirmPage(
             new PageHeader(SiteBackupView::label($restore ? 'panel.confirm.restore_page_title' : 'panel.confirm.delete_page_title'), tabs: $this->view->nav('panel')),
             $restore ? self::restoreConfirm($backupId) : self::deleteConfirm($backupId),
-            new Action($restore ? 'restore' : 'delete', SiteBackupView::label($restore ? 'panel.index.restore' : 'panel.index.delete'), $this->view->pathPrefix, method: 'POST', form: $form),
-            $this->view->pathPrefix,
+            new Action($restore ? 'restore' : 'delete', SiteBackupView::label($restore ? 'panel.index.restore' : 'panel.index.delete'), $this->view->indexUrl(), method: 'POST', form: $form),
+            $this->view->indexUrl(),
             SiteBackupView::BUNDLE,
             $this->view->layout(),
             ['data-testid' => 'nowo-sbb-' . $kind . '-confirm'],
@@ -178,14 +178,14 @@ final readonly class PanelPages
         $display = $this->view->rowActionsDisplay;
 
         return [
-            new Action('custom', SiteBackupView::label('panel.index.verify'), $this->view->pathPrefix, method: 'POST', icon: 'shield-check', attributes: ['data-testid' => 'nowo-sbb-verify'], form: $forms['verify'], display: $display),
-            new Action('restore', SiteBackupView::label('panel.index.restore'), $this->view->pathPrefix, method: 'POST', confirm: self::restoreConfirm($id), icon: 'arrow-counterclockwise', variant: 'secondary', attributes: ['data-testid' => 'nowo-sbb-restore'], form: $forms['restore'], display: $display, fallbackHref: $this->url('/restore/' . rawurlencode($id))),
-            new Action('delete', SiteBackupView::label('panel.index.delete'), $this->view->pathPrefix, method: 'POST', confirm: self::deleteConfirm($id), attributes: ['data-testid' => 'nowo-sbb-delete'], form: $forms['delete'], display: $display, fallbackHref: $this->url('/delete/' . rawurlencode($id))),
+            new Action('custom', SiteBackupView::label('panel.index.verify'), $this->view->indexUrl(), method: 'POST', icon: 'shield-check', attributes: ['data-testid' => 'nowo-sbb-verify'], form: $forms['verify'], display: $display),
+            new Action('restore', SiteBackupView::label('panel.index.restore'), $this->view->indexUrl(), method: 'POST', confirm: self::restoreConfirm($id), icon: 'arrow-counterclockwise', variant: 'secondary', attributes: ['data-testid' => 'nowo-sbb-restore'], form: $forms['restore'], display: $display, fallbackHref: $this->url('/restore/' . rawurlencode($id))),
+            new Action('delete', SiteBackupView::label('panel.index.delete'), $this->view->indexUrl(), method: 'POST', confirm: self::deleteConfirm($id), attributes: ['data-testid' => 'nowo-sbb-delete'], form: $forms['delete'], display: $display, fallbackHref: $this->url('/delete/' . rawurlencode($id))),
         ];
     }
 
     private function url(string $path): string
     {
-        return rtrim($this->view->pathPrefix, '/') . $path;
+        return rtrim($this->view->indexUrl(), '/') . $path;
     }
 }
