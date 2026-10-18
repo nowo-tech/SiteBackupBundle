@@ -9,7 +9,7 @@
     {% if db_connection_failed %}
         <div class="{{ nowo_ui_class('flash_warning', _b) }}" role="alert">{{ 'setup.reason.db_connection_form'|trans({}, _b) }}</div>
     {% endif %}
-    {{ form_row(form.database_url, {id: 'nowo-sbb-database-url', attr: {class: nowo_ui_class('input_full', _b), autocomplete: 'off', placeholder: 'postgresql://user:pass@db:5432/app'}}) }}
+    {{ form_row(form.database_url, {id: 'nowo-sbb-database-url', attr: {class: nowo_ui_class('input_full', _b), autocomplete: 'off', placeholder: 'setup.database.url_placeholder'}}) }}
     {{ form_rest(form) }}
     <div class="{{ nowo_ui_class('form_actions', _b) }}">
         <button type="submit" class="{{ nowo_ui_class('btn_primary', _b) }}">{{ 'setup.database.save'|trans({}, _b) }}</button>

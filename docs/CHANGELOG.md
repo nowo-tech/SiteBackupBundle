@@ -68,6 +68,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Demo: the host layout prints the UiKit runtimes through the UiKit `scripts` partial (the hand-kept list lacked
   `modal`, `tabs` and `theme`).
 
+### Fixed
+
+- **Missing / double translations (profiler):** the example placeholders of the setup forms (`DatabaseUrlType`,
+  `_database_form`, `_bootstrap_form`) were literals looked up in the bundle domain by the form theme; they are now
+  catalogue keys `setup.database.url_placeholder` / `setup.bootstrap.sql_placeholder` (7 locales). The wizard
+  translated the controller error (already translated), literal step output ("Migrations applied.") and exception
+  messages again: only key-shaped progress messages / errors are looked up now, the rest is printed as given. A
+  contract test renders every page with a `DataCollectorTranslator` and asserts no missing message.
+
 ## [1.21.0] - 2026-10-18
 
 Panel, sign-in, setup wizard and confirm pages on the UiKit 2.1 standard page contract (REQ-UI-003): list, form, confirm, auth and wizard scaffolds, type-to-confirm restore, no-JS fallbacks; deprecated `panel.*` / `setup.*` / `templates.*` keys mapped to `web_ui.*`. See [UPGRADING](UPGRADING.md#to-1210).

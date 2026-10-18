@@ -18,15 +18,22 @@ use Nowo\UiKitBundle\Test\PageContractTestCase;
 use Nowo\UiKitBundle\Test\PageFixture;
 use Nowo\UiKitBundle\Test\StubHost;
 use Nowo\UiKitBundle\View\ListPage;
+use PHPUnit\Framework\Attributes\DataProvider;
+use Symfony\Bridge\Twig\Extension\TranslationExtension;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\Session\Session;
 use Symfony\Component\HttpFoundation\Session\Storage\MockArraySessionStorage;
 use Symfony\Component\Security\Csrf\CsrfToken;
 use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
+use Symfony\Component\Translation\DataCollectorTranslator;
 use Symfony\Component\Translation\Loader\YamlFileLoader;
 use Symfony\Component\Translation\Translator;
 
+use function array_filter;
+use function array_map;
+use function array_values;
+use function assert;
 use function class_exists;
 use function dirname;
 use function glob;
@@ -116,6 +123,8 @@ final class PageContractTest extends PageContractTestCase
         self::assertStringContainsString('The database is not reachable', $html);
         self::assertStringContainsString('formnovalidate', $html);
         self::assertStringContainsString('id="nowo-sbb-database-url"', $html);
+        self::assertStringContainsString('placeholder="postgresql://user:pass@db:5432/app"', $html, 'Example URL from the catalogue, translated once.');
+        self::assertStringContainsString('>Waiting for input</label>', $html, 'Literal step output is the progress label as given.');
         self::assertStringNotContainsString('setTimeout', $html);
         self::assertStringContainsString('data-testid="nowo-sbb-setup-progress"', $html, 'Progress through the UiKit progress partial.');
         self::assertMatchesRegularExpression('/<progress id="nowo-sbb-setup-progress"[^>]* max="100" value="\d+"/', $html);
@@ -126,6 +135,37 @@ final class PageContractTest extends PageContractTestCase
         $failed = $this->renderPage(new PageFixture('@NowoSiteBackupBundle/setup/wizard.html.twig', PageFixtures::wizard('failed')))->html;
         self::assertStringContainsString('Connection refused', $failed);
         self::assertStringContainsString('name="reset"', $failed);
+    }
+
+    /**
+     * @return iterable<string, array{PageFixture}>
+     */
+    public static function translationPages(): iterable
+    {
+        foreach (self::pageFixtures() as $name => $fixture) {
+            yield $name => [$fixture];
+        }
+    }
+
+    /**
+     * The form theme translates labels, help, placeholders and titles in the field domain: example values
+     * are catalogue keys (`setup.database.url_placeholder`, `setup.bootstrap.sql_placeholder`), and literal step output,
+     * exception messages and text the controller already translated are not looked up again (the profiler would log
+     * them as missing messages). Every lookup of a page hits the catalogues.
+     */
+    #[DataProvider('translationPages')]
+    public function testPageLooksUpNoMissingMessage(PageFixture $fixture): void
+    {
+        $twig      = $this->createTwig();
+        $collector = $twig->getExtension(TranslationExtension::class)->getTranslator();
+        assert($collector instanceof DataCollectorTranslator);
+        $twig->render($fixture->template, $fixture->context);
+
+        $missing = array_filter(
+            $collector->getCollectedMessages(),
+            static fn (array $message): bool => $message['state'] === DataCollectorTranslator::MESSAGE_MISSING,
+        );
+        self::assertSame([], array_values(array_map(static fn (array $message): string => $message['domain'] . ': ' . $message['id'], $missing)));
     }
 
     public function testCustomTabTemplateReceivesTheStepForm(): void

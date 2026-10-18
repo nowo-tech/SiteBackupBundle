@@ -107,6 +107,7 @@ setup:
     full_database: 'Carregar dump completo da base de dados'
     sql_path: 'Caminho do dump SQL (relativo ao projeto)'
     sql_hint: 'Obrigatório para dump completo. Por omissão: var/site-backup/full-import.sql ou last-restore-dump.sql. As migrações e os carregadores idempotentes continuam a ser executados; o formulário de administrador é ignorado se já existirem utilizadores.'
+    sql_placeholder: 'var/site-backup/full-import.sql'
   tab:
     requirements: 'Requisitos'
     bootstrap_mode: 'Modo de arranque'
@@ -137,6 +138,7 @@ setup:
     save: 'Guardar DATABASE_URL'
     skip: 'Ignorar (usar env existente)'
     field_label: 'DATABASE_URL'
+    url_placeholder: 'postgresql://user:pass@db:5432/app'
   error:
     invalid_csrf: 'Token CSRF inválido.'
     invalid_request: 'Pedido de configuração inválido.'

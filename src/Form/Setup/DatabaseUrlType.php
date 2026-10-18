@@ -23,7 +23,7 @@ final class DatabaseUrlType extends AbstractSiteBackupFormType
             'label' => 'setup.database.field_label',
             'attr'  => [
                 'autocomplete' => 'off',
-                'placeholder'  => 'postgresql://user:pass@db:5432/app',
+                'placeholder'  => 'setup.database.url_placeholder',
             ],
             'required' => $required,
         ]);

@@ -17,9 +17,14 @@
 {% block nowo_ui_wizard_step %}
     {% set _b = page.bundle %}
     {% set _d = 'NowoSiteBackupBundle' %}
+    {#- Progress messages / errors mix translation keys (setup.check.ok, step labels) with literal step output
+        ("Migrations applied.", exception messages) and text the controller already translated: only key-shaped
+        values are looked up, the rest is printed as given (no "missing message" in the profiler). -#}
+    {% set _key = '/^[A-Za-z0-9_-]+(\\.[A-Za-z0-9_-]+)+$/' %}
+    {% set _message = progress.message ? (progress.message matches _key ? progress.message|trans({}, _d) : progress.message) : null %}
     {{ include(nowo_ui_partial('progress', _b), {
         percent: progress.percent|round,
-        label: progress.message ? progress.message|trans({}, _d) : 'setup.wizard.progress'|trans({}, _d),
+        label: _message ?? 'setup.wizard.progress'|trans({}, _d),
         id: 'nowo-sbb-setup-progress',
         attr: {'data-testid': 'nowo-sbb-setup-progress'},
         bundle: _b,
@@ -59,9 +64,9 @@
     {% endif %}
 
     {% if error %}
-        <div class="{{ nowo_ui_class('flash_error', _b) }}" role="alert"{{ nowo_ui_attrs('flash_error', _b) }}>{{ error|trans({}, _d) }}</div>
+        <div class="{{ nowo_ui_class('flash_error', _b) }}" role="alert"{{ nowo_ui_attrs('flash_error', _b) }}>{{ error matches _key ? error|trans({}, _d) : error }}</div>
     {% elseif progress.error %}
-        <div class="{{ nowo_ui_class('flash_error', _b) }}" role="alert"{{ nowo_ui_attrs('flash_error', _b) }}>{{ progress.error|trans({}, _d) }}</div>
+        <div class="{{ nowo_ui_class('flash_error', _b) }}" role="alert"{{ nowo_ui_attrs('flash_error', _b) }}>{{ progress.error matches _key ? progress.error|trans({}, _d) : progress.error }}</div>
     {% endif %}
 
     {% if wizardForm %}

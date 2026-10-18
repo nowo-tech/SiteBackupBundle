@@ -107,6 +107,7 @@ setup:
     full_database: 'Volledige databasedump laden'
     sql_path: 'Pad naar SQL-dump (relatief aan het project)'
     sql_hint: 'Vereist voor een volledige dump. Standaard: var/site-backup/full-import.sql of last-restore-dump.sql. Migraties en idempotente loaders worden nog steeds uitgevoerd; het beheerdersformulier wordt overgeslagen als er al gebruikers zijn.'
+    sql_placeholder: 'var/site-backup/full-import.sql'
   tab:
     requirements: 'Vereisten'
     bootstrap_mode: 'Opstartmodus'
@@ -137,6 +138,7 @@ setup:
     save: 'DATABASE_URL opslaan'
     skip: 'Overslaan (bestaande env gebruiken)'
     field_label: 'DATABASE_URL'
+    url_placeholder: 'postgresql://user:pass@db:5432/app'
   error:
     invalid_csrf: 'Ongeldig CSRF-token.'
     invalid_request: 'Ongeldig installatieverzoek.'
