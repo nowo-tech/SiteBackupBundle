@@ -42,7 +42,8 @@ nowo_site_backup:
         locale:
             in_path: both
             default: en
-            enabled: [en, es]
+            # Same list as framework.enabled_locales (an env var also works: '%env(json:APP_LOCALES)%').
+            enabled: '%kernel.enabled_locales%'
             unlocalized: redirect
         advance_mode: automatic
         detectors:

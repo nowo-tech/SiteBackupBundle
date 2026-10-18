@@ -54,6 +54,18 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `setup.locale.enabled` given as a container parameter or env var (`'%kernel.enabled_locales%'`, `'%app.locales%'`,
+  `'%env(json:APP_LOCALES)%'`) no longer breaks the container build ("Expected array, but got string"): `prepend()`
+  processed the whole raw host config, where the parameter is still a string (and `kernel.enabled_locales` is not
+  defined yet), and the node only accepted a literal list. `prepend()` now processes only `css_framework` and
+  `panel.extra_classes`, the node accepts a list or a parameter / env placeholder, and an env var is read at runtime
+  by the setup routes, gates, exclusion matcher and time-limit subscriber (the derived `/{locale}{prefix}` paths are
+  built by factories). See [CONFIGURATION](CONFIGURATION.md#setup-locales-from-a-parameter-or-env-var).
+- `setup.cold_start.mysql_port` given as an env var (`'%env(int:DATABASE_PORT)%'`) was silently replaced by `3306`;
+  the placeholder is now kept and resolved at runtime.
+
 ## [1.21.1] - 2026-10-18
 
 Requires UiKit ^2.2 (wizard on the guest layout, progress partial, scripts partial); setup placeholders translated once. See [UPGRADING](UPGRADING.md#to-1211).

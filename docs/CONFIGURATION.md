@@ -62,7 +62,7 @@ Root key: `nowo_site_backup`.
 | `setup.path_prefix` | `/_setup` | Wizard URL prefix; drives imported setup routes + site-gate exclusions |
 | `setup.locale.in_path` | `never` | `never` \| `always` \| `both` — locale prefix on setup URLs (AuthKit-style) |
 | `setup.locale.default` | `en` | Default `{_locale}` for localized setup routes |
-| `setup.locale.enabled` | `[en]` | Allowed locale codes |
+| `setup.locale.enabled` | `[en]` | Allowed locale codes. A list, or a parameter / env var holding one (`'%kernel.enabled_locales%'`, `'%app.locales%'`, `'%env(json:APP_LOCALES)%'`) — see [Setup locales from a parameter or env var](#setup-locales-from-a-parameter-or-env-var) |
 | `setup.locale.unlocalized` | `redirect` | When `in_path: both`: `serve` or `redirect` bare `/_setup`. With `serve`, `UnlocalizedDefaultLocaleSubscriber` re-applies `setup.locale.default` each request (stale route-cache / image-vs-runtime env). |
 | `setup.layout_template` | — | **Deprecated alias** of `web_ui.guest_layout_template` |
 | `setup.progress_storage` | `filesystem` | `filesystem` (JSON `setup.progress_file`) \| `doctrine` (DBAL `progress_table`) \| `chain` (JSON + DB, prefer DB on load) \| `cache` (PSR-6 pool) \| `cache_doctrine` (cache + DB, prefer DB on load) |
@@ -85,7 +85,7 @@ Root key: `nowo_site_backup`.
 | `setup.cold_start.stop_propagation` | `true` | Stop `kernel.request` propagation after redirect / on safe paths |
 | `setup.cold_start.safe_path_prefixes` | `/health/`, `/api/`, `/_wdt`, … | Allowed without redirect when schema missing |
 | `setup.cold_start.require_application_tables` | `true` | An empty MySQL schema (only `nowo_site_backup_*` tables) stays cold-start until migrations create application tables |
-| `setup.cold_start.mysql_host` / `setup.cold_start.mysql_port` / `setup.cold_start.mysql_user` / `setup.cold_start.mysql_password` / `setup.cold_start.mysql_database` | `null` / `3306` / `null` / `null` / `null` | Optional PDO fallback when DBAL is unavailable |
+| `setup.cold_start.mysql_host` / `setup.cold_start.mysql_port` / `setup.cold_start.mysql_user` / `setup.cold_start.mysql_password` / `setup.cold_start.mysql_database` | `null` / `3306` / `null` / `null` / `null` | Optional PDO fallback when DBAL is unavailable. Env vars work (e.g. `mysql_port: '%env(int:DATABASE_PORT)%'`) |
 | `setup.progress_file` | `%kernel.project_dir%/var/site-backup/setup-progress.json` | JSON progress when filesystem/chain. v1.19+: excluded from archives and never overwritten by a restore |
 | `setup.detectors.incomplete_progress` | `true` | Gate when progress phase is running/waiting/failed |
 | `setup.detectors.marker` | `true` | `MarkerFileDetector`: `setup.required` present (or `setup.done` missing with `require_done_marker`) |
@@ -102,6 +102,25 @@ Root key: `nowo_site_backup`.
 | `setup.profiles` / `setup.profiles.*.steps` | `fresh_install`, `post_restore`, `full_database`, `minimal` | Profiles keyed by name; `steps` is the legacy ordered step list (ignored when `tabs` is non-empty). Keys below |
 | `setup.profiles.*.tabs` | `[]` | Preferred ordered flow (checker/runner; optional `template` — prefer bundle `@NowoSiteBackupBundle/...` or omit); when non-empty, ignores `steps`. Keys below |
 | `setup.profiles.fresh_install` | includes `bootstrap_mode` + optional full SQL | Guided vs full dump; see [SETUP-WIZARD.md](SETUP-WIZARD.md) |
+
+### Setup locales from a parameter or env var
+
+Keep one locale list in the host and pass it to the setup wizard:
+
+```yaml
+nowo_site_backup:
+    setup:
+        locale:
+            in_path: both
+            enabled: '%kernel.enabled_locales%'    # framework.enabled_locales, or '%app.locales%'
+            # enabled: '%env(json:APP_LOCALES)%'   # APP_LOCALES='["en","es"]' (or '%env(csv:APP_LOCALES)%' with APP_LOCALES=en,es)
+```
+
+Parameters are resolved when the container is built (`nowo.site_backup.setup.locale.enabled` holds the resolved list).
+An env var is read at runtime: the setup routes (`{_locale}` requirement, built with the route cache), the setup gates,
+the exclusion matcher (`/{locale}{setup.path_prefix}` pattern) and `bump_time_limit` get it through factories. Values
+are trimmed and de-duplicated. Any other option may be a build-time parameter too: `prepend()` only processes
+`css_framework` and `panel.extra_classes`.
 
 ### Setup step / tab keys
 

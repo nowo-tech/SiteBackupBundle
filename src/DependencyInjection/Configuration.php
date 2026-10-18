@@ -558,10 +558,13 @@ final class Configuration implements ConfigurationInterface
                                     ->defaultValue('en')
                                     ->cannotBeEmpty()
                                 ->end()
-                                ->arrayNode('enabled')
-                                    ->info('List of enabled locale codes.')
-                                    ->scalarPrototype()->end()
+                                ->variableNode('enabled')
+                                    ->info('List of enabled locale codes, or a parameter / env var holding one: "%app.locales%", "%kernel.enabled_locales%", "%env(json:APP_LOCALES)%" (resolved at runtime).')
                                     ->defaultValue(['en'])
+                                    ->validate()
+                                        ->ifTrue(static fn (mixed $v): bool => !is_string($v) && !self::isLocaleList($v))
+                                        ->thenInvalid('Invalid nowo_site_backup.setup.locale.enabled %s: use a list of locale codes or a parameter / env placeholder holding one.')
+                                    ->end()
                                 ->end()
                                 ->enumNode('unlocalized')
                                     ->values(['serve', 'redirect'])
@@ -843,5 +846,19 @@ final class Configuration implements ConfigurationInterface
         }
 
         return $then instanceof DateTimeImmutable && $then > $now;
+    }
+
+    private static function isLocaleList(mixed $v): bool
+    {
+        if (!is_array($v)) {
+            return false;
+        }
+        foreach ($v as $locale) {
+            if (!is_string($locale)) {
+                return false;
+            }
+        }
+
+        return true;
     }
 }

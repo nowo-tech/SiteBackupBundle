@@ -21,6 +21,7 @@ use Nowo\SiteBackupBundle\EventSubscriber\UnlocalizedDefaultLocaleSubscriber;
 use Nowo\SiteBackupBundle\Exclusion\SiteBackupExclusionMatcher;
 use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
 use Nowo\SiteBackupBundle\Routing\PanelRouteLoader;
+use Nowo\SiteBackupBundle\Routing\SetupLocales;
 use Nowo\SiteBackupBundle\Routing\SetupPathPrefixResolver;
 use Nowo\SiteBackupBundle\Routing\SetupRouteLoader;
 use Nowo\SiteBackupBundle\Security\AllowAllSiteBackupAccessChecker;
@@ -78,7 +79,6 @@ use Symfony\Component\RateLimiter\Storage\CacheStorage;
 use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
 
 use function array_key_exists;
-use function array_map;
 use function array_values;
 use function in_array;
 use function is_array;
@@ -140,7 +140,21 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             }
         }
 
-        $config   = $this->processConfiguration(new Configuration(), $container->getExtensionConfig(Configuration::ALIAS));
+        // Only the keys read here are processed: prepend() sees the raw host config, where any other key may still be
+        // a "%parameter%" / env placeholder (e.g. setup.locale.enabled: '%kernel.enabled_locales%', defined by
+        // FrameworkExtension::load() after prepend).
+        $subsets = [];
+        foreach ($container->getExtensionConfig(Configuration::ALIAS) as $cfg) {
+            $subset = [];
+            if (array_key_exists('css_framework', $cfg)) {
+                $subset['css_framework'] = $cfg['css_framework'];
+            }
+            if (is_array($cfg['panel']['extra_classes'] ?? null)) {
+                $subset['panel'] = ['extra_classes' => $cfg['panel']['extra_classes']];
+            }
+            $subsets[] = $subset;
+        }
+        $config   = $this->processConfiguration(new Configuration(), $subsets);
         $defaults = [];
 
         $fw = $config['css_framework'] ?? null;
@@ -203,7 +217,16 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
         $container->setParameter('nowo.site_backup.panel.path_prefix', $config['panel']['path_prefix']);
         $container->setParameter('nowo.site_backup.setup.path_prefix', $config['setup']['path_prefix']);
 
-        $locale = $config['setup']['locale'] ?? [];
+        // setup.locale.enabled may be a parameter (%app.locales%, %kernel.enabled_locales%): the kernel resolves it
+        // before load(), a direct load() caller may not. An env var (%env(json:APP_LOCALES)%) stays a placeholder until
+        // runtime: the services get it through SetupLocales factories (see enabledLocalesArgument()).
+        $enabledLocales = $container->getParameterBag()->resolveValue($config['setup']['locale']['enabled']);
+        if (!$this->isRuntimeValue($container, $enabledLocales)) {
+            $enabledLocales = SetupLocales::normalize($enabledLocales);
+        }
+        $config['setup']['locale']['enabled'] = $enabledLocales;
+
+        $locale = $config['setup']['locale'];
         $container->setParameter('nowo.site_backup.setup.locale.in_path', $locale['in_path'] ?? 'never');
         $container->setParameter('nowo.site_backup.setup.locale.default', $locale['default'] ?? 'en');
         $container->setParameter('nowo.site_backup.setup.locale.enabled', $locale['enabled'] ?? ['en']);
@@ -272,9 +295,7 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             $prefixes[]  = $setupPrefix;
             $localeConf  = $setup['locale'] ?? [];
             if ((string) ($localeConf['in_path'] ?? 'never') !== 'never') {
-                foreach (array_values($localeConf['enabled'] ?? []) as $locale) {
-                    $prefixes[] = '/' . $locale . $setupPrefix;
-                }
+                $prefixes = $this->localeDerived($container, 'localizedPrefixes', $prefixes, $localeConf['enabled'] ?? [], $setupPrefix);
             }
         }
 
@@ -338,6 +359,53 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
         $container->getDefinition(DatabaseDumpCommand::class)
             ->setArgument('$databaseUrl', '%env(default::DATABASE_URL)%')
             ->setArgument('$timeoutSeconds', (int) $config['process_timeout']);
+    }
+
+    /**
+     * True when the value holds an env placeholder (%env(…)%), i.e. it is only known at runtime.
+     */
+    private function isRuntimeValue(ContainerBuilder $container, mixed $value): bool
+    {
+        $usedEnvs = [];
+        $container->resolveEnvPlaceholders($value, null, $usedEnvs);
+
+        return $usedEnvs !== [];
+    }
+
+    /**
+     * The enabled locales as a service argument: the normalized list, or (env var) a SetupLocales::normalize() factory.
+     *
+     * @return Definition|list<string>
+     */
+    private function enabledLocalesArgument(ContainerBuilder $container, mixed $locales): array|Definition
+    {
+        if (!$this->isRuntimeValue($container, $locales)) {
+            return SetupLocales::normalize($locales);
+        }
+
+        return (new Definition('array'))
+            ->setFactory([SetupLocales::class, 'normalize'])
+            ->setArguments([$locales]);
+    }
+
+    /**
+     * A list derived from the enabled locales (SetupLocales::$method($base, $locales, $setupPrefix)): computed now, or
+     * (env var) by a factory at runtime.
+     *
+     * @param 'localizedPrefixes'|'withLocalizedSetupPattern' $method
+     * @param list<string> $base
+     *
+     * @return Definition|list<string>
+     */
+    private function localeDerived(ContainerBuilder $container, string $method, array $base, mixed $locales, string $setupPrefix): array|Definition
+    {
+        if (!$this->isRuntimeValue($container, $locales)) {
+            return SetupLocales::$method($base, $locales, $setupPrefix);
+        }
+
+        return (new Definition('array'))
+            ->setFactory([SetupLocales::class, $method])
+            ->setArguments([$base, $locales, $setupPrefix]);
     }
 
     public function getAlias(): string
@@ -467,16 +535,9 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
 
         $patterns = array_values($exclusions['patterns'] ?? []);
 
-        $localeConfig  = $config['setup']['locale'] ?? [];
-        $localeInPath  = (string) ($localeConfig['in_path'] ?? 'never');
-        $localeEnabled = array_values($localeConfig['enabled'] ?? ['en']);
-        if ($localeInPath !== 'never' && $localeEnabled !== []) {
-            $escapedPrefix  = preg_quote($setupPrefix, '#');
-            $escapedLocales = array_map(static fn (mixed $locale): string => preg_quote((string) $locale, '#'), $localeEnabled);
-            $localePattern  = '#^/(' . implode('|', $escapedLocales) . ')' . $escapedPrefix . '(/|$|\\?)#';
-            if (!in_array($localePattern, $patterns, true)) {
-                $patterns[] = $localePattern;
-            }
+        $localeConfig = $config['setup']['locale'] ?? [];
+        if ((string) ($localeConfig['in_path'] ?? 'never') !== 'never') {
+            $patterns = $this->localeDerived($container, 'withLocalizedSetupPattern', $patterns, $localeConfig['enabled'] ?? ['en'], $setupPrefix);
         }
 
         $container->getDefinition(SiteBackupExclusionMatcher::class)
@@ -709,7 +770,7 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
         $localeConfig   = $setup['locale'] ?? [];
         $localeInPath   = (string) ($localeConfig['in_path'] ?? 'never');
         $localeDefault  = (string) ($localeConfig['default'] ?? 'en');
-        $localeEnabled  = array_values($localeConfig['enabled'] ?? ['en']);
+        $localeEnabled  = $this->enabledLocalesArgument($container, $localeConfig['enabled'] ?? ['en']);
         $unlocalizedStr = (string) ($localeConfig['unlocalized'] ?? 'redirect');
         $setupEnabled   = (bool) $setup['enabled'];
 
@@ -988,9 +1049,9 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
 
     /**
      * @param array<string, mixed> $setup
-     * @param list<string> $localeEnabled
+     * @param Definition|list<string> $localeEnabled literal list, or a SetupLocales factory (env var locales)
      */
-    private function configureDurableDoneAndColdStart(ContainerBuilder $container, array $setup, array $localeEnabled): void
+    private function configureDurableDoneAndColdStart(ContainerBuilder $container, array $setup, array|Definition $localeEnabled): void
     {
         // Alias may already point at NullDurableSetupDoneStore from setup wiring; keep default unless host replaced it.
         if (!$container->hasAlias(DurableSetupDoneStoreInterface::class) && !$container->hasDefinition(DurableSetupDoneStoreInterface::class)) {
@@ -1039,7 +1100,8 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
         $container->getDefinition(MysqlSchemaExistenceChecker::class)
             ->setArgument('$connection', $dbalRef)
             ->setArgument('$host', is_string($mysqlHost) && $mysqlHost !== '' ? $mysqlHost : null)
-            ->setArgument('$port', is_int($mysqlPort) ? $mysqlPort : 3306)
+            // An env placeholder (%env(int:DB_PORT)%) is a string here: kept, resolved at runtime.
+            ->setArgument('$port', is_int($mysqlPort) || $this->isRuntimeValue($container, $mysqlPort) ? $mysqlPort : 3306)
             ->setArgument('$user', is_string($mysqlUser) && $mysqlUser !== '' ? $mysqlUser : null)
             ->setArgument('$password', is_string($mysqlPass) ? $mysqlPass : null)
             ->setArgument('$database', is_string($mysqlDb) && $mysqlDb !== '' ? $mysqlDb : null)
