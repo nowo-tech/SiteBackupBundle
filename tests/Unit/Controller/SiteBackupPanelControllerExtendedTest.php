@@ -164,7 +164,10 @@ final class SiteBackupPanelControllerExtendedTest extends TestCase
 
     public function testCreateBackupFailure(): void
     {
-        $this->harnessFs->chmod($this->harnessStorageDir, 0444);
+        // A regular file where the storage dir should be: the archiver cannot write there for any uid
+        // (chmod 0444 is ignored by root, which made this test environment-dependent).
+        $this->harnessFs->remove($this->harnessStorageDir);
+        $this->harnessFs->dumpFile($this->harnessStorageDir, 'not a directory');
         $session = new Session(new MockArraySessionStorage());
         $csrf    = $this->createMock(CsrfTokenManagerInterface::class);
         $csrf->method('getToken')->willReturn(new CsrfToken('id', 'token'));
@@ -182,8 +185,8 @@ final class SiteBackupPanelControllerExtendedTest extends TestCase
         );
         $request = Request::create('/', 'POST', ['action' => 'create', '_csrf_token' => 'token']);
         $request->setSession($session);
-        self::assertSame(200, $controller->index($request)->getStatusCode());
-        $this->harnessFs->chmod($this->harnessStorageDir, 0777);
+        // A failed create goes back to the create form with the error (422), not to the index.
+        self::assertSame(422, $controller->index($request)->getStatusCode());
     }
 
     public function testIndexReturnsForbiddenWhenRoleAccessDenied(): void
