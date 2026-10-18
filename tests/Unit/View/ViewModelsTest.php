@@ -59,6 +59,12 @@ final class ViewModelsTest extends TestCase
 
         self::assertCount(5, $page->steps);
         self::assertSame(SetupPages::DONE_STEP, $page->current);
+        self::assertTrue($page->guest, 'UiKit 2.2 WizardPage::$guest: the wizard renders on nowo_ui_kit.layouts.guest.');
+        self::assertNull($page->layout, 'No layout override without web_ui.guest_layout_template.');
+
+        $done = (new SetupPages(PageFixtures::view()))->done(PageFixtures::steps());
+        self::assertTrue($done->guest);
+        self::assertNull($done->layout);
     }
 
     public function testExtraClassesBridgeIntoTheUiKitTheme(): void

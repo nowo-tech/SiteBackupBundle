@@ -53,6 +53,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Requires `nowo-tech/ui-kit-bundle` **^2.2** (default-theme polish: table header hierarchy, striped rows, subtle
+  badges, solid destructive confirm button with a close button). See [UPGRADING](UPGRADING.md#unreleased).
+- Setup wizard and "done" page: `WizardPage` uses UiKit 2.2 `guest: true` (layout `nowo_ui_kit.layouts.guest`)
+  instead of resolving the guest layout in the bundle; `web_ui.guest_layout_template` is still passed as the layout
+  override. `SiteBackupView::guestLayout()` is deprecated (kept for host-built wizard view models).
+- Setup wizard progress bar renders through the UiKit `progress` partial (slots `progress` / `progress_meter`,
+  `data-testid="nowo-sbb-setup-progress"`) instead of the bundle's own `<progress class="nowo-sbb-progress">`; the
+  step message is the progress label.
+- `_messages.html.twig` passes the last POST result to the UiKit `flashes` partial through `flash_messages` (the
+  2.0 `flashes` input is deprecated in UiKit 2.2).
+- Demo: the host layout prints the UiKit runtimes through the UiKit `scripts` partial (the hand-kept list lacked
+  `modal`, `tabs` and `theme`).
+
 ## [1.21.0] - 2026-10-18
 
 Panel, sign-in, setup wizard and confirm pages on the UiKit 2.1 standard page contract (REQ-UI-003): list, form, confirm, auth and wizard scaffolds, type-to-confirm restore, no-JS fallbacks; deprecated `panel.*` / `setup.*` / `templates.*` keys mapped to `web_ui.*`. See [UPGRADING](UPGRADING.md#to-1210).

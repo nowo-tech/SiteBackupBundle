@@ -28,7 +28,7 @@ tests: `tests/Integration/Contract/PageContractTest.php` (English, plus controll
 | Restore backup (no-JS) | `panel/confirm.html.twig` | `page/confirm` | `ConfirmPage` (same `Confirm` as the dialog: title `panel.confirm.restore_title`, type the backup id; POST action with the per-backup CSRF form; cancel → panel; `data-testid="nowo-sbb-restore-confirm"`) | — |
 | Delete backup (no-JS) | `panel/confirm.html.twig` | `page/confirm` | `ConfirmPage` (`Confirm` `panel.index.delete_confirm`; POST + CSRF; `data-testid="nowo-sbb-delete-confirm"`) | — |
 | Panel sign-in | `panel/login.html.twig` | `page/auth` (guest) | `AuthPage` (title `panel.login.heading`, brand `panel.title`, `PanelLoginType` (null when the gate is misconfigured), error: invalid password / throttle / CSRF / misconfiguration; `data-testid="nowo-sbb-login"`) | — |
-| Setup wizard | `setup/wizard.html.twig` | `page/wizard` (guest) | `WizardPage` (header `setup.page_title.wizard` with the brand + `setup.wizard.subtitle`; steps = configured profile steps + a final "Done" step; current from the setup progress; form = the step form; attributes `data-testid="nowo-sbb-setup-wizard"`, `data-phase`) + 1.x context: `progress`, `steps`, `currentStep`, `reasons`, `error`, `wizardForm`, `advanceMode`, `progressUrl`, `pathPrefix`, `brandName` | `nowo_ui_wizard_step` (progress bar, need reasons in `flash_warning`, errors in `flash_error`, the step form, log in `code_block`), `nowo_ui_flashes`, `nowo_ui_scripts` (automatic advance, CSP nonce) |
+| Setup wizard | `setup/wizard.html.twig` | `page/wizard` (guest) | `WizardPage` (`guest: true`; header `setup.page_title.wizard` with the brand + `setup.wizard.subtitle`; steps = configured profile steps + a final "Done" step; current from the setup progress; form = the step form; attributes `data-testid="nowo-sbb-setup-wizard"`, `data-phase`) + 1.x context: `progress`, `steps`, `currentStep`, `reasons`, `error`, `wizardForm`, `advanceMode`, `progressUrl`, `pathPrefix`, `brandName` | `nowo_ui_wizard_step` (UiKit `progress` partial, need reasons in `flash_warning`, errors in `flash_error`, the step form, log in `code_block`), `nowo_ui_flashes`, `nowo_ui_scripts` (automatic advance, CSP nonce) |
 | Setup done | `setup/done.html.twig` | `page/wizard` (guest) | `WizardPage` (current = "Done"; `data-testid="nowo-sbb-setup-done"`) | `nowo_ui_wizard_step` |
 | Setup token gate (403) | `setup/token.html.twig` | `page/auth` (guest) | `AuthPage` (title `setup.token.title`, brand = `setup.brand_name`, GET form `SetupTokenType`; `data-testid="nowo-sbb-token-gate"`) | `nowo_ui_auth_footer` (how to find the token) |
 
@@ -90,12 +90,12 @@ or a canonical block. Prefer theming the UiKit slots (`nowo_ui_kit.theme`) and s
 
 | Partial | Role | Renders through |
 | --- | --- | --- |
-| `_messages.html.twig` | Last POST result (`messages`) | `nowo_ui_partial('flashes')` (`flashes` input) |
+| `_messages.html.twig` | Last POST result (`messages`) | `nowo_ui_partial('flashes')` (`flash_messages` input) |
 | `panel/_restore_status.html.twig` | Restore phase / percent / step / error + Clear status (`data-testid="nowo-sbb-restore-status"`, `data-phase`); hidden while idle | `flash_success` / `flash_error` / `flash_info` slots, `nowo_ui_partial('action')` |
 | `setup/_admin_form.html.twig`, `_bootstrap_form.html.twig`, `_database_form.html.twig`, `_sample_form.html.twig`, `_continue_form.html.twig` | Step forms of the wizard | `form` / `form_actions` / `btn_*` slots, form theme of the host |
 | `panel/_legacy_layout.html.twig`, `setup/_legacy_layout.html.twig` | Deprecated bridges around 1.x layouts | Removed in 2.0 |
 
 ## Allowed exceptions
 
-- (none) — the contract tests declare no `allowedClasses()`. The setup progress bar is a native `<progress>` with the
-  semantic class `nowo-sbb-progress` (UiKit has no progress slot yet).
+- (none) — the contract tests declare no `allowedClasses()`. The setup progress bar is the UiKit `progress` partial
+  (slots `progress` / `progress_meter`, UiKit 2.2).

@@ -163,8 +163,10 @@ final readonly class SiteBackupView implements AreaNavProviderInterface
 
     /**
      * Layout of the guest view models (panel login, setup wizard): the configured guest layout (or its legacy bridge),
-     * else the UiKit guest layout ({@code nowo_ui_kit.layouts.guest}). Never null: the wizard scaffold would
-     * otherwise extend the admin layout.
+     * else the UiKit guest layout ({@code nowo_ui_kit.layouts.guest}). Never null.
+     *
+     * @deprecated since 1.22, the setup wizard uses {@code WizardPage::$guest} (UiKit 2.2) with
+     *             {@see self::guestLayoutOverride()}; kept for hosts that build their own wizard view models
      */
     public function guestLayout(): string
     {
@@ -180,7 +182,7 @@ final readonly class SiteBackupView implements AreaNavProviderInterface
     }
 
     /**
-     * Layout override of the guest view models whose scaffold already defaults to the guest layout ({@code AuthPage}):
+     * Layout override of the guest view models ({@code AuthPage}, {@code WizardPage} with {@code guest: true}):
      * null = {@code nowo_ui_kit.layouts.guest}.
      */
     public function guestLayoutOverride(): ?string

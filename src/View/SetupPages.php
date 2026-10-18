@@ -53,8 +53,9 @@ final readonly class SetupPages
             $current,
             $form,
             bundle: SiteBackupView::BUNDLE,
-            layout: $this->view->guestLayout(),
+            layout: $this->view->guestLayoutOverride(),
             attributes: ['data-testid' => 'nowo-sbb-setup-wizard', 'data-phase' => $progress->getPhase()],
+            guest: true,
         );
     }
 
@@ -68,8 +69,9 @@ final readonly class SetupPages
             $this->steps($steps),
             self::DONE_STEP,
             bundle: SiteBackupView::BUNDLE,
-            layout: $this->view->guestLayout(),
+            layout: $this->view->guestLayoutOverride(),
             attributes: ['data-testid' => 'nowo-sbb-setup-done'],
+            guest: true,
         );
     }
 

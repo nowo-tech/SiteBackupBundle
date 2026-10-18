@@ -29,8 +29,7 @@
 {% endblock %}
 
 {% block javascripts %}
-    {% for _script in ['nowo-ui-confirm', 'nowo-ui-dialog', 'nowo-ui-toast'] %}
-        <script src="{{ asset('js/' ~ _script ~ '.js', 'nowo_ui_kit') }}" defer></script>
-    {% endfor %}
+    {# UiKit 2.2: every UiKit runtime (confirm, dialog, toast…) from the scripts partial, no hand-kept list. #}
+    {{ include(nowo_ui_partial('scripts')) }}
     {% block nowo_ui_scripts %}{% endblock %}
 {% endblock %}

@@ -117,6 +117,8 @@ final class PageContractTest extends PageContractTestCase
         self::assertStringContainsString('formnovalidate', $html);
         self::assertStringContainsString('id="nowo-sbb-database-url"', $html);
         self::assertStringNotContainsString('setTimeout', $html);
+        self::assertStringContainsString('data-testid="nowo-sbb-setup-progress"', $html, 'Progress through the UiKit progress partial.');
+        self::assertMatchesRegularExpression('/<progress id="nowo-sbb-setup-progress"[^>]* max="100" value="\d+"/', $html);
 
         $running = $this->renderPage(new PageFixture('@NowoSiteBackupBundle/setup/wizard.html.twig', PageFixtures::wizard('running')))->html;
         self::assertStringContainsString("getElementById('nowo-sbb-auto-advance')", $running);

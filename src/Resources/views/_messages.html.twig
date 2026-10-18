@@ -4,5 +4,5 @@
   session flashes. Included by every page in block nowo_ui_flashes.
 #}
 {% if messages|default({}) is not empty %}
-    {{ include(nowo_ui_partial('flashes', 'NowoSiteBackupBundle'), {flashes: messages, bundle: 'NowoSiteBackupBundle'}, false) }}
+    {{ include(nowo_ui_partial('flashes', 'NowoSiteBackupBundle'), {flash_messages: messages, bundle: 'NowoSiteBackupBundle'}, false) }}
 {% endif %}

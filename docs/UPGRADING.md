@@ -100,6 +100,21 @@
 
 ## Unreleased
 
+Requires UiKit **^2.2** (`composer require nowo-tech/ui-kit-bundle:^2.2`). No configuration change. What hosts may
+notice:
+
+- **Setup wizard progress**: the bar is the UiKit `progress` partial (`.nowo-ui-progress-field`, `<progress
+  id="nowo-sbb-setup-progress">`, the step message as its `<label>`). Host CSS targeting `.nowo-sbb-progress` or
+  `.nowo-sbb-setup__progress` should theme the UiKit slots `progress` / `progress_meter` instead.
+- **Wizard layout**: `SetupPages` builds `WizardPage(guest: true)`; with `web_ui.guest_layout_template: null` the
+  scaffold extends `nowo_ui_kit.layouts.guest` itself. Code calling `SiteBackupView::guestLayout()` keeps working
+  (deprecated); prefer `guestLayoutOverride()` plus `guest: true`.
+- **Default theme** (UiKit 2.2): table headers in small uppercase labels, striped rows, subtle badges, solid red
+  confirm button. Hosts that styled danger confirms through `btn_danger` set `btn_danger_solid` too (UiKit UPGRADING
+  "Template contract (2.2)").
+- **Host layouts** with their own script list: include `{{ include(nowo_ui_partial('scripts')) }}` instead of listing
+  the UiKit runtimes.
+
 ## To 1.21.0
 
 From **1.20.0**:
