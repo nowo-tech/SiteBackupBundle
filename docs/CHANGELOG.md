@@ -55,6 +55,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- **Docs:** per-page overrides (`web_ui.templates.<page>`) extend the bundle original with `{% extends '@!NowoSiteBackup/…' %}`. USAGE, TEMPLATES and the `web_ui.templates` config info showed `@!NowoSiteBackupBundle/…`, which is not a registered Twig namespace (Symfony names a bundle's `!` namespace without the `Bundle` suffix; the `@NowoSiteBackupBundle` alias added by the bundle has no `!` variant), so a copied override failed with "There are no registered paths for namespace". A kernel test now resolves the documented namespace.
+
 ## [1.21.2] - 2026-10-18
 
 Setup locales accept %parameters% and env vars; int env placeholders for the cold-start MySQL port are kept. See [UPGRADING](UPGRADING.md#to-1212).

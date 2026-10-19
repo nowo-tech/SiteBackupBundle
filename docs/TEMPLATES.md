@@ -82,7 +82,7 @@ use none. A configured layout without a `nowo_ui_content` block is a 1.x layout:
 ## Per-page overrides
 
 `nowo_site_backup.web_ui.templates.<page>` (`index`, `history`, `create`, `restore_confirm`, `delete_confirm`, `login`,
-`setup_wizard`, `setup_token`, `setup_done`, `restore_page`): a host template that extends `@!NowoSiteBackupBundle/…`
+`setup_wizard`, `setup_token`, `setup_done`, `restore_page`): a host template that extends `@!NowoSiteBackup/…`
 and overrides a data block (`nowo_ui_list_row`, `nowo_ui_list_after`, `nowo_ui_wizard_step`, `nowo_ui_auth_footer`…)
 or a canonical block. Prefer theming the UiKit slots (`nowo_ui_kit.theme`) and scaffolds once for every bundle.
 

@@ -176,7 +176,7 @@ nowo_site_backup:
 
 ```twig
 {# templates/site_backup/history.html.twig #}
-{% extends '@!NowoSiteBackupBundle/panel/history.html.twig' %}
+{% extends '@!NowoSiteBackup/panel/history.html.twig' %}
 {% block nowo_ui_list_after %}<p>{{ 'site_backup.history_retention'|trans }}</p>{% endblock %}
 ```
 

@@ -102,6 +102,10 @@
 
 ## Unreleased
 
+No code change. If you copied an override from the docs that extends the `@!NowoSiteBackupBundle` namespace, change it to
+`@!NowoSiteBackup/…` (e.g. `{% extends '@!NowoSiteBackup/panel/history.html.twig' %}`); the old name never resolved.
+Includes and non-overriding extends can keep `@NowoSiteBackupBundle/…`.
+
 ## To 1.21.2
 
 From **1.21.1**:

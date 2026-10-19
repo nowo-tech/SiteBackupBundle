@@ -609,7 +609,7 @@ final class Configuration implements ConfigurationInterface
                     ->defaultNull()
                 ->end()
                 ->arrayNode('templates')
-                    ->info('Per-page template override (page => template): ' . implode(', ', array_keys(SiteBackupView::TEMPLATES)) . '. Prefer a thin {% extends \'@!NowoSiteBackupBundle/…\' %} that overrides a data block.')
+                    ->info('Per-page template override (page => template): ' . implode(', ', array_keys(SiteBackupView::TEMPLATES)) . '. Prefer a thin {% extends \'@!NowoSiteBackup/…\' %} that overrides a data block.')
                     ->normalizeKeys(false)
                     ->useAttributeAsKey('page')
                     ->scalarPrototype()->cannotBeEmpty()->end()

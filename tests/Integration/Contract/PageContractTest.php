@@ -334,7 +334,7 @@ final class PageContractTest extends PageContractTestCase
             'host/legacy_setup.html.twig' => '<legacy-setup>{% block nowo_site_backup_content %}{% endblock %}</legacy-setup>',
             'host/tab.html.twig'          => '<p class="host-tab">fields: {{ form.children|length }}</p>',
             // Thin app override through the bang namespace (REQ-UI-003 "For applications" 4).
-            'host/history_override.html.twig' => "{% extends '@!NowoSiteBackupBundle/panel/history.html.twig' %}{% block nowo_ui_list_after %}<p class=\"host-after\">exported nightly</p>{% endblock %}",
+            'host/history_override.html.twig' => "{% extends '@!NowoSiteBackup/panel/history.html.twig' %}{% block nowo_ui_list_after %}<p class=\"host-after\">exported nightly</p>{% endblock %}",
         ];
     }
 
@@ -398,7 +398,8 @@ final class PageContractTest extends PageContractTestCase
     {
         $views = dirname(__DIR__, 3) . '/src/Resources/views';
 
-        return ['NowoSiteBackupBundle' => $views, '!NowoSiteBackupBundle' => $views];
+        // Symfony registers a bundle's views as @NowoSiteBackup and @!NowoSiteBackup; TwigPathsPass adds @NowoSiteBackupBundle
+        return ['NowoSiteBackupBundle' => $views, 'NowoSiteBackup' => $views, '!NowoSiteBackup' => $views];
     }
 
     protected static function translationDirs(): array
