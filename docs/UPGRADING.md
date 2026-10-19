@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.21.3](#to-1213)
 - [To 1.21.2](#to-1212)
 - [To 1.21.1](#to-1211)
 - [To 1.21.0](#to-1210)
@@ -101,6 +102,14 @@
   - [Breaking changes](#breaking-changes-1)
 
 ## Unreleased
+
+## To 1.21.3
+
+From **1.21.2**:
+
+```bash
+composer update nowo-tech/site-backup-bundle
+```
 
 No code change. If you copied an override from the docs that extends the `@!NowoSiteBackupBundle` namespace, change it to
 `@!NowoSiteBackup/…` (e.g. `{% extends '@!NowoSiteBackup/panel/history.html.twig' %}`); the old name never resolved.
