@@ -2,6 +2,12 @@
 
 Current stable target: **v1.19.2**.
 
+## Table of contents
+
+- [Checklist](#checklist)
+- [Example: v1.14.0](#example-v1140)
+- [Versioning](#versioning)
+
 ## Checklist
 
 1. `make release-check` (Cursor trailer check, open PRs, composer-sync, cs-fix, cs-check, rector-dry, phpstan, validate-translations, test-coverage, demos when available).

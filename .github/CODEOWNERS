@@ -1,4 +1,4 @@
-# CODEOWNERS for MaintenanceModeBundle
+# CODEOWNERS for SiteBackupBundle
 # Default owner for everything in the repository
 * @HecFranco
 
@@ -10,3 +10,6 @@
 
 # Tests
 /tests/ @HecFranco
+
+# Optional: scripts / tooling
+/.scripts/ @HecFranco

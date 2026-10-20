@@ -56,6 +56,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- Documentation: wave-1 REQ compliance — canonical issue templates, CODEOWNERS header, README documentation list order (PSR/Templates under Additional documentation), CONTRIBUTING Cursor Agent queue settings (REQ-IDE-006), DEMO-FRANKENPHP dev/production start, timeout hierarchy and troubleshooting, commented demo `.env.example`, Spec Kit manual (layers, incremental features), categorized Spec Kit inventory (160/160), tables of contents on long docs.
+
 ## [1.21.3] - 2026-10-19
 
 Docs: per-page overrides extend @!NowoSiteBackup (the documented namespace did not resolve). See [UPGRADING](UPGRADING.md#to-1213).

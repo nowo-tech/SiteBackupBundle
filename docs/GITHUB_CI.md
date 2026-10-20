@@ -1,5 +1,11 @@
 # GitHub CI notes
 
+## Table of contents
+
+- [Workflows](#workflows)
+- [REQ-GIT-001 (no Cursor co-author trailers)](#req-git-001-no-cursor-co-author-trailers)
+- [Local parity](#local-parity)
+
 ## Workflows
 
 - `.github/workflows/ci.yml` — quality + tests on PRs / pushes

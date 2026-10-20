@@ -1,5 +1,12 @@
 # Coverage policy (REQ-TEST-003)
 
+## Table of contents
+
+- [Threshold](#threshold)
+- [Measured coverage](#measured-coverage)
+- [Justified residual branches](#justified-residual-branches)
+- [README](#readme)
+
 ## Threshold
 
 - **PHP line coverage gate:** **≥ 99%** of includable `src/` (`make coverage-check`).

@@ -23,3 +23,55 @@ make -C demo up-symfony8
 - Worker mode (kernel not reset): after restore / `cache_clear` / `database_url`, check `bin/console nowo:site-backup:worker-restart` and restart workers — see [FRANKENPHP-WORKER-AUDIT.md](FRANKENPHP-WORKER-AUDIT.md)
 
 See [SETUP-WIZARD.md](SETUP-WIZARD.md), [USAGE.md](USAGE.md), and [demo/README.md](../demo/README.md).
+
+## Table of contents
+
+- [Start the demo in development](#start-the-demo-in-development)
+- [Start the demo in production mode](#start-the-demo-in-production-mode)
+- [Timeout hierarchy (REQ-RUNTIME-001)](#timeout-hierarchy-req-runtime-001)
+- [Troubleshooting](#troubleshooting)
+
+## Start the demo in development
+
+```bash
+make -C demo up-symfony8        # build + start (APP_ENV=dev, FRANKENPHP_MODE=worker by default)
+make -C demo/symfony8 logs      # follow FrankenPHP logs
+make -C demo update-bundle-all  # re-sync the mounted bundle after editing src/
+```
+
+For edit-and-refresh without worker restarts, set `FRANKENPHP_MODE=classic` in `demo/symfony8/.env` and recreate the container (`docker compose up -d`): the entrypoint then uses `Caddyfile.dev` (plain `php_server` with `hot_reload`). Twig cache is off in `dev`.
+
+## Start the demo in production mode
+
+The demo is not a production deployment, but the production runtime can be reproduced locally:
+
+1. Keep `FRANKENPHP_MODE=worker`: `Caddyfile` runs `php_server { worker { file /app/public/index.php; watch } }`.
+2. Run with `APP_ENV=prod` / `APP_DEBUG=0` (compose override), `composer install --no-dev --optimize-autoloader` and `php bin/console cache:clear --env=prod` inside the container.
+3. Set a real panel password hash (`nowo:site-backup:hash-password`) and the setup token before exposing the host (see [SECURITY.md](SECURITY.md)).
+4. After a restore, `cache_clear` or a `DATABASE_URL` change, run `bin/console nowo:site-backup:worker-restart` and restart the workers (kernel is not reset between requests).
+
+## Timeout hierarchy (REQ-RUNTIME-001)
+
+Backups and restores run blocking subprocesses (`tar`, `mysqldump`). Keep the deadlines layered, innermost first:
+
+| Layer | Setting | Demo / default |
+| --- | --- | --- |
+| Operation | `nowo_site_backup.process_timeout` (Symfony `Process` timeout for `tar` / dump) | demo **300 s**, bundle default **600 s** |
+| PHP | `max_execution_time`; with `bump_time_limit: true` the panel and setup requests call `set_time_limit(bump_time_limit_seconds ?? process_timeout)` — set `bump_time_limit_seconds` **above** `process_timeout` so the process timeout fires first | demo: PHP default (no bump configured) |
+| HTTP server | Caddy `servers { timeouts { write … } }` — must be **greater** than the PHP limit when set | demo Caddyfile: Caddy default (no write timeout) |
+| FrankenPHP queue | `max_wait_time` caps how long a request waits for a free PHP thread | demo: not set |
+
+When raising `process_timeout`, raise the PHP and HTTP write deadlines in the same change. Long restores should preferably run from the CLI (`nowo:site-backup:restore`), which is not bound by HTTP timeouts. See [CONFIGURATION.md](CONFIGURATION.md) (`process_timeout`, `bump_time_limit`, `restore.stale_after_seconds`).
+
+## Troubleshooting
+
+| Symptom | Cause / fix |
+| --- | --- |
+| Twig or PHP changes do not appear | Worker keeps the kernel in memory: use `FRANKENPHP_MODE=classic` or restart the container. |
+| `FRANKENPHP_MODE` change has no effect | Env is read at container creation: `docker compose up -d` (recreate), not `restart`. |
+| Site stays in 503 after a crashed restore | The restore heartbeat stopped; after `restore.stale_after_seconds` (default 2 × `process_timeout`) the restore is treated as abandoned. |
+| Backup / restore fails with a Process timeout | Raise `process_timeout` and, with it, the PHP and HTTP deadlines above — or run the CLI command instead. |
+| Panel access denied ("misconfigured") | No password hash configured (fail-closed): generate one with `nowo:site-backup:hash-password`. |
+| Setup wizard asks for a token | Expected on internet-facing hosts: pass `?token=…` (see [SETUP-WIZARD.md](SETUP-WIZARD.md)). |
+| `DATABASE_URL` cannot connect | The demo MySQL has no host ports (REQ-DEMO-006): use the compose service name `mysql`. |
+

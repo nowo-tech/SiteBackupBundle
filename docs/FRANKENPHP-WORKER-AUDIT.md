@@ -9,6 +9,21 @@
 | Remediation (2026-09-23 / 2026-09-25) | W-02 fixed (self-healing schema memo + `ResetInterface`); W-01 mitigated with a shared "restart workers" signal (`WorkerRestartSignal`, `WorkerRestartRequiredEvent`, `nowo:site-backup:worker-restart`); W-04 PDO connect timeout added; regression tests simulate two requests on the same instances without `reset()` |
 | **Verdict** | ✅ **Viable under scenario B** — no cross-request state leak; the only remaining condition is operational: restart workers when the bundle raises the restart signal after a restore / `cache_clear` / `database_url` (W-01, cannot be fixed in-process) |
 
+## Table of contents
+
+- [Execution model assumed](#execution-model-assumed)
+- [Summary](#summary)
+- [Services reviewed](#services-reviewed)
+- [Findings](#findings)
+  - [W-01 — Restore and setup change code, env and cache under a running worker (Medium)](#w-01--restore-and-setup-change-code-env-and-cache-under-a-running-worker-medium)
+  - [W-02 — `$schemaEnsured` flag goes stale when the setup tables are dropped (Medium)](#w-02--schemaensured-flag-goes-stale-when-the-setup-tables-are-dropped-medium)
+  - [W-03 — Long synchronous subprocesses inside HTTP requests (Low)](#w-03--long-synchronous-subprocesses-inside-http-requests-low)
+  - [W-04 — Cold-start schema probe runs on every main request (Low)](#w-04--cold-start-schema-probe-runs-on-every-main-request-low)
+  - [W-05 — File markers are read with `is_file()` (Info)](#w-05--file-markers-are-read-with-is_file-info)
+  - [W-06 — `SetupRouteLoader::$loaded` guard (Info)](#w-06--setuprouteloaderloaded-guard-info)
+- [Usage recommendations in worker mode](#usage-recommendations-in-worker-mode)
+- [Re-audit triggers](#re-audit-triggers)
+
 ## Execution model assumed
 
 FrankenPHP worker mode boots the Symfony kernel once per worker and serves many requests with the same container. This audit assumes the **strict** variant: the kernel is **not** rebooted between requests, so every shared service, static property and PHP global survives from one request to the next. Two scenarios are evaluated:

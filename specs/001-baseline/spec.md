@@ -105,12 +105,13 @@ Given `setup.profiles.*.tabs` (ordered), When the wizard runs, Then each tab may
 | FR-ATTR-001 | `#[ExcludeFromRestore]` |
 | FR-DI-001 | `services.yaml` / routes attribute loader with path-prefix parameters |
 | FR-WORKER-001 | FrankenPHP worker scenario B (no kernel reset): no cross-request mutable state in shared services; DBAL setup storages self-heal schema memo + `ResetInterface`; after restore / `cache_clear` / `database_url` env write, `WorkerRestartSignal` + `WorkerRestartRequiredEvent` require an operational worker restart |
+| FR-UI-001 | Panel and setup pages render on the UiKit page contract (REQ-UI-003, v1.21+): `View\PanelPages` / `View\SetupPages` build the view models, `View\SiteBackupView` resolves per-page templates and layouts; `_legacy_layout.html.twig` bridges 1.x layouts |
 
 ## Success criteria
 
 | ID | Criterion |
 | --- | --- |
-| SC-INV-001 | `code-inventory.md` lists 100% of production sources under `src/` (PHP + Twig views) |
+| SC-INV-001 | `code-inventory.md` lists 100% of production sources under `src/` — **160/160** (PHP, config YAML, Twig views, translations; audited 2026-10-20), grouped by domain |
 | SC-TEST-001 | PHPUnit Lines coverage ≥ 99% (`make coverage-check`) |
 | SC-SEC-001 | Panel denied without hash; CSRF required for POSTs |
 | SC-SETUP-001 | Incomplete progress detector + doctrine/chain storage covered by unit tests |
@@ -141,6 +142,10 @@ make test-coverage
 make coverage-check
 make release-check
 ```
+
+## Feature specifications
+
+Incremental features extend this baseline (IDs prefixed with the spec number in [`code-inventory.md`](code-inventory.md)): [002 setup step rows](../002-setup-step-rows/spec.md), [003 durable done / cold start](../003-durable-done-cold-start/spec.md), [004 worker perf + DB dump hardening](../004-worker-perf-dump-hardening/spec.md), [005 panel login throttle](../005-panel-login-throttle/spec.md), [006 translated themed screens](../006-translated-themed-screens/spec.md).
 
 ## Links
 

@@ -118,11 +118,10 @@ make release-check
 ```
 
 ## Documentation
+
 - [Installation](docs/INSTALLATION.md)
 - [Configuration](docs/CONFIGURATION.md)
-- [PSR evaluation (REQ-CS-007)](docs/PSR.md)
 - [Usage](docs/USAGE.md)
-- [Templates (UiKit page contract)](docs/TEMPLATES.md)
 - [Contributing](docs/CONTRIBUTING.md)
 - [Code of Conduct](CODE_OF_CONDUCT.md)
 - [Changelog](docs/CHANGELOG.md)
@@ -135,6 +134,8 @@ make release-check
 
 ### Additional documentation
 
+- [PSR evaluation (REQ-CS-007)](docs/PSR.md)
+- [Templates (UiKit page contract)](docs/TEMPLATES.md)
 - [Setup Wizard (cold start & post-restore)](docs/SETUP-WIZARD.md)
 - [Demo (FrankenPHP)](docs/DEMO-FRANKENPHP.md)
 - [GitHub CI notes](docs/GITHUB_CI.md)

@@ -7,6 +7,7 @@
 - [Restore without breaking the site](#restore-without-breaking-the-site)
   - [Exclude routes during restore](#exclude-routes-during-restore)
 - [Admin panel](#admin-panel)
+  - [Login throttle and session rotation](#login-throttle-and-session-rotation)
 - [Setup wizard](#setup-wizard)
 - [Twig helpers](#twig-helpers)
 - [Web UI on the UiKit page contract (REQ-UI-003, 1.21+)](#web-ui-on-the-uikit-page-contract-req-ui-003-121)

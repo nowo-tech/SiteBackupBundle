@@ -7,6 +7,7 @@
 - [Routes](#routes)
 - [Firewall / access control](#firewall--access-control)
 - [Panel password (required by default)](#panel-password-required-by-default)
+- [Twig Extra Bundle (REQ-TWIG-004)](#twig-extra-bundle-req-twig-004)
 - [Next steps](#next-steps)
 
 ## Requirements

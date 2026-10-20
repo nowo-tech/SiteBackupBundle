@@ -3,11 +3,13 @@
 ## Table of contents
 
 - [What Spec Kit adds](#what-spec-kit-adds)
-- [Prerequisites — install Specify CLI](#prerequisites-install-specify-cli)
+- [Prerequisites — install Specify CLI](#prerequisites--install-specify-cli)
 - [Initialize Spec Kit in this repository](#initialize-spec-kit-in-this-repository)
 - [Folder structure](#folder-structure)
+- [How the layers fit together](#how-the-layers-fit-together)
 - [Baseline backfill (`specs/001-baseline/`)](#baseline-backfill-specs001-baseline)
 - [Using Spec Kit in Cursor Agent](#using-spec-kit-in-cursor-agent)
+- [Incremental features](#incremental-features)
 - [Maintainer checklist](#maintainer-checklist)
 - [Troubleshooting](#troubleshooting)
 - [See also](#see-also)
@@ -93,20 +95,33 @@ Repository root/
 
 ---
 
+## How the layers fit together
+
+| Layer | Path | Role |
+| --- | --- | --- |
+| Spec Kit manual | `docs/SPEC-KIT.md` (this file) | Tooling: install, init, structure, Cursor skills |
+| Spec-driven development | [`docs/SPEC-DRIVEN-DEVELOPMENT.md`](SPEC-DRIVEN-DEVELOPMENT.md) | User stories, scope, `REQ-*` anchors, validation |
+| Baseline spec | [`specs/001-baseline/`](../specs/001-baseline/) | Normative `FR-*` / `SC-*` + 100% `src/` inventory |
+| Feature specs | `specs/002-…` to `specs/006-…` | Incremental features (setup step rows, durable done / cold start, worker perf + dump hardening, login throttle, translated screens) |
+| Integrator docs | `docs/USAGE.md`, `docs/CONFIGURATION.md`, `docs/SETUP-WIZARD.md` | How hosts configure and use the bundle |
+| Mechanical proof | `tests/`, PHPStan | Specs are not proof on their own: behaviour changes need tests |
+
+---
+
 ## Baseline backfill (`specs/001-baseline/`)
 
 Every Nowo bundle with Spec Kit must ship:
 
 | File | Content |
 | --- | --- |
-| `spec.md` | User scenarios, `FR-*` requirements, success criteria (`SC-*`), validation commands |
+| `spec.md` | User scenarios, `FR-*` requirements, success criteria (`SC-*`), non-goals, validation commands |
 | `code-inventory.md` | Table mapping **every production file** under `src/` to spec sections |
 
 **Audit:**
 
 ```bash
-find src -type f -name '*.php' | wc -l
-# Must match "Total production PHP" row in code-inventory.md (16 for this bundle)
+git ls-files src | wc -l
+# Must match the "Total production sources" row in code-inventory.md (160 for this bundle)
 ```
 
 When you change product behaviour:
@@ -131,6 +146,18 @@ Open the repository in **Cursor** at the project root. Invoke skills as slash co
 | `/speckit-converge` | Post-refactor gap analysis |
 
 For **baseline maintenance**, edit [`specs/001-baseline/spec.md`](../specs/001-baseline/spec.md) and [`code-inventory.md`](../specs/001-baseline/code-inventory.md) directly.
+
+---
+
+## Incremental features
+
+| Directory | Role |
+| --- | --- |
+| `specs/001-baseline/` | Authoritative full-product backfill; later specs must not contradict it |
+| `specs/002-setup-step-rows/` … `specs/006-translated-themed-screens/` | Shipped incremental features; their IDs appear in the inventory prefixed with the spec number (e.g. `004 FR-PERF-001`) |
+| `specs/007-…` | Next feature, created by `/speckit-specify` (sequential numbering) |
+
+When a feature ships: reference it from `001-baseline` if it becomes core surface, add its new `src/` files to `code-inventory.md`, update integrator docs and tests.
 
 ---
 

@@ -5,10 +5,19 @@
 - [Problem](#problem)
 - [Product idea](#product-idea)
 - [Modes and site gate](#modes-and-site-gate)
+  - [Progress storage](#progress-storage)
 - [UI flows](#ui-flows)
+  - [A — Fresh install (no DB)](#a--fresh-install-no-db)
+  - [B — Post-restore (files OK, DB cold)](#b--post-restore-files-ok-db-cold)
+  - [C — Headless / CI](#c--headless--ci)
+  - [UI chrome (single composition)](#ui-chrome-single-composition)
 - [Wizard engine](#wizard-engine)
+  - [Contracts](#contracts)
 - [Built-in step types](#built-in-step-types)
+- [Tabs, checkers, and advance mode](#tabs-checkers-and-advance-mode)
+  - [Reusable Twig (REQ-TWIG-001 / REQ-UI-001)](#reusable-twig-req-twig-001--req-ui-001)
 - [Configuration (polyvalent)](#configuration-polyvalent)
+  - [App-owned pieces (required for full wizard)](#app-owned-pieces-required-for-full-wizard)
 - [Profiles](#profiles)
 - [Security](#security)
 - [Idempotency contract](#idempotency-contract)
@@ -18,6 +27,7 @@
 - [CLI](#cli)
 - [Events](#events)
 - [Implementation roadmap](#implementation-roadmap)
+  - [Non-goals (keep polyvalent)](#non-goals-keep-polyvalent)
 
 ## Problem
 
