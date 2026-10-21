@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.22.0] - 2026-10-21](#1220---2026-10-21)
 - [[1.21.3] - 2026-10-19](#1213---2026-10-19)
 - [[1.21.2] - 2026-10-18](#1212---2026-10-18)
 - [[1.21.1] - 2026-10-18](#1211---2026-10-18)
@@ -55,6 +56,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [[1.0.0] - 2026-07-26](#100---2026-07-26)
 
 ## [Unreleased]
+
+## [1.22.0] - 2026-10-21
+
+Setup-token gate illustration and configurable how-to steps (hosts drop their copied token page), dependency refresh, php-cs-fixer ParallelConfig(2). See [UPGRADING](UPGRADING.md#to-1220).
 
 ### Added
 
@@ -730,7 +735,8 @@ First stable release of **Site Backup Bundle**.
 - Symfony `^7.0 || ^8.0` (CI / mandatory minors: **7.4**, **8.0**, **8.1**)
 - System `tar` required for archive create/extract
 
-[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.21.3...HEAD
+[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.22.0...HEAD
+[1.22.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.21.3...v1.22.0
 [1.21.3]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.21.2...v1.21.3
 [1.21.2]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.21.1...v1.21.2
 [1.21.1]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.21.0...v1.21.1
