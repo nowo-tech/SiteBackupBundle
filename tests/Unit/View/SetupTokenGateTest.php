@@ -18,11 +18,12 @@ final class SetupTokenGateTest extends TestCase
         }
     }
 
-    public function testStringShorthandDerivesTheWebpSibling(): void
+    public function testStringShorthandEmitsNoWebpByDefault(): void
     {
         $gate = SetupTokenGate::fromConfig(['illustration' => ' illustrations/error-403.JPG ']);
 
-        self::assertSame(['src' => 'illustrations/error-403.JPG', 'webp' => 'illustrations/error-403.webp', 'width' => null, 'height' => null, 'alt' => SetupTokenGate::DEFAULT_ILLUSTRATION_ALT], $gate->illustration);
+        self::assertSame(['src' => 'illustrations/error-403.JPG', 'webp' => null, 'width' => null, 'height' => null, 'alt' => SetupTokenGate::DEFAULT_ILLUSTRATION_ALT], $gate->illustration, 'PNG/JPEG-only hosts get no broken <source> (1.22.1)');
+        self::assertSame('illustrations/error-403.webp', SetupTokenGate::fromConfig(['illustration' => ['src' => 'illustrations/error-403.JPG', 'webp' => true]])->illustration['webp'] ?? null, 'webp: true derives the sibling');
     }
 
     public function testFullFormAndSanitizing(): void

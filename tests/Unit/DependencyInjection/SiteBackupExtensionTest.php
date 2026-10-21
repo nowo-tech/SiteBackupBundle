@@ -243,7 +243,7 @@ final class SiteBackupExtensionTest extends TestCase
         $gate = $container->getDefinition(SetupTokenGate::class);
         self::assertSame([SetupTokenGate::class, 'fromConfig'], $gate->getFactory());
         $built = SetupTokenGate::fromConfig($gate->getArgument(0));
-        self::assertSame('illustrations/error-403.webp', $built->illustration['webp'] ?? null);
+        self::assertNull($built->illustration['webp'] ?? null, 'string shorthand: no WebP <source> unless opted in (1.22.1)');
         self::assertSame(['setup.token.step_env'], $built->howtoSteps);
     }
 

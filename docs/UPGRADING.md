@@ -105,6 +105,8 @@
 
 ## Unreleased
 
+Patch release. `setup.token_gate.illustration.webp` no longer defaults to the derived `.webp` sibling: a PNG/JPEG-only host got a broken `<source>`. If your illustration has a WebP next to it, set `webp: true` (or the WebP path).
+
 ## To 1.22.0
 
 From **1.21.3**:
@@ -134,7 +136,8 @@ nowo_site_backup:
     setup:
         token_gate:
             illustration:
-                src: 'illustrations/error-403.png'   # WebP sibling illustrations/error-403.webp is used as <source>
+                src: 'illustrations/error-403.png'
+                webp: true                            # only if illustrations/error-403.webp exists (1.22.1+: opt-in)
                 width: 896
                 height: 597
                 alt: 'error.403.image_alt'

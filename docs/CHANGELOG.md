@@ -57,6 +57,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- `setup.token_gate.illustration.webp` is opt-in: `null` (default) emits no WebP `<source>` (1.22.0 derived `<src>.webp` without knowing it exists, so PNG/JPEG-only hosts showed a broken image); `true` derives the sibling, a string is the WebP path.
+
 ## [1.22.0] - 2026-10-21
 
 Setup-token gate illustration and configurable how-to steps (hosts drop their copied token page), dependency refresh, php-cs-fixer ParallelConfig(2). See [UPGRADING](UPGRADING.md#to-1220).

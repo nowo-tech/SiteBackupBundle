@@ -394,13 +394,13 @@ final class PageContractTest extends PageContractTestCase
         yield 'setup done' => new PageFixture('@NowoSiteBackupBundle/setup/done.html.twig', PageFixtures::done());
         yield 'setup token' => new PageFixture('@NowoSiteBackupBundle/setup/token.html.twig', PageFixtures::token());
         yield 'setup token (no form)' => new PageFixture('@NowoSiteBackupBundle/setup/token.html.twig', PageFixtures::token(false));
-        yield 'setup token (illustration, custom steps)' => new PageFixture('@NowoSiteBackupBundle/setup/token.html.twig', PageFixtures::token(true, SetupTokenGate::fromConfig(['illustration' => ['src' => 'illustrations/error-403.png', 'width' => 896, 'height' => 597], 'howto_steps' => ['setup.token.step_env', 'setup.token.step_header']])));
+        yield 'setup token (illustration, custom steps)' => new PageFixture('@NowoSiteBackupBundle/setup/token.html.twig', PageFixtures::token(true, SetupTokenGate::fromConfig(['illustration' => ['src' => 'illustrations/error-403.png', 'webp' => true, 'width' => 896, 'height' => 597], 'howto_steps' => ['setup.token.step_env', 'setup.token.step_header']])));
         yield 'setup token (illustration without WebP, no how-to)' => new PageFixture('@NowoSiteBackupBundle/setup/token.html.twig', PageFixtures::token(true, SetupTokenGate::fromConfig(['illustration' => ['src' => 'illustrations/gate.png', 'webp' => false], 'howto_steps' => []])));
     }
 
     public function testTokenGateRendersTheIllustrationAndTheConfiguredSteps(): void
     {
-        $gate = SetupTokenGate::fromConfig(['illustration' => ['src' => 'illustrations/error-403.png', 'width' => 896, 'height' => 597], 'howto_steps' => ['setup.token.step_url', 'Ask the on-call engineer.']]);
+        $gate = SetupTokenGate::fromConfig(['illustration' => ['src' => 'illustrations/error-403.png', 'webp' => true, 'width' => 896, 'height' => 597], 'howto_steps' => ['setup.token.step_url', 'Ask the on-call engineer.']]);
         $html = $this->renderPage(new PageFixture('@NowoSiteBackupBundle/setup/token.html.twig', PageFixtures::token(true, $gate)))->html;
 
         self::assertStringContainsString('<source type="image/webp" srcset="/assets/illustrations/error-403.webp">', $html);

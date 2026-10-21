@@ -75,8 +75,9 @@ final readonly class SetupTokenGate
 
         $src  = trim($illustration['src']);
         $webp = $illustration['webp'] ?? null;
-        if ($webp === null || $webp === true) {
-            // Derived sibling: illustrations/error-403.png => illustrations/error-403.webp (src already WebP: none).
+        if ($webp === true) {
+            // Opt-in derived sibling (1.22.1): illustrations/error-403.png => illustrations/error-403.webp (src already
+            // WebP: none). Null (default) emits no WebP <source>: the bundle cannot know the sibling exists.
             $webp = preg_match('/\.(png|jpe?g)$/i', $src) === 1 ? (string) preg_replace('/\.(png|jpe?g)$/i', '.webp', $src) : null;
         } elseif (!is_string($webp) || trim($webp) === '') {
             $webp = null;

@@ -461,7 +461,7 @@ final class Configuration implements ConfigurationInterface
                                             ->cannotBeEmpty()
                                         ->end()
                                         ->scalarNode('webp')
-                                            ->info('WebP source asset path. Null (default) = src with a .webp extension; false = no WebP source.')
+                                            ->info('WebP <source>: an asset path, true = src with a .webp extension, null / false (default) = none (1.22.1: no longer derived by default).')
                                             ->defaultNull()
                                         ->end()
                                         ->integerNode('width')->info('Intrinsic width in pixels (reserves the layout box).')->defaultNull()->min(1)->end()

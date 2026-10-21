@@ -38,7 +38,8 @@ nowo_site_backup:
         # how-to steps (translation keys of translation_domain, or literal text). Preview: /demo/setup-token-gate
         token_gate:
             illustration:
-                src: 'illustrations/setup-locked.png'   # WebP sibling setup-locked.webp = <source>
+                src: 'illustrations/setup-locked.png'
+                webp: true                               # the demo ships setup-locked.webp next to it
                 width: 896
                 height: 560
             howto_steps:
