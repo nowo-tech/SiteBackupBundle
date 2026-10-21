@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.22.1](#to-1221)
 - [To 1.22.0](#to-1220)
 - [To 1.22.0](#to-1220-1)
 - [To 1.21.3](#to-1213)
@@ -104,6 +105,14 @@
   - [Breaking changes](#breaking-changes-1)
 
 ## Unreleased
+
+## To 1.22.1
+
+From **1.22.0**:
+
+```bash
+composer update nowo-tech/site-backup-bundle
+```
 
 Patch release. `setup.token_gate.illustration.webp` no longer defaults to the derived `.webp` sibling: a PNG/JPEG-only host got a broken `<source>`. If your illustration has a WebP next to it, set `webp: true` (or the WebP path).
 
