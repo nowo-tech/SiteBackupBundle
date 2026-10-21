@@ -163,6 +163,7 @@ setup:
     step_env: 'El token es el valor de setup.setup_token en la configuración del bundle (normalmente una variable de entorno).'
     step_url: 'Abre %path% con ese valor.'
     step_header: 'O envíalo en la cabecera HTTP X-Setup-Token.'
+    illustration_alt: 'La instalación está bloqueada hasta que se indique el token'
   done:
     title: 'Configuración completada'
     body: 'El sitio está listo. Puedes iniciar sesión con la cuenta de administrador.'

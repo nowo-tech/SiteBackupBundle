@@ -27,6 +27,7 @@ use Nowo\SiteBackupBundle\Setup\Step\DatabaseUrlStep;
 use Nowo\SiteBackupBundle\Setup\Step\RequirementsStep;
 use Nowo\SiteBackupBundle\View\PanelPages;
 use Nowo\SiteBackupBundle\View\SetupPages;
+use Nowo\SiteBackupBundle\View\SetupTokenGate;
 use Nowo\SiteBackupBundle\View\SiteBackupView;
 use Nowo\UiKitBundle\Test\StubHost;
 use Nowo\UiKitBundle\View\Action;
@@ -282,10 +283,11 @@ final class PageFixtures
     /**
      * @return array<string, mixed>
      */
-    public static function token(bool $withForm = true): array
+    public static function token(bool $withForm = true, ?SetupTokenGate $tokenGate = null): array
     {
         $form = $withForm ? self::formFactory()->createNamed('', SetupTokenType::class, null, ['action' => self::SETUP_PREFIX])->createView() : null;
+        $vars = ['page' => (new SetupPages(self::view(), 'Acme Shop'))->token($form, self::SETUP_PREFIX), 'pathPrefix' => self::SETUP_PREFIX, 'brandName' => 'Acme Shop', 'messages' => []];
 
-        return ['page' => (new SetupPages(self::view(), 'Acme Shop'))->token($form, self::SETUP_PREFIX), 'pathPrefix' => self::SETUP_PREFIX, 'brandName' => 'Acme Shop', 'messages' => []];
+        return $tokenGate instanceof SetupTokenGate ? $vars + ['tokenGate' => $tokenGate] : $vars;
     }
 }

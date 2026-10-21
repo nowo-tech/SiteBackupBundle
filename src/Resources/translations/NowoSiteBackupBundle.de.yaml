@@ -163,6 +163,7 @@ setup:
     step_env: 'Das Token ist der Wert von setup.setup_token in der Bundle-Konfiguration (meist eine Umgebungsvariable).'
     step_url: 'Öffnen Sie %path% mit diesem Wert.'
     step_header: 'Oder senden Sie es im HTTP-Header X-Setup-Token.'
+    illustration_alt: 'Die Einrichtung ist bis zur Eingabe des Tokens gesperrt'
   done:
     title: 'Einrichtung abgeschlossen'
     body: 'Die Website ist bereit. Sie können sich mit dem erstellten Admin-Konto anmelden.'

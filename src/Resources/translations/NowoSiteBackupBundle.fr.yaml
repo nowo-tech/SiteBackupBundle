@@ -163,6 +163,7 @@ setup:
     step_env: 'Le jeton est la valeur de setup.setup_token dans la configuration du bundle (généralement une variable d''environnement).'
     step_url: 'Ouvrez %path% avec cette valeur.'
     step_header: 'Ou envoyez-le dans l''en-tête HTTP X-Setup-Token.'
+    illustration_alt: 'La configuration est verrouillée jusqu''à la saisie du jeton'
   done:
     title: 'Configuration terminée'
     body: 'Le site est prêt. Vous pouvez vous connecter avec le compte administrateur créé.'

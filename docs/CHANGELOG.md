@@ -56,6 +56,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Setup-token gate presentation options (`setup.token_gate`, 1.22): an optional **illustration** above the auth panel
+  (`illustration`: asset path shorthand or `{ src, webp, width, height, alt }`, rendered as `<picture>` with a WebP
+  source and a PNG/JPEG fallback `<img>` with intrinsic width/height, sized by a CSP-nonce `<style>`), configurable
+  **how-to steps** of the `<details>` disclosure (`howto_steps`: translation keys or translated texts, `[]` hides it) and
+  their `translation_domain`. New `View\SetupTokenGate` (immutable, worker safe) passed to `setup/token.html.twig` as
+  `tokenGate`; new translation key `setup.token.illustration_alt` (7 locales). Hosts that copied the token page only to
+  add art and copy can delete it (see UPGRADING).
+
 ### Changed
 
 - Dependencies refreshed (Composer and pnpm/npm lock files of the bundle and its demos, campaign 2026-10-19).

@@ -13,6 +13,7 @@ use Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupMarkerManager;
 use Nowo\SiteBackupBundle\Tests\Support\PageFixtures;
 use Nowo\SiteBackupBundle\Tests\Unit\CreatesSiteBackupTestHarness;
+use Nowo\SiteBackupBundle\View\SetupTokenGate;
 use Nowo\SiteBackupBundle\View\SiteBackupView;
 use Nowo\UiKitBundle\Test\PageContractTestCase;
 use Nowo\UiKitBundle\Test\PageFixture;
@@ -38,6 +39,7 @@ use function class_exists;
 use function dirname;
 use function glob;
 use function password_hash;
+use function strpos;
 use function substr_count;
 
 use const PASSWORD_DEFAULT;
@@ -392,6 +394,45 @@ final class PageContractTest extends PageContractTestCase
         yield 'setup done' => new PageFixture('@NowoSiteBackupBundle/setup/done.html.twig', PageFixtures::done());
         yield 'setup token' => new PageFixture('@NowoSiteBackupBundle/setup/token.html.twig', PageFixtures::token());
         yield 'setup token (no form)' => new PageFixture('@NowoSiteBackupBundle/setup/token.html.twig', PageFixtures::token(false));
+        yield 'setup token (illustration, custom steps)' => new PageFixture('@NowoSiteBackupBundle/setup/token.html.twig', PageFixtures::token(true, SetupTokenGate::fromConfig(['illustration' => ['src' => 'illustrations/error-403.png', 'width' => 896, 'height' => 597], 'howto_steps' => ['setup.token.step_env', 'setup.token.step_header']])));
+        yield 'setup token (illustration without WebP, no how-to)' => new PageFixture('@NowoSiteBackupBundle/setup/token.html.twig', PageFixtures::token(true, SetupTokenGate::fromConfig(['illustration' => ['src' => 'illustrations/gate.png', 'webp' => false], 'howto_steps' => []])));
+    }
+
+    public function testTokenGateRendersTheIllustrationAndTheConfiguredSteps(): void
+    {
+        $gate = SetupTokenGate::fromConfig(['illustration' => ['src' => 'illustrations/error-403.png', 'width' => 896, 'height' => 597], 'howto_steps' => ['setup.token.step_url', 'Ask the on-call engineer.']]);
+        $html = $this->renderPage(new PageFixture('@NowoSiteBackupBundle/setup/token.html.twig', PageFixtures::token(true, $gate)))->html;
+
+        self::assertStringContainsString('<source type="image/webp" srcset="/assets/illustrations/error-403.webp">', $html);
+        self::assertStringContainsString('<img class="nowo-sbb-token__img" src="/assets/illustrations/error-403.png" width="896" height="597" alt="Setup is locked until the setup token is provided" decoding="async" fetchpriority="high">', $html);
+        self::assertLessThan(strpos($html, 'data-testid="nowo-sbb-token-gate"'), strpos($html, 'data-testid="nowo-sbb-token-illustration"'), 'The illustration sits above the auth panel.');
+        self::assertStringContainsString('.nowo-sbb-token__img{', $html);
+        self::assertSame(2, substr_count($html, '<li>'), 'Only the configured how-to steps.');
+        self::assertStringContainsString('<li>Open /_setup?token=… with that value.</li>', $html);
+        self::assertStringContainsString('<li>Ask the on-call engineer.</li>', $html, 'A literal step renders as given.');
+        self::assertStringContainsString('name="token"', $html);
+        self::assertStringNotContainsString('nonce=', $html);
+
+        $request = Request::create('/_setup');
+        $request->attributes->set('csp_nonce', 'n0nce');
+        $nonced = $this->renderPage(new PageFixture('@NowoSiteBackupBundle/setup/token.html.twig', PageFixtures::token(true, $gate) + ['app' => (object) ['request' => $request], 'flash_messages' => []]))->html;
+        self::assertStringContainsString('<style nonce="n0nce">.nowo-sbb-token__art{', $nonced);
+    }
+
+    public function testTokenGateDefaultsKeepTheThreeStepsWithoutIllustration(): void
+    {
+        $html = $this->renderPage(new PageFixture('@NowoSiteBackupBundle/setup/token.html.twig', PageFixtures::token(true, new SetupTokenGate())))->html;
+        $bc   = $this->renderPage(new PageFixture('@NowoSiteBackupBundle/setup/token.html.twig', PageFixtures::token()))->html;
+
+        self::assertStringNotContainsString('<picture', $html);
+        self::assertStringNotContainsString('.nowo-sbb-token__img{', $html);
+        self::assertSame(3, substr_count($html, '<li>'));
+        self::assertSame($html, $bc, 'Without tokenGate (host controller / 1.21 context) the page renders the defaults.');
+
+        $none = $this->renderPage(new PageFixture('@NowoSiteBackupBundle/setup/token.html.twig', PageFixtures::token(true, SetupTokenGate::fromConfig(['illustration' => ['src' => 'illustrations/gate.webp'], 'howto_steps' => []]))))->html;
+        self::assertStringNotContainsString('<source', $none, 'A WebP src needs no extra source.');
+        self::assertStringContainsString('src="/assets/illustrations/gate.webp"', $none);
+        self::assertStringNotContainsString('nowo-sbb-token-howto', $none, 'An empty step list drops the disclosure.');
     }
 
     protected static function templatePaths(): array

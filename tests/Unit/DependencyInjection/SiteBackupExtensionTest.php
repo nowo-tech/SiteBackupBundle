@@ -45,6 +45,7 @@ use Nowo\SiteBackupBundle\Setup\SetupTabCheckerLocator;
 use Nowo\SiteBackupBundle\Setup\SetupWizardReopener;
 use Nowo\SiteBackupBundle\Setup\Storage\DoctrineDbalSetupProgressStorage;
 use Nowo\SiteBackupBundle\Setup\Storage\DoctrineDbalSetupStepJournal;
+use Nowo\SiteBackupBundle\View\SetupTokenGate;
 use Nowo\SiteBackupBundle\View\SiteBackupView;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\DependencyInjection\Argument\TaggedIteratorArgument;
@@ -226,6 +227,24 @@ final class SiteBackupExtensionTest extends TestCase
         $translator = $container->getDefinition(SetupWizardController::class)->getArgument('$translator');
         self::assertInstanceOf(Reference::class, $translator);
         self::assertSame('translator', (string) $translator);
+    }
+
+    public function testTokenGateIsBuiltFromSetupConfig(): void
+    {
+        $container = new ContainerBuilder();
+        $container->setParameter('kernel.project_dir', sys_get_temp_dir());
+
+        (new SiteBackupExtension())->load([[
+            'security' => ['allow_unauthenticated' => true],
+            'setup'    => ['token_gate' => ['illustration' => 'illustrations/error-403.png', 'howto_steps' => ['setup.token.step_env']]],
+        ]], $container);
+
+        self::assertSame(SetupTokenGate::class, (string) $container->getDefinition(SetupWizardController::class)->getArgument('$tokenGate'));
+        $gate = $container->getDefinition(SetupTokenGate::class);
+        self::assertSame([SetupTokenGate::class, 'fromConfig'], $gate->getFactory());
+        $built = SetupTokenGate::fromConfig($gate->getArgument(0));
+        self::assertSame('illustrations/error-403.webp', $built->illustration['webp'] ?? null);
+        self::assertSame(['setup.token.step_env'], $built->howtoSteps);
     }
 
     public function testGetAlias(): void

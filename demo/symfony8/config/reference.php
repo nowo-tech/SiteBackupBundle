@@ -1163,6 +1163,18 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *         },
  *         brand_name?: scalar|Param|null, // Default: "Site Setup"
  *         setup_token?: scalar|Param|null, // Optional shared secret for /_setup (?token= or X-Setup-Token). // Default: null
+ *         token_gate?: array{ // Setup-token gate page (v1.22+): optional illustration above the auth panel and the how-to steps of its <details> disclosure.
+ *             illustration?: Param|string|array{ // Asset path of the illustration (string shorthand = src), rendered as <picture>: WebP source + PNG/JPEG fallback <img> with width/height. Null = no illustration.
+ *                 src?: scalar|Param|null, // Fallback image asset path (PNG / JPEG), resolved with asset(), e.g. illustrations/error-403.png.
+ *                 webp?: scalar|Param|null, // WebP source asset path. Null (default) = src with a .webp extension; false = no WebP source. // Default: null
+ *                 width?: int|Param, // Intrinsic width in pixels (reserves the layout box). // Default: null
+ *                 height?: int|Param, // Intrinsic height in pixels (reserves the layout box). // Default: null
+ *                 alt?: scalar|Param|null, // Alt text: translation key (or text) of token_gate.translation_domain. // Default: "setup.token.illustration_alt"
+ *                 ...<string, mixed>
+ *             },
+ *             howto_steps?: list<scalar|Param|null>,
+ *             translation_domain?: scalar|Param|null, // Translation domain of the illustration alt text and the how-to steps. // Default: "NowoSiteBackupBundle"
+ *         },
  *         progress_file?: scalar|Param|null, // Default: "%kernel.project_dir%/var/site-backup/setup-progress.json"
  *         progress_storage?: "filesystem"|"doctrine"|"chain"|"cache"|"cache_doctrine"|Param, // filesystem = JSON in var/; doctrine = DBAL; chain = JSON+DB; cache = PSR-6 pool; cache_doctrine = cache+DB (prefer DB on load). // Default: "filesystem"
  *         progress_table?: scalar|Param|null, // DBAL table name when progress_storage is doctrine, chain, or cache_doctrine. // Default: "nowo_site_backup_setup_progress"

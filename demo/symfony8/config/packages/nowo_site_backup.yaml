@@ -34,6 +34,17 @@ nowo_site_backup:
     setup:
         enabled: true
         brand_name: 'Site Backup Demo'
+        # Token gate presentation (v1.22): art above the auth panel (<picture>: WebP source + PNG fallback) and the
+        # how-to steps (translation keys of translation_domain, or literal text). Preview: /demo/setup-token-gate
+        token_gate:
+            illustration:
+                src: 'illustrations/setup-locked.png'   # WebP sibling setup-locked.webp = <source>
+                width: 896
+                height: 560
+            howto_steps:
+                - setup.token.step_env
+                - setup.token.step_url
+                - 'Demo: the token is not set here, so /_setup opens without it.'
         require_done_marker: false
         # Survive wiping var/ once DB exists (v1.2+)
         progress_storage: chain

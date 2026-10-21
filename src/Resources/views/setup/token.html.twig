@@ -1,18 +1,47 @@
 {#
-  Setup token gate (REQ-UI-003, page/auth on the guest layout, HTTP 403). Variable: page (View\AuthPage, built by
-  View\SetupPages::token): GET form Form\Setup\SetupTokenType (field `token`). Extra context: pathPrefix, brandName.
-  Data block: nowo_ui_auth_footer (how to find the token: setup.setup_token, ?token=…, X-Setup-Token).
+  Setup token gate (REQ-UI-003, page/auth on the guest layout, HTTP 403). Variables: page (View\AuthPage, built by
+  View\SetupPages::token): GET form Form\Setup\SetupTokenType (field `token`); tokenGate (View\SetupTokenGate, v1.22+,
+  setup.token_gate): optional illustration and the how-to steps. Extra context: pathPrefix, brandName.
+  Data blocks: nowo_ui_content (the illustration, a <picture> with a WebP source and a PNG/JPEG fallback, above the
+  UiKit auth panel), nowo_ui_auth_footer (the how-to disclosure: setup.setup_token, ?token=…, X-Setup-Token),
+  nowo_ui_styles (sizes the illustration; the inline style tag carries the csp_nonce request attribute).
 #}
 {% extends '@NowoUiKit/page/auth.html.twig' %}
 
+{% block nowo_ui_styles %}
+    {{ parent() }}
+    {% if tokenGate.illustration ?? null %}
+        {% set _csp_nonce = app is defined and app and app.request ? app.request.attributes.get('csp_nonce')|default('') : '' %}
+        <style{% if _csp_nonce %} nonce="{{ _csp_nonce }}"{% endif %}>.nowo-sbb-token__art{margin:0 auto 1.5rem;text-align:center}.nowo-sbb-token__img{display:block;max-width:100%;height:auto;margin-inline:auto}</style>
+    {% endif %}
+{% endblock %}
+
+{% block nowo_ui_content %}
+    {% set _illustration = tokenGate.illustration ?? null %}
+    {% if _illustration %}
+        {% set _domain = tokenGate.translationDomain ?? 'NowoSiteBackupBundle' %}
+        <div class="nowo-sbb-token__art" data-testid="nowo-sbb-token-illustration">
+            <picture>
+                {% if _illustration.webp %}<source type="image/webp" srcset="{{ asset(_illustration.webp) }}">{% endif %}
+                <img class="nowo-sbb-token__img" src="{{ asset(_illustration.src) }}"{% if _illustration.width %} width="{{ _illustration.width }}"{% endif %}{% if _illustration.height %} height="{{ _illustration.height }}"{% endif %} alt="{{ _illustration.alt|trans({}, _domain) }}" decoding="async" fetchpriority="high">
+            </picture>
+        </div>
+    {% endif %}
+    {{ parent() }}
+{% endblock %}
+
 {% block nowo_ui_auth_footer %}
-    {% set _example = pathPrefix ~ '?token=…' %}
-    <details class="nowo-sbb-token__howto" data-testid="nowo-sbb-token-howto">
-        <summary>{{ 'setup.token.howto'|trans({}, 'NowoSiteBackupBundle') }}</summary>
-        <ol>
-            <li>{{ 'setup.token.step_env'|trans({}, 'NowoSiteBackupBundle') }}</li>
-            <li>{{ 'setup.token.step_url'|trans({'%path%': _example}, 'NowoSiteBackupBundle') }}</li>
-            <li>{{ 'setup.token.step_header'|trans({}, 'NowoSiteBackupBundle') }}</li>
-        </ol>
-    </details>
+    {% set _steps = tokenGate.howtoSteps ?? ['setup.token.step_env', 'setup.token.step_url', 'setup.token.step_header'] %}
+    {% if _steps is not empty %}
+        {% set _domain = tokenGate.translationDomain ?? 'NowoSiteBackupBundle' %}
+        {% set _example = pathPrefix ~ '?token=…' %}
+        <details class="nowo-sbb-token__howto" data-testid="nowo-sbb-token-howto">
+            <summary>{{ 'setup.token.howto'|trans({}, 'NowoSiteBackupBundle') }}</summary>
+            <ol>
+                {% for _step in _steps %}
+                    <li>{{ _step|trans({'%path%': _example}, _domain) }}</li>
+                {% endfor %}
+            </ol>
+        </details>
+    {% endif %}
 {% endblock %}

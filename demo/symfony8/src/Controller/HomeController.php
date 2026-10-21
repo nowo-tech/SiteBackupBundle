@@ -6,6 +6,10 @@ namespace App\Controller;
 
 use App\Setup\DemoForceSetupNeedDetector;
 use App\Setup\DemoSeedTabChecker;
+use Nowo\SiteBackupBundle\Form\Setup\SetupTokenType;
+use Nowo\SiteBackupBundle\View\SetupPages;
+use Nowo\SiteBackupBundle\View\SetupTokenGate;
+use Nowo\SiteBackupBundle\View\SiteBackupView;
 use Symfony\Bundle\FrameworkBundle\Controller\AbstractController;
 use Symfony\Component\DependencyInjection\Attribute\Autowire;
 use Symfony\Component\HttpFoundation\Request;
@@ -46,6 +50,25 @@ final class HomeController extends AbstractController
     public function health(): Response
     {
         return new Response('ok', Response::HTTP_OK, ['Content-Type' => 'text/plain']);
+    }
+
+    /**
+     * Preview of the setup-token gate (HTTP 403 page when setup.setup_token is set) with the demo
+     * setup.token_gate options: illustration (<picture> WebP + PNG fallback) and custom how-to steps (v1.22).
+     */
+    #[Route(path: '/demo/setup-token-gate', name: 'demo_setup_token_gate', methods: ['GET'])]
+    public function setupTokenGate(SiteBackupView $view, SetupTokenGate $tokenGate): Response
+    {
+        $prefix = '/en/_setup';
+        $form   = $this->container->get('form.factory')->createNamed('', SetupTokenType::class, null, ['action' => $prefix])->createView();
+
+        return $view->render('setup_token', [
+            'page'       => (new SetupPages($view, 'Site Backup Demo'))->token($form, $prefix),
+            'tokenGate'  => $tokenGate,
+            'pathPrefix' => $prefix,
+            'brandName'  => 'Site Backup Demo',
+            'messages'   => [],
+        ]);
     }
 
     #[Route(path: '/demo/force-setup/on', name: 'demo_force_setup_on', methods: ['POST'])]

@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.22.0](#to-1220)
 - [To 1.21.3](#to-1213)
 - [To 1.21.2](#to-1212)
 - [To 1.21.1](#to-1211)
@@ -102,6 +103,43 @@
   - [Breaking changes](#breaking-changes-1)
 
 ## Unreleased
+
+## To 1.22.0
+
+From **1.21.x**:
+
+```bash
+composer update nowo-tech/site-backup-bundle
+```
+
+No breaking change: without `setup.token_gate` the token gate renders exactly as in 1.21 (no illustration, the three
+default how-to steps).
+
+**Retire a copied token page.** If your app overrides `web_ui.templates.setup_token` only to add an illustration and
+its own copy (e.g. `templates/kit/site_backup_setup_token.html.twig`), delete the template and its
+`web_ui.templates.setup_token` line, then configure the gate:
+
+```yaml
+# config/packages/nowo_site_backup.yaml
+nowo_site_backup:
+    setup:
+        token_gate:
+            illustration:
+                src: 'illustrations/error-403.png'   # WebP sibling illustrations/error-403.webp is used as <source>
+                width: 896
+                height: 597
+                alt: 'error.403.image_alt'
+            # Optional: keep the app wording (keys of translation_domain, %path% = <prefix>?token=…)
+            # howto_steps: ['setup.token.step_env', 'setup.token.step_url', 'setup.token.step_header']
+            translation_domain: messages             # domain of alt + howto_steps (default NowoSiteBackupBundle)
+```
+
+The page title, lead, field placeholder, submit label and the disclosure summary stay in the `NowoSiteBackupBundle`
+domain (`setup.token.*`): to keep your own wording, copy those keys to `translations/NowoSiteBackupBundle.<locale>.yaml`.
+Selectors of the bundle page: `[data-testid="nowo-sbb-token-gate"]` (auth panel),
+`[data-testid="nowo-sbb-token-illustration"]` (art), `img.nowo-sbb-token__img`, `details.nowo-sbb-token__howto`
+(`[data-testid="nowo-sbb-token-howto"]`), field `input[name="token"]` in a GET form; update functional tests that
+asserted classes of the copied template.
 
 ## To 1.21.3
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\Tests\Unit\DependencyInjection;
 
 use Nowo\SiteBackupBundle\DependencyInjection\Configuration;
+use Nowo\SiteBackupBundle\View\SetupTokenGate;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Config\Definition\ArrayNode;
 use Symfony\Component\Config\Definition\BaseNode;
@@ -277,5 +278,36 @@ final class ConfigurationTest extends TestCase
     {
         $this->expectException(InvalidConfigurationException::class);
         (new Processor())->processConfiguration(new Configuration(), [['security' => ['login_throttle' => ['limit' => 0]]]]);
+    }
+
+    public function testTokenGateDefaults(): void
+    {
+        $config = (new Processor())->processConfiguration(new Configuration(), [[]]);
+
+        self::assertSame(['howto_steps' => SetupTokenGate::DEFAULT_HOWTO_STEPS, 'translation_domain' => 'NowoSiteBackupBundle'], $config['setup']['token_gate']);
+
+        $null = (new Processor())->processConfiguration(new Configuration(), [['setup' => ['token_gate' => ['illustration' => null]]]]);
+        self::assertArrayNotHasKey('illustration', $null['setup']['token_gate']);
+    }
+
+    public function testTokenGateIllustrationShorthandAndFullForm(): void
+    {
+        $short = (new Processor())->processConfiguration(new Configuration(), [['setup' => ['token_gate' => ['illustration' => 'illustrations/error-403.png']]]]);
+        self::assertSame(['src' => 'illustrations/error-403.png', 'webp' => null, 'width' => null, 'height' => null, 'alt' => SetupTokenGate::DEFAULT_ILLUSTRATION_ALT], $short['setup']['token_gate']['illustration']);
+
+        $full = (new Processor())->processConfiguration(new Configuration(), [['setup' => ['token_gate' => [
+            'illustration'       => ['src' => 'img/gate.png', 'webp' => false, 'width' => 896, 'height' => 597, 'alt' => 'error.403.image_alt'],
+            'howto_steps'        => ['setup.token.step_env'],
+            'translation_domain' => 'messages',
+        ]]]]);
+        self::assertSame(['src' => 'img/gate.png', 'webp' => false, 'width' => 896, 'height' => 597, 'alt' => 'error.403.image_alt'], $full['setup']['token_gate']['illustration']);
+        self::assertSame(['setup.token.step_env'], $full['setup']['token_gate']['howto_steps']);
+        self::assertSame('messages', $full['setup']['token_gate']['translation_domain']);
+    }
+
+    public function testTokenGateIllustrationNeedsPositiveSize(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+        (new Processor())->processConfiguration(new Configuration(), [['setup' => ['token_gate' => ['illustration' => ['src' => 'a.png', 'width' => 0]]]]]);
     }
 }

@@ -63,6 +63,7 @@ use Nowo\SiteBackupBundle\Storage\FilesystemBackupHistoryStorage;
 use Nowo\SiteBackupBundle\Storage\FilesystemRestoreProgressStorage;
 use Nowo\SiteBackupBundle\Storage\RestoreProgressStorageInterface;
 use Nowo\SiteBackupBundle\Twig\SiteBackupExtension as SiteBackupTwigExtension;
+use Nowo\SiteBackupBundle\View\SetupTokenGate;
 use Nowo\SiteBackupBundle\View\SiteBackupView;
 use Nowo\SiteBackupBundle\Worker\WorkerRestartSignal;
 use Symfony\Component\Config\FileLocator;
@@ -1031,6 +1032,11 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             return;
         }
 
+        // Setup-token gate presentation (1.22+): a shared immutable service (illustration + how-to steps).
+        $container->register(SetupTokenGate::class, SetupTokenGate::class)
+            ->setFactory([SetupTokenGate::class, 'fromConfig'])
+            ->setArguments([$setup['token_gate'] ?? []]);
+
         $token = $setup['setup_token'] ?? null;
         $container->getDefinition(SetupWizardController::class)
             ->setArgument('$orchestrator', new Reference(SetupOrchestrator::class))
@@ -1044,6 +1050,7 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$pathPrefixResolver', new Reference(SetupPathPrefixResolver::class))
             ->setArgument('$translator', new Reference('translator', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
             ->setArgument('$view', new Reference(SiteBackupView::class))
+            ->setArgument('$tokenGate', new Reference(SetupTokenGate::class))
             ->setPublic(true);
     }
 

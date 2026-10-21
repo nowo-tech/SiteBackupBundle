@@ -102,3 +102,15 @@ test.describe('backup panel', () => {
     await expect(row(page, id)).toHaveCount(0);
   });
 });
+
+test.describe('setup token gate (setup.token_gate, v1.22)', () => {
+  test('renders the illustration as <picture> and the configured how-to steps', async ({ page }) => {
+    await page.goto('/demo/setup-token-gate');
+    await expect(page.getByTestId('nowo-sbb-token-gate')).toBeVisible();
+    const art = page.getByTestId('nowo-sbb-token-illustration');
+    await expect(art.locator('source[type="image/webp"]')).toHaveAttribute('srcset', /setup-locked\.webp$/);
+    await expect(art.locator('img.nowo-sbb-token__img')).toHaveAttribute('width', '896');
+    await expect(page.locator('form[method="get"] input[name="token"]')).toBeVisible();
+    await expect(page.getByTestId('nowo-sbb-token-howto').locator('li')).toHaveCount(3);
+  });
+});

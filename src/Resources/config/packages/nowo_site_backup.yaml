@@ -37,6 +37,8 @@ nowo_site_backup:
         # require_done_marker: true   # force wizard until setup.done exists
         brand_name: 'Site Setup'
         # setup_token: '%env(SITE_SETUP_TOKEN)%'
+        # Token gate art + how-to (v1.22+): <picture> WebP + PNG fallback above the auth panel
+        # token_gate: { illustration: { src: 'illustrations/setup-locked.png', width: 896, height: 597 }, howto_steps: ['setup.token.step_env', 'setup.token.step_url'] }
         # admin_provisioner: App\Setup\AdminUserProvisioner
         detectors:
             marker: true

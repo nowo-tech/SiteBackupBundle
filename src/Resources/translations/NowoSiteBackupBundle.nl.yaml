@@ -163,6 +163,7 @@ setup:
     step_env: 'Het token is de waarde van setup.setup_token in de bundleconfiguratie (meestal een omgevingsvariabele).'
     step_url: 'Open %path% met die waarde.'
     step_header: 'Of stuur het mee in de HTTP-header X-Setup-Token.'
+    illustration_alt: 'De installatie is vergrendeld tot het token is ingevoerd'
   done:
     title: 'Installatie voltooid'
     body: 'De site is klaar. U kunt inloggen met het aangemaakte beheerdersaccount.'

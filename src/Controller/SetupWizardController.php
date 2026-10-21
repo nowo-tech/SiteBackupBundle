@@ -20,6 +20,7 @@ use Nowo\SiteBackupBundle\Setup\SetupStepInput;
 use Nowo\SiteBackupBundle\Setup\Step\DatabaseUrlStep;
 use Nowo\SiteBackupBundle\Setup\Step\TabStep;
 use Nowo\SiteBackupBundle\View\SetupPages;
+use Nowo\SiteBackupBundle\View\SetupTokenGate;
 use Nowo\SiteBackupBundle\View\SiteBackupView;
 use Symfony\Component\Form\FormFactoryInterface;
 use Symfony\Component\Form\FormInterface;
@@ -53,6 +54,8 @@ final class SetupWizardController
 
     private readonly SetupPages $pages;
 
+    private readonly SetupTokenGate $tokenGate;
+
     /**
      * @param array<string, string> $templates page id => template (web_ui.templates; 1.x templates.* keys accepted)
      */
@@ -69,9 +72,11 @@ final class SetupWizardController
         private readonly ?SetupPathPrefixResolver $pathPrefixResolver = null,
         private readonly ?TranslatorInterface $translator = null,
         ?SiteBackupView $view = null,
+        ?SetupTokenGate $tokenGate = null,
     ) {
-        $this->view  = $view ?? new SiteBackupView($twig, guestLayoutTemplate: $templates['setup_layout'] ?? null, templates: $templates);
-        $this->pages = new SetupPages($this->view, $brandName);
+        $this->view      = $view ?? new SiteBackupView($twig, guestLayoutTemplate: $templates['setup_layout'] ?? null, templates: $templates);
+        $this->pages     = new SetupPages($this->view, $brandName);
+        $this->tokenGate = $tokenGate ?? new SetupTokenGate();
     }
 
     public function index(Request $request): Response
@@ -84,7 +89,8 @@ final class SetupWizardController
 
         if (!$this->isTokenValid($request)) {
             return $this->view->render('setup_token', $this->setupViewVars([
-                'page' => $this->pages->token($this->formFactory->createNamed('', SetupTokenType::class, null, ['action' => $pathPrefix])->createView(), $pathPrefix),
+                'page'      => $this->pages->token($this->formFactory->createNamed('', SetupTokenType::class, null, ['action' => $pathPrefix])->createView(), $pathPrefix),
+                'tokenGate' => $this->tokenGate,
             ], $pathPrefix), Response::HTTP_FORBIDDEN);
         }
 
