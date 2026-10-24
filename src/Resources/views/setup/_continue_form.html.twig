@@ -4,7 +4,11 @@
     <p class="{{ nowo_ui_class('muted', _b) }}">{{ currentStep.description|trans({}, currentStep.labelDomain|default(_b)) }}</p>
 {% endif %}
 {{ form_start(form, {attr: {class: nowo_ui_class('form', _b)}}) }}
-    {{ form_rest(form) }}
+    {% for child in form %}
+        {% if not child.rendered %}
+            {{ form_row(child) }}
+        {% endif %}
+    {% endfor %}
     <div class="{{ nowo_ui_class('form_actions', _b) }}">
         <button type="submit" class="{{ nowo_ui_class('btn_primary', _b) }}">{{ 'setup.wizard.continue'|trans({}, _b) }}</button>
     </div>

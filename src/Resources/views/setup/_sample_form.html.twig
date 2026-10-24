@@ -2,7 +2,11 @@
 {% set _b = 'NowoSiteBackupBundle' %}
 {{ form_start(form, {attr: {class: nowo_ui_class('form', _b)}}) }}
     <p>{{ 'setup.sample.prompt'|trans({}, _b) }}</p>
-    {{ form_rest(form) }}
+    {% for child in form %}
+        {% if not child.rendered %}
+            {{ form_row(child) }}
+        {% endif %}
+    {% endfor %}
     <div class="{{ nowo_ui_class('form_actions', _b) }}">
         <button type="submit" name="action" value="load" class="{{ nowo_ui_class('btn_primary', _b) }}">{{ 'setup.sample.load'|trans({}, _b) }}</button>
         <button type="submit" name="action" value="skip" class="{{ nowo_ui_class('btn_secondary', _b) }}">{{ 'setup.sample.skip'|trans({}, _b) }}</button>

@@ -3,8 +3,13 @@
 {% if progress.phase == 'waiting_input' %}
 {{ form_start(form, {attr: {class: nowo_ui_class('form', _b)}}) }}
     <p>{{ 'setup.bootstrap.prompt'|trans({}, _b) }}</p>
+    {# sql_import_path keeps its UiKit class/placeholder (REQ-TWIG-003 rule 3); the loop renders the rest. #}
     {{ form_row(form.sql_import_path, {attr: {class: nowo_ui_class('input_wide', _b), placeholder: 'setup.bootstrap.sql_placeholder'}}) }}
-    {{ form_rest(form) }}
+    {% for child in form %}
+        {% if not child.rendered %}
+            {{ form_row(child) }}
+        {% endif %}
+    {% endfor %}
     <div class="{{ nowo_ui_class('form_actions', _b) }}">
         <button type="submit" name="bootstrap_mode" value="guided" class="{{ nowo_ui_class('btn_primary', _b) }}">{{ 'setup.bootstrap.guided'|trans({}, _b) }}</button>
         <button type="submit" name="bootstrap_mode" value="full_database" class="{{ nowo_ui_class('btn_secondary', _b) }}">{{ 'setup.bootstrap.full_database'|trans({}, _b) }}</button>

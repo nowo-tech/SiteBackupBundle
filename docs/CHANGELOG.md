@@ -58,6 +58,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Setup wizard partials (`setup/_admin_form`, `_bootstrap_form`, `_database_form`, `_continue_form`, `_sample_form`) render the form body through the child loop (`{% for child in form %}` + `not child.rendered` + `form_row(child)`) instead of `form_row(form.<field>)` + `form_rest`; `sql_import_path` and `database_url` keep their custom options and render first (REQ-TWIG-003 rule 3).
+
 ## [1.22.1] - 2026-10-21
 
 Setup-token gate WebP source is opt-in (webp: true or a path), so PNG-only hosts get no broken image. See [UPGRADING](UPGRADING.md#to-1221).
