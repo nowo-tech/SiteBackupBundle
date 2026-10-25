@@ -59,9 +59,15 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Developer tooling: `make check-no-raw-html-form` fails on raw `<form>` / `<input>` / `<textarea>` / `<select>` in bundle views and demo templates, and runs in `release-check` (REQ-TWIG-005).
+
 ### Changed
 
-- Developer tooling: `make release-check` runs the full REQ-MAKE-002 chain with `ensure-up` first (then the Cursor co-author, open-PR and Twig `extra` gates, composer-sync, cs-fix, cs-check, rector-dry, phpstan, igor, translations, coverage-check and the demo release-check). `check-no-raw-html-form` (REQ-TWIG-005) is wired once the remaining raw form markup is migrated.
+- Demo: the force-setup flag buttons (home page and guest layout gate escape) render through a Symfony Form Type (`CsrfOnlyType`, CSRF token id `demo_force_setup`) with `form_start` / child loop / `form_end`, and the POST handlers validate with `handleRequest` + `isValid()` instead of a hand-rolled `_csrf_token` input (REQ-TWIG-005).
+
+- Developer tooling: `make release-check` runs the full REQ-MAKE-002 chain with `ensure-up` first (then the Cursor co-author, open-PR and Twig `extra` gates, composer-sync, cs-fix, cs-check, rector-dry, phpstan, igor, translations, coverage-check and the demo release-check).
 - Developer tooling: `composer test-coverage` runs PHPUnit with `memory_limit=1G` so the HTML coverage report no longer runs out of memory at the 128M default (`make test-coverage` / `coverage-check` read the % again).
 
 ## [1.22.2] - 2026-10-24

@@ -8,10 +8,12 @@
 
 {% block body %}
     {% if app.request.pathInfo matches '{_setup}' %}
-        <form class="demo-gate-escape" method="post" action="{{ path('demo_force_setup_off') }}">
-            <input type="hidden" name="_csrf_token" value="{{ csrf_token('demo_force_setup') }}">
+        {# Built by App\Twig\DemoFormExtension: bundle controllers render this layout, so no demo variable is passed (REQ-TWIG-005). #}
+        {% set gate_escape_form = demo_force_setup_off_form() %}
+        {{ form_start(gate_escape_form) }}
+            {% for child in gate_escape_form %}{% if not child.rendered %}{{ form_row(child) }}{% endif %}{% endfor %}
             Demo gate escape: <button type="submit" class="btn btn--ghost">Clear force-setup flag</button>
-        </form>
+        {{ form_end(gate_escape_form) }}
     {% endif %}
     <div class="demo-guest">{{ parent() }}</div>
 {% endblock %}

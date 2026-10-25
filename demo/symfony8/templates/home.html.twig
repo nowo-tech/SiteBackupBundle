@@ -38,14 +38,14 @@
             {% endif %}
         </p>
         <div class="row">
-            <form method="post" action="{{ path('demo_force_setup_on') }}">
-                <input type="hidden" name="_csrf_token" value="{{ csrf_token('demo_force_setup') }}">
+            {{ form_start(force_setup_on_form) }}
+                {% for child in force_setup_on_form %}{% if not child.rendered %}{{ form_row(child) }}{% endif %}{% endfor %}
                 <button class="btn" type="submit">Enable force-setup flag</button>
-            </form>
-            <form method="post" action="{{ path('demo_force_setup_off') }}">
-                <input type="hidden" name="_csrf_token" value="{{ csrf_token('demo_force_setup') }}">
+            {{ form_end(force_setup_on_form) }}
+            {{ form_start(force_setup_off_form) }}
+                {% for child in force_setup_off_form %}{% if not child.rendered %}{{ form_row(child) }}{% endif %}{% endfor %}
                 <button class="btn btn--ghost" type="submit">Clear flag</button>
-            </form>
+            {{ form_end(force_setup_off_form) }}
         </div>
     </section>
 

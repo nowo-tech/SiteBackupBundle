@@ -125,6 +125,8 @@ See [SETUP-WIZARD.md](SETUP-WIZARD.md) for profiles, step types, and security.
 
 Panel and setup bundle templates now render POST actions via Symfony Forms (`form_start`, `form_widget`, `form_end`) instead of raw HTML `<form>` tags. When you override these templates, keep using Symfony Form Types and preserve the legacy flat field names (`action`, `backup_id`, `label`, `database_url`, ...) for controller compatibility.
 
+Every UI form (bundle views and the demo) is a PHP Symfony Form Type rendered with `form_start`, the REQ-TWIG-003 child loop (`{% for child in form %}{% if not child.rendered %}{{ form_row(child) }}{% endif %}{% endfor %}`) and `form_end`; submit buttons may stay outside the loop. Host overrides and demos must not reintroduce raw `<form>` / `<input>` / `<textarea>` / `<select>` markup — `make check-no-raw-html-form` (part of `release-check`) fails when they appear (REQ-TWIG-005).
+
 
 ```twig
 {% if nowo_site_backup_is_restoring() %}
