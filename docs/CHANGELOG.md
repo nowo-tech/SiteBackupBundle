@@ -59,6 +59,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- CSRF fails closed also when only form CSRF is disabled: new `CsrfProtectionPass` makes the container refuse to compile while the panel (`web_ui.enabled`) or the setup wizard (`setup.enabled`) is registered and `security.csrf.token_manager` or `form.type_extension.csrf` is missing, or `framework.form.csrf_protection` is false. The controllers already denied mutations without a token manager, but with `framework.form.csrf_protection: false` the token manager exists while the panel / wizard forms skipped token validation, so backup / restore / delete and setup steps accepted tokenless cross-site POSTs. See [UPGRADING](UPGRADING.md#unreleased) and [SECURITY](SECURITY.md#threat-model).
+
 ### Added
 
 - Developer tooling: `make check-no-raw-html-form` fails on raw `<form>` / `<input>` / `<textarea>` / `<select>` in bundle views and demo templates, and runs in `release-check` (REQ-TWIG-005).

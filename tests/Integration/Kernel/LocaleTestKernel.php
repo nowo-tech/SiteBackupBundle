@@ -59,6 +59,10 @@ final class LocaleTestKernel extends Kernel
             'test'                 => true,
             'http_method_override' => false,
             'enabled_locales'      => ['de', 'en'],
+            // The setup wizard refuses to compile without form CSRF (CsrfProtectionPass).
+            'session'         => ['storage_factory_id' => 'session.storage.factory.mock_file'],
+            'csrf_protection' => true,
+            'form'            => ['csrf_protection' => true],
         ]);
         $container->extension('nowo_site_backup', [
             'bump_time_limit' => true,

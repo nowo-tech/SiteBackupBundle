@@ -107,6 +107,10 @@
 
 ## Unreleased
 
+### Panel and setup wizard require form CSRF protection at compile time
+
+While the panel or the setup wizard (on by default) is enabled, the container no longer compiles without form CSRF protection (`LogicException`: "require CSRF protection"), including `framework.form.csrf_protection: false`. Standard Flex hosts (`symfony/security-csrf` installed, `framework.csrf_protection` enabled) need no change. Otherwise enable `framework.csrf_protection: true` and form CSRF — also in the `test` environment of functional suites that boot the bundle — or disable `web_ui.enabled` and `setup.enabled`.
+
 ## To 1.22.2
 
 From **1.22.1**:

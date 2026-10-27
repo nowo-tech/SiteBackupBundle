@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\Tests\Unit;
 
 use Nowo\SiteBackupBundle\Attribute\AsSetupNeedDetector;
+use Nowo\SiteBackupBundle\DependencyInjection\Compiler\CsrfProtectionPass;
 use Nowo\SiteBackupBundle\DependencyInjection\Compiler\TwigPathsPass;
 use Nowo\SiteBackupBundle\DependencyInjection\SiteBackupExtension;
 use Nowo\SiteBackupBundle\NowoSiteBackupBundle;
@@ -31,6 +32,7 @@ final class NowoSiteBackupBundleTest extends TestCase
             }
         }
         self::assertTrue($found);
+        self::assertContains(CsrfProtectionPass::class, array_map(static fn (object $pass): string => $pass::class, $passes));
     }
 
     public function testBundleAutoconfiguresAsSetupNeedDetectorAttribute(): void
