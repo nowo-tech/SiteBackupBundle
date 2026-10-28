@@ -95,6 +95,7 @@ final class PageContractTest extends PageContractTestCase
         self::assertSame('/_site_backup/history', $nav->items[1]->href);
         self::assertTrue($nav->items[1]->active);
         self::assertFalse($nav->items[0]->active);
+        self::assertSame(['tabler:database-export', 'tabler:history'], [$nav->items[0]->icon, $nav->items[1]->icon]);
 
         $published = PageFixtures::view()->areaNav(SiteBackupView::AREA, ['current' => '/_site_backup/']);
         self::assertNotNull($published);

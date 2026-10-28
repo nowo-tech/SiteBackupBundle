@@ -198,8 +198,8 @@ final readonly class SiteBackupView implements AreaNavProviderInterface
         $prefix = rtrim($this->pathPrefix, '/');
 
         return new AreaNav([
-            new AreaNavItem(self::label('panel.nav.panel'), $this->indexUrl(), $current === 'panel', ['data-testid' => 'nowo-sbb-nav-panel']),
-            new AreaNavItem(self::label('panel.nav.history'), $prefix . '/history', $current === 'history', ['data-testid' => 'nowo-sbb-nav-history']),
+            new AreaNavItem(self::label('panel.nav.panel'), $this->indexUrl(), $current === 'panel', ['data-testid' => 'nowo-sbb-nav-panel'], 'tabler:database-export'),
+            new AreaNavItem(self::label('panel.nav.history'), $prefix . '/history', $current === 'history', ['data-testid' => 'nowo-sbb-nav-history'], 'tabler:history'),
         ], self::label('panel.nav.label'));
     }
 

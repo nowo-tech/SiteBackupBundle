@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.24.0](#to-1240)
 - [To 1.23.0](#to-1230)
   - [Panel and setup wizard require form CSRF protection at compile time](#panel-and-setup-wizard-require-form-csrf-protection-at-compile-time)
 - [To 1.22.2](#to-1222)
@@ -108,6 +109,11 @@
   - [Breaking changes](#breaking-changes-1)
 
 ## Unreleased
+
+## To 1.24.0
+
+From **1.23.0**: no change needed. The tabs carry icons that show with NowoUiKitBundle **2.17** or later (older 2.x versions ignore
+them), and only when the host sets `data-tab-style="icon-text"` or `"icon"`.
 
 ## To 1.23.0
 
