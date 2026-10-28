@@ -3,6 +3,8 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.23.0](#to-1230)
+  - [Panel and setup wizard require form CSRF protection at compile time](#panel-and-setup-wizard-require-form-csrf-protection-at-compile-time)
 - [To 1.22.2](#to-1222)
 - [To 1.22.1](#to-1221)
 - [To 1.22.0](#to-1220)
@@ -106,6 +108,14 @@
   - [Breaking changes](#breaking-changes-1)
 
 ## Unreleased
+
+## To 1.23.0
+
+From **1.22.2**:
+
+```bash
+composer update nowo-tech/site-backup-bundle
+```
 
 ### Panel and setup wizard require form CSRF protection at compile time
 

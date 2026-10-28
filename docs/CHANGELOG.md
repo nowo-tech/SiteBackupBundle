@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.23.0] - 2026-10-28](#1230---2026-10-28)
 - [[1.22.2] - 2026-10-24](#1222---2026-10-24)
 - [[1.22.1] - 2026-10-21](#1221---2026-10-21)
 - [[1.22.0] - 2026-10-21](#1220---2026-10-21)
@@ -58,6 +59,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [[1.0.0] - 2026-07-26](#100---2026-07-26)
 
 ## [Unreleased]
+
+## [1.23.0] - 2026-10-28
+
+Security: the admin UI refuses to compile without form CSRF protection (CsrfProtectionPass, fail closed). See [UPGRADING](UPGRADING.md#to-1230).
 
 ### Security
 
@@ -768,7 +773,8 @@ First stable release of **Site Backup Bundle**.
 - Symfony `^7.0 || ^8.0` (CI / mandatory minors: **7.4**, **8.0**, **8.1**)
 - System `tar` required for archive create/extract
 
-[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.22.2...HEAD
+[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.23.0...HEAD
+[1.23.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.22.2...v1.23.0
 [1.22.2]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.22.1...v1.22.2
 [1.22.1]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.22.0...v1.22.1
 [1.22.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.21.3...v1.22.0
