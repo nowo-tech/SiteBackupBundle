@@ -891,7 +891,8 @@ final class Configuration implements ConfigurationInterface
             return false;
         }
 
-        return $then instanceof DateTimeImmutable && $then > $now;
+        // PHP >= 8.3 throws on a bad modifier; PHP 8.2 returns false, and false > $now is false.
+        return $then > $now;
     }
 
     private static function isLocaleList(mixed $v): bool

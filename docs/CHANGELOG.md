@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.24.1] - 2026-10-28](#1241---2026-10-28)
 - [[1.24.0] - 2026-10-28](#1240---2026-10-28)
 - [[1.23.0] - 2026-10-28](#1230---2026-10-28)
 - [[1.22.2] - 2026-10-24](#1222---2026-10-24)
@@ -60,6 +61,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [[1.0.0] - 2026-07-26](#100---2026-07-26)
 
 ## [Unreleased]
+
+## [1.24.1] - 2026-10-28
+
+Dependency update
+
+### Changed
+
+- **Dependencies updated** within their constraints: NowoUiKitBundle 2.17.1 in the development lock, PHPStan 2.3.3, Rector 2.8.1. No change in the bundle's behaviour or configuration.
 
 ## [1.24.0] - 2026-10-28
 

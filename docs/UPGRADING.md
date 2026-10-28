@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.24.1](#to-1241)
 - [To 1.24.0](#to-1240)
 - [To 1.23.0](#to-1230)
   - [Panel and setup wizard require form CSRF protection at compile time](#panel-and-setup-wizard-require-form-csrf-protection-at-compile-time)
@@ -109,6 +110,10 @@
   - [Breaking changes](#breaking-changes-1)
 
 ## Unreleased
+
+## To 1.24.1
+
+From **1.24.0**: no change needed (development dependencies updated).
 
 ## To 1.24.0
 
