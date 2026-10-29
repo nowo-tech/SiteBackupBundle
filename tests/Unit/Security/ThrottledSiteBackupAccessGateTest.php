@@ -56,7 +56,8 @@ final class ThrottledSiteBackupAccessGateTest extends TestCase
             $retryAfter = $e->getHeaders()['Retry-After'] ?? null;
             self::assertIsInt($retryAfter);
             self::assertGreaterThanOrEqual(1, $retryAfter);
-            self::assertLessThanOrEqual(900, $retryAfter);
+            // symfony/rate-limiter 8.1.10+ rounds the retry time up to the next second: up to window + 1 s.
+            self::assertLessThanOrEqual(901, $retryAfter);
         }
 
         // Other client IPs keep their own budget.

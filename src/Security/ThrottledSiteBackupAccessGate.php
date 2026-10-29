@@ -8,12 +8,10 @@ use Psr\Log\LoggerInterface;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException;
 use Symfony\Component\RateLimiter\LimiterInterface;
-use Symfony\Component\RateLimiter\RateLimit;
 use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
 
-use function ceil;
 use function max;
-use function microtime;
+use function time;
 
 /**
  * Hardens any {@see SiteBackupAccessGateInterface} used by the panel login (v1.17+):
@@ -29,8 +27,7 @@ use function microtime;
  * Attempts are logged (REQ-OBS-001: throttled = warning, failed = notice, success = info) without IP or password.
  *
  * Retry-After is computed against system time on purpose: the Symfony rate limiter itself uses microtime(), not an
- * injectable clock (REQ-DI-001 exception). Sub-second precision keeps it within the window whether the limiter floors
- * (rate-limiter <= 8.1.6) or ceils (8.1.10+) its retry time.
+ * injectable clock (REQ-DI-001 exception).
  *
  * Stateless (worker-safe): the limiter state lives in the limiter storage (cache pool).
  */
@@ -63,7 +60,7 @@ final readonly class ThrottledSiteBackupAccessGate implements SiteBackupAccessGa
             if (!$limit->isAccepted()) {
                 $this->logger?->warning('SiteBackup: panel login throttled.', self::LOG_CONTEXT);
 
-                throw new TooManyRequestsHttpException($this->retryAfterSeconds($limit), 'Too many SiteBackup panel login attempts.');
+                throw new TooManyRequestsHttpException(max(1, $limit->getRetryAfter()->getTimestamp() - time()), 'Too many SiteBackup panel login attempts.');
             }
         }
 
@@ -95,10 +92,5 @@ final readonly class ThrottledSiteBackupAccessGate implements SiteBackupAccessGa
     public function isMisconfigured(): bool
     {
         return $this->inner->isMisconfigured();
-    }
-
-    private function retryAfterSeconds(RateLimit $limit): int
-    {
-        return max(1, (int) ceil((float) $limit->getRetryAfter()->format('U.u') - microtime(true)));
     }
 }

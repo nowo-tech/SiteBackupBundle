@@ -98,7 +98,8 @@ final class SiteBackupPanelControllerThrottleTest extends TestCase
                 }
                 self::assertSame('panel.login.too_many_attempts', $id);
                 self::assertGreaterThanOrEqual(1, (int) $parameters['%minutes%']);
-                self::assertLessThanOrEqual(15, (int) $parameters['%minutes%']);
+                // 15-minute window; symfony/rate-limiter 8.1.10+ rounds the retry time up (901 s → 16 min).
+                self::assertLessThanOrEqual(16, (int) $parameters['%minutes%']);
 
                 return 'translated-too-many';
             });
@@ -112,7 +113,7 @@ final class SiteBackupPanelControllerThrottleTest extends TestCase
         self::assertSame('html', $response->getContent());
         $retryAfter = (int) $response->headers->get('Retry-After');
         self::assertGreaterThanOrEqual(1, $retryAfter);
-        self::assertLessThanOrEqual(900, $retryAfter);
+        self::assertLessThanOrEqual(901, $retryAfter);
 
         self::assertSame('translated-invalid', $this->rendered[0]['page']->error);
         $context = $this->rendered[1];
