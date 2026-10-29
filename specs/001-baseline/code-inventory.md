@@ -118,7 +118,7 @@ Every production source under `src/` is listed exactly once, grouped by domain (
 | `Security/PasswordSiteBackupAccessGate.php` | FR-SEC-001 |
 | `Security/SiteBackupAccessCheckerInterface.php` | FR-SEC-001 |
 | `Security/SiteBackupAccessGateInterface.php` | FR-SEC-001 |
-| `Security/ThrottledSiteBackupAccessGate.php` | FR-SEC-001, 005 FR-THR-002, FR-DI-003 |
+| `Security/ThrottledSiteBackupAccessGate.php` | FR-SEC-001, 005 FR-THR-002, FR-OBS-001 |
 
 ## Forms
 

@@ -84,8 +84,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Demo**: both FrankenPHP Caddyfiles set the timeout hierarchy (`process_timeout` 300 s < PHP
   `max_execution_time` 360 s < Caddy `write` 400 s; `max_wait_time` 30 s), documented in `docs/DEMO-FRANKENPHP.md`.
 - **Clock (REQ-DI-001)**: time-dependent services (`BackupArchiver`, `SiteBackupManager`, `RestoreOrchestrator`,
-  `SetupOrchestrator`, `SetupDbDoneGuard`, `SetupMarkerManager`, `WorkerRestartSignal`, DBAL setup storages, login
-  throttle) take an optional `Psr\Clock\ClockInterface` (framework `clock` service; default `NativeClock`).
+  `SetupOrchestrator`, `SetupDbDoneGuard`, `SetupMarkerManager`, `WorkerRestartSignal`, DBAL setup storages) take an optional `Psr\Clock\ClockInterface` (framework `clock` service; default `NativeClock`).
   `symfony/clock` and `psr/log` are now explicit dependencies.
 - **Attribute wiring (REQ-SF-003)**: built-in setup-need detectors use `#[AsSetupNeedDetector(priority: …)]`, the
   time-limit listener `#[AsEventListener]`, the controllers `#[AsController]`, and the event subscribers are tagged by

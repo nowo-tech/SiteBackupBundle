@@ -19,6 +19,7 @@ use Symfony\Component\HttpKernel\KernelEvents;
 
 use function array_map;
 use function is_array;
+use function is_callable;
 use function iterator_to_array;
 use function sys_get_temp_dir;
 use function uniqid;
@@ -54,7 +55,7 @@ final class AttributeWiringKernelTest extends TestCase
             self::assertInstanceOf(EventDispatcherInterface::class, $dispatcher);
             $timeLimitPriority = null;
             foreach ($dispatcher->getListeners(KernelEvents::REQUEST) as $listener) {
-                if (is_array($listener) && $listener[0] instanceof LongRequestTimeLimitSubscriber) {
+                if (is_array($listener) && $listener[0] instanceof LongRequestTimeLimitSubscriber && is_callable($listener)) {
                     $timeLimitPriority = $dispatcher->getListenerPriority(KernelEvents::REQUEST, $listener);
                 }
             }
