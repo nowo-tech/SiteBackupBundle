@@ -92,6 +92,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Fixed
 
+- **Login `Retry-After`** is computed with sub-second precision, so it stays within the throttle window with
+  symfony/rate-limiter 8.1.10+ (which rounds its retry time up) — a 15-minute window no longer reports 901 s / 16 min.
 - **`setup.default_profile` is validated (REQ-CFG-001)**: a name that is not a key of `setup.profiles` now fails the
   container compile with the path and the defined profiles, instead of a runtime "Unknown setup profile" error in the
   wizard.
