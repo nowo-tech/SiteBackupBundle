@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Worker;
 
-use DateTimeImmutable;
 use JsonException;
 use Nowo\SiteBackupBundle\Event\WorkerRestartRequiredEvent;
+use Psr\Clock\ClockInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
+use Symfony\Component\Clock\NativeClock;
 use Symfony\Component\Filesystem\Filesystem;
 
 use function dirname;
@@ -33,6 +34,7 @@ final class WorkerRestartSignal
         private readonly string $markerFile,
         private readonly ?EventDispatcherInterface $eventDispatcher = null,
         private readonly Filesystem $filesystem = new Filesystem(),
+        private readonly ClockInterface $clock = new NativeClock(),
     ) {
     }
 
@@ -41,7 +43,7 @@ final class WorkerRestartSignal
         $this->filesystem->mkdir(dirname($this->markerFile));
         $this->filesystem->dumpFile($this->markerFile, json_encode([
             'reason'       => $reason,
-            'requested_at' => (new DateTimeImmutable())->format(DATE_ATOM),
+            'requested_at' => $this->clock->now()->format(DATE_ATOM),
         ], JSON_THROW_ON_ERROR) . "\n");
 
         $this->eventDispatcher?->dispatch(new WorkerRestartRequiredEvent($reason));

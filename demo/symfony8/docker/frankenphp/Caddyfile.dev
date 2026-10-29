@@ -1,6 +1,19 @@
 {
 	order mercure after encode
 	skip_install_trust
+	# REQ-RUNTIME-001 timeout hierarchy: process_timeout (300 s, config/packages/nowo_site_backup.yaml)
+	# < PHP max_execution_time (360 s) < Caddy write timeout (400 s).
+	servers {
+		timeouts {
+			write 400s
+		}
+	}
+	frankenphp {
+		php_ini max_execution_time 360
+		php_ini max_input_time 360
+		# Cap how long a request waits for a free PHP thread (504 instead of an endless queue).
+		max_wait_time 30s
+	}
 }
 
 :80 {

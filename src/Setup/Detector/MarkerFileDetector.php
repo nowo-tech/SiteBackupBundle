@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Setup\Detector;
 
+use Nowo\SiteBackupBundle\Attribute\AsSetupNeedDetector;
 use Nowo\SiteBackupBundle\Setup\SetupNeedDetectorInterface;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupMarkerManager;
 
+#[AsSetupNeedDetector(priority: 100)]
 final class MarkerFileDetector implements SetupNeedDetectorInterface
 {
     public function __construct(

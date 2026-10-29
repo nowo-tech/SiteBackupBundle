@@ -40,7 +40,7 @@ Covers backup creation, integrity verification, restore orchestration, restore l
 | Command injection via dump/setup cmd | High | Dump / console commands are **operator-configured** only (not from free-form HTTP input) |
 | Progress info disclosure | Low | Restore `progress.json` gives the log / error / backup id only to authorised panel users; `/_setup/api/progress` needs the setup token and never returns wizard answers |
 | Archive / dump at rest | Medium | Archives (`chmod 0600`) and `var/site-backup/last-restore-dump.sql` (`0600`, deleted after the setup `sql_file` step imports it) are owner-only |
-| DoS via huge archives / long setup | Medium | `process_timeout`; ops should size storage and includes carefully |
+| DoS via huge archives / long setup / hung subprocess | Medium | `process_timeout` is the hard **and** idle timeout of every subprocess (`tar`, dump, console steps); on expiry the whole process tree is killed (no orphan `mysqldump`) and the partial archive removed. Layer PHP / proxy / FrankenPHP deadlines above it ([CONFIGURATION.md](CONFIGURATION.md#timeouts-req-runtime-001)); ops should size storage and includes carefully |
 
 ## Setup token (mandatory on internet-facing hosts)
 
@@ -70,7 +70,29 @@ Bundle templates follow the nowo-tech kit convention: inline script and style ta
 
 ## Logging
 
-History JSONL stores action, actor, backup id, messages — avoid putting secrets in labels.
+**PSR-3 logs (REQ-OBS-001).** `SiteBackupManager`, `SetupOrchestrator`, `SetupTabCheckerLocator` and the panel login gate log through the
+injected `Psr\Log\LoggerInterface` on the Monolog channel **`site_backup`** (tag ignored without MonologBundle; no
+logger = `NullLogger`):
+
+| Event | Level | Context |
+| --- | --- | --- |
+| Backup started / created | info | `action`, `backup_id`, `size_bytes` |
+| Backup / restore / deletion failed | error | `action`, `backup_id`, `exception` (class), `error` (redacted message) |
+| Restore started, backup deleted, setup progress reset | warning | `action`, `backup_id` |
+| Restore completed | info | `action`, `backup_id` |
+| Setup started / step completed / completed | info | `profile`, `step` |
+| Setup step failed | error | `profile`, `step`, `error` (redacted) |
+| Misconfigured tab `checker:` id | warning | `checker`, `exception` / `type` |
+| Panel login succeeded / failed / throttled (HTTP 429) | info / notice / warning | `action: panel_login` (no client IP, no password) |
+
+**Never logged:** passwords, the setup token, the panel password hash, `DATABASE_URL`, the configured dump command,
+actors (usernames), client IPs and backup labels. Error messages pass through `SecretRedactor` (URL user info, `password=` /
+`MYSQL_PWD=` pairs, `-p…` / `--password=…` options are masked as `***`) and the exception is logged by class name,
+not as an object (no unredacted message or trace). The dump timeout error never repeats the command line. There is
+no `dump()` / `error_log()` in `src/`.
+
+**History JSONL** (`storage.history_file`) stores action, actor, backup id and messages for the panel *History*
+tab — avoid putting secrets in labels.
 
 ## Dependency and updates
 

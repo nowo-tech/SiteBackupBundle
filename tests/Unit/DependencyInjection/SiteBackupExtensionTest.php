@@ -19,6 +19,7 @@ use Nowo\SiteBackupBundle\EventSubscriber\ProductionSecretsGuardSubscriber;
 use Nowo\SiteBackupBundle\EventSubscriber\SetupDbDoneRedirectSubscriber;
 use Nowo\SiteBackupBundle\EventSubscriber\UnlocalizedDefaultLocaleSubscriber;
 use Nowo\SiteBackupBundle\Exclusion\SiteBackupExclusionMatcher;
+use Nowo\SiteBackupBundle\NowoSiteBackupBundle;
 use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
 use Nowo\SiteBackupBundle\Routing\PanelRouteLoader;
 use Nowo\SiteBackupBundle\Routing\SetupPathPrefixResolver;
@@ -49,9 +50,16 @@ use Nowo\SiteBackupBundle\View\SetupTokenGate;
 use Nowo\SiteBackupBundle\View\SiteBackupView;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\DependencyInjection\Argument\TaggedIteratorArgument;
+use Symfony\Component\DependencyInjection\ChildDefinition;
+use Symfony\Component\DependencyInjection\Compiler\AttributeAutoconfigurationPass;
+use Symfony\Component\DependencyInjection\Compiler\ResolveClassPass;
+use Symfony\Component\DependencyInjection\Compiler\ResolveInstanceofConditionalsPass;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Definition;
 use Symfony\Component\DependencyInjection\Reference;
+use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
+use Symfony\Component\EventDispatcher\EventSubscriberInterface;
+use Symfony\Component\HttpKernel\Attribute\AsController;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 
 final class SiteBackupExtensionTest extends TestCase
@@ -294,8 +302,9 @@ final class SiteBackupExtensionTest extends TestCase
         (new SiteBackupExtension())->load([[
             'security' => ['allow_unauthenticated' => true],
             'setup'    => [
-                'advance_mode' => 'manual',
-                'profiles'     => [
+                'advance_mode'    => 'manual',
+                'default_profile' => 'with_tabs',
+                'profiles'        => [
                     'with_tabs' => [
                         'advance_mode' => 'automatic',
                         'steps'        => [
@@ -349,22 +358,24 @@ final class SiteBackupExtensionTest extends TestCase
         self::assertInstanceOf(TaggedIteratorArgument::class, $detectors);
         self::assertSame('nowo.site_backup.setup_need_detector', $detectors->getTag());
 
-        foreach ([
-            MarkerFileDetector::class,
-            DoctrineConnectDetector::class,
-            DoctrineSchemaEmptyDetector::class,
-            IncompleteSetupProgressDetector::class,
-        ] as $class) {
-            $def = $container->getDefinition($class);
-            self::assertTrue($def->hasTag('nowo.site_backup.setup_need_detector'), $class);
-        }
-
         self::assertTrue($evaluator->getArgument('$shortCircuitWhenDone'));
         self::assertInstanceOf(Reference::class, $evaluator->getArgument('$markers'));
         self::assertInstanceOf(Reference::class, $evaluator->getArgument('$durableDoneStore'));
         self::assertFalse($evaluator->getArgument('$reopenWhenDetectorRequires'));
         self::assertInstanceOf(Reference::class, $evaluator->getArgument('$reopener'));
         self::assertTrue($container->getDefinition(SetupWizardReopener::class)->isPublic());
+
+        // REQ-SF-003: built-in detectors are tagged by #[AsSetupNeedDetector(priority: …)] through autoconfigure.
+        $this->autoconfigure($container);
+        foreach ([
+            MarkerFileDetector::class              => 100,
+            DoctrineConnectDetector::class         => 90,
+            DoctrineSchemaEmptyDetector::class     => 80,
+            IncompleteSetupProgressDetector::class => 70,
+        ] as $class => $priority) {
+            $def = $container->getDefinition($class);
+            self::assertSame([['priority' => $priority]], $def->getTag('nowo.site_backup.setup_need_detector'), $class);
+        }
     }
 
     public function testSetupNeedEvaluatorCanReopenWhenDetectorRequires(): void
@@ -523,6 +534,25 @@ final class SiteBackupExtensionTest extends TestCase
     }
 
     /**
+     * Applies the autoconfiguration FrameworkBundle registers (EventSubscriberInterface, #[AsEventListener],
+     * #[AsController]) plus the bundle's own attributes, like the container compiler would.
+     */
+    private function autoconfigure(ContainerBuilder $container): void
+    {
+        (new NowoSiteBackupBundle())->build($container);
+        $container->registerForAutoconfiguration(EventSubscriberInterface::class)->addTag('kernel.event_subscriber');
+        $container->registerAttributeForAutoconfiguration(AsController::class, static function (ChildDefinition $definition): void {
+            $definition->addTag('controller.service_arguments');
+        });
+        $container->registerAttributeForAutoconfiguration(AsEventListener::class, static function (ChildDefinition $definition, AsEventListener $attribute): void {
+            $definition->addTag('kernel.event_listener', array_filter(['event' => $attribute->event, 'method' => $attribute->method, 'priority' => $attribute->priority], static fn (mixed $v): bool => $v !== null));
+        });
+        (new ResolveClassPass())->process($container);
+        (new AttributeAutoconfigurationPass())->process($container);
+        (new ResolveInstanceofConditionalsPass())->process($container);
+    }
+
+    /**
      * Classes excluded from the resource glob are still registered as abstract `container.excluded` definitions.
      */
     private function isRegistered(ContainerBuilder $container, string $id): bool
@@ -579,7 +609,13 @@ final class SiteBackupExtensionTest extends TestCase
         $def = $container->getDefinition(LongRequestTimeLimitSubscriber::class);
         self::assertSame(['/_site_backup', '/_setup', '/en/_setup', '/es/_setup'], $def->getArgument('$pathPrefixes'));
         self::assertSame(900, $def->getArgument('$seconds'));
-        self::assertSame(512, $def->getTag('kernel.event_listener')[0]['priority']);
+        self::assertTrue($def->isAutoconfigured());
+        self::assertSame([], $def->getTag('kernel.event_listener'), 'no manual tag (REQ-SF-003)');
+        $this->autoconfigure($container);
+        self::assertSame(
+            [['event' => 'kernel.request', 'method' => 'onKernelRequest', 'priority' => 512]],
+            $container->getDefinition(LongRequestTimeLimitSubscriber::class)->getTag('kernel.event_listener'),
+        );
 
         $container = $this->loadWith([
             'bump_time_limit'         => true,
@@ -602,7 +638,7 @@ final class SiteBackupExtensionTest extends TestCase
             'security'       => ['password_hash' => 'h'],
         ]);
         $def = $container->getDefinition(ProductionSecretsGuardSubscriber::class);
-        self::assertTrue($def->hasTag('kernel.event_subscriber'));
+        self::assertTrue($def->isAutoconfigured());
         self::assertSame('%kernel.environment%', $def->getArgument('$environment'));
         self::assertTrue($def->getArgument('$checkSetupToken'));
         self::assertSame('%env(SITE_SETUP_TOKEN)%', $def->getArgument('$setupToken'));
@@ -610,6 +646,8 @@ final class SiteBackupExtensionTest extends TestCase
         self::assertTrue($def->getArgument('$checkPanelPassword'));
         self::assertSame('%env(default::APP_SECRET)%', $def->getArgument('$appSecret'));
         self::assertContains('nowo:site-backup:hash-password', $def->getArgument('$skipConsoleCommands'));
+        $this->autoconfigure($container);
+        self::assertTrue($container->getDefinition(ProductionSecretsGuardSubscriber::class)->hasTag('kernel.event_subscriber'));
 
         $container = $this->loadWith([
             'security_guard' => ['enabled' => true, 'app_secret' => 'explicit'],

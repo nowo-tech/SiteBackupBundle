@@ -22,6 +22,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Attribute\AsController;
 use Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException;
 use Symfony\Component\Routing\Attribute\Route;
 use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
@@ -43,6 +44,7 @@ use function strtr;
  * Backup panel (REQ-UI-003, v1.21+): every page renders a UiKit view model built by {@see PanelPages} through
  * {@see SiteBackupView} (archives list, history, create form, no-JS restore / delete confirmations, guest login).
  */
+#[AsController]
 final class SiteBackupPanelController
 {
     private readonly SiteBackupView $view;

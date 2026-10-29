@@ -7,6 +7,7 @@ namespace Nowo\SiteBackupBundle\Tests\Unit\Security;
 use Nowo\SiteBackupBundle\Security\PasswordSiteBackupAccessGate;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessGateInterface;
 use Nowo\SiteBackupBundle\Security\ThrottledSiteBackupAccessGate;
+use Nowo\SiteBackupBundle\Tests\Unit\RecordingLogger;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Session\Session;
@@ -15,6 +16,8 @@ use Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException;
 use Symfony\Component\RateLimiter\RateLimiterFactory;
 use Symfony\Component\RateLimiter\RateLimiterFactoryInterface;
 use Symfony\Component\RateLimiter\Storage\InMemoryStorage;
+
+use function json_encode;
 
 final class ThrottledSiteBackupAccessGateTest extends TestCase
 {
@@ -152,5 +155,37 @@ final class ThrottledSiteBackupAccessGateTest extends TestCase
         $gate->logout($request);
         self::assertTrue($gate->isProtectionEnabled());
         self::assertTrue($gate->isMisconfigured());
+    }
+
+    /**
+     * REQ-OBS-001: attempts are logged without the client IP or the password.
+     */
+    public function testLoginAttemptsAreLoggedWithoutIpOrPassword(): void
+    {
+        $logger = new RecordingLogger();
+        $gate   = new ThrottledSiteBackupAccessGate(new PasswordSiteBackupAccessGate(self::HASH), $this->factory(2), logger: $logger);
+
+        self::assertFalse($gate->authenticate($this->request('10.9.8.7'), 'wrong'));
+        self::assertTrue($gate->authenticate($this->request('10.9.8.7'), 'secret'));
+        self::assertFalse($gate->authenticate($this->request('10.9.8.7'), 'wrong'));
+        self::assertFalse($gate->authenticate($this->request('10.9.8.7'), 'wrong'));
+
+        try {
+            $gate->authenticate($this->request('10.9.8.7'), 'wrong');
+            self::fail('Expected TooManyRequestsHttpException.');
+        } catch (TooManyRequestsHttpException) {
+        }
+
+        self::assertSame([
+            'notice SiteBackup: panel login failed.',
+            'info SiteBackup: panel login succeeded.',
+            'notice SiteBackup: panel login failed.',
+            'notice SiteBackup: panel login failed.',
+            'warning SiteBackup: panel login throttled.',
+        ], $logger->lines());
+        $all = (string) json_encode($logger->records);
+        self::assertStringNotContainsString('10.9.8.7', $all);
+        self::assertStringNotContainsString('wrong', $all);
+        self::assertSame(['bundle' => 'site_backup', 'action' => 'panel_login'], $logger->records[0]['context']);
     }
 }

@@ -2,7 +2,7 @@
 
 **Baseline spec**: [`spec.md`](spec.md)  
 **Package**: `nowo-tech/site-backup-bundle`  
-**Last audited**: 2026-10-20 (v1.21.x; features 002–006 included; feature IDs are prefixed with their spec number, e.g. `004 FR-PERF-001` → [`specs/004-worker-perf-dump-hardening/`](../004-worker-perf-dump-hardening/spec.md))
+**Last audited**: 2026-10-29 (v1.24.x + unreleased REQ-100 pass; features 002–006 included; feature IDs are prefixed with their spec number, e.g. `004 FR-PERF-001` → [`specs/004-worker-perf-dump-hardening/`](../004-worker-perf-dump-hardening/spec.md))
 
 Every production source under `src/` is listed exactly once, grouped by domain (REQ-SPECKIT-001 / REQ-SPECKIT-003).
 
@@ -10,10 +10,11 @@ Every production source under `src/` is listed exactly once, grouped by domain (
 
 | Source file | Requirement IDs |
 | --- | --- |
+| `DependencyInjection/Compiler/CsrfProtectionPass.php` | FR-SEC-002 |
 | `DependencyInjection/Compiler/LoginThrottleStoragePass.php` | 005 FR-THR-005 |
 | `DependencyInjection/Compiler/TwigPathsPass.php` | FR-TWIG-001 |
-| `DependencyInjection/Configuration.php` | FR-DI-001 |
-| `DependencyInjection/SiteBackupExtension.php` | FR-DI-001 |
+| `DependencyInjection/Configuration.php` | FR-DI-001, FR-CFG-001, FR-CFG-002 |
+| `DependencyInjection/SiteBackupExtension.php` | FR-DI-001, FR-DI-002, FR-DI-003 |
 | `NowoSiteBackupBundle.php` | FR-DI-001 |
 
 ## Configuration & routing
@@ -41,27 +42,34 @@ Every production source under `src/` is listed exactly once, grouped by domain (
 
 | Source file | Requirement IDs |
 | --- | --- |
-| `Backup/BackupArchiver.php` | FR-BACKUP-001 |
+| `Backup/BackupArchiver.php` | FR-BACKUP-001, FR-RUNTIME-001, FR-DI-003 |
 | `Backup/RuntimeStatePaths.php` | FR-BACKUP-002, FR-RESTORE-001 |
 | `Database/MysqlDumpCommandFactory.php` | FR-BACKUP-001, 004 FR-DUMP-002 |
 | `Model/BackupArtifact.php` | FR-MODEL-001 |
 | `Model/BackupHistoryEntry.php` | FR-MODEL-001 |
 | `Model/RestoreProgress.php` | FR-MODEL-001 |
 | `Model/SetupProgress.php` | FR-MODEL-001 |
-| `Restore/RestoreOrchestrator.php` | FR-RESTORE-001 |
-| `Service/SiteBackupManager.php` | FR-SVC-001 |
+| `Restore/RestoreOrchestrator.php` | FR-RESTORE-001, FR-DI-003 |
+| `Service/SiteBackupManager.php` | FR-SVC-001, FR-OBS-001, FR-DI-003 |
 | `Storage/BackupHistoryStorageInterface.php` | FR-STORE-001 |
 | `Storage/FilesystemBackupHistoryStorage.php` | FR-STORE-001 |
 | `Storage/FilesystemRestoreProgressStorage.php` | FR-STORE-001 |
 | `Storage/RestoreProgressStorageInterface.php` | FR-STORE-001 |
-| `Worker/WorkerRestartSignal.php` | FR-WORKER-001 |
+| `Worker/WorkerRestartSignal.php` | FR-WORKER-001, FR-DI-003 |
+
+## Runtime: subprocess deadlines & log redaction
+
+| Source file | Requirement IDs |
+| --- | --- |
+| `Log/SecretRedactor.php` | FR-OBS-001 |
+| `Process/ProcessDeadline.php` | FR-RUNTIME-001 |
 
 ## Console commands
 
 | Source file | Requirement IDs |
 | --- | --- |
 | `Command/CreateBackupCommand.php` | FR-CLI-001 |
-| `Command/DatabaseDumpCommand.php` | FR-CLI-001, 004 FR-DUMP-001 |
+| `Command/DatabaseDumpCommand.php` | FR-CLI-001, 004 FR-DUMP-001, FR-RUNTIME-001 |
 | `Command/HashPasswordCommand.php` | FR-CLI-001 |
 | `Command/ListBackupsCommand.php` | FR-CLI-001 |
 | `Command/RestoreBackupCommand.php` | FR-CLI-001 |
@@ -75,11 +83,11 @@ Every production source under `src/` is listed exactly once, grouped by domain (
 
 | Source file | Requirement IDs |
 | --- | --- |
-| `Controller/SetupUnlocalizedLocaleRedirectController.php` | FR-HTTP-001 |
-| `Controller/SetupWizardController.php` | FR-HTTP-001 |
-| `Controller/SiteBackupPanelController.php` | FR-HTTP-001 |
+| `Controller/SetupUnlocalizedLocaleRedirectController.php` | FR-HTTP-001, FR-DI-002 |
+| `Controller/SetupWizardController.php` | FR-HTTP-001, FR-DI-002 |
+| `Controller/SiteBackupPanelController.php` | FR-HTTP-001, FR-DI-002 |
 | `EventSubscriber/ColdStartSchemaGateSubscriber.php` | FR-HTTP-002 |
-| `EventSubscriber/LongRequestTimeLimitSubscriber.php` | 004 FR-TIME-001 |
+| `EventSubscriber/LongRequestTimeLimitSubscriber.php` | 004 FR-TIME-001, FR-DI-002 |
 | `EventSubscriber/ProductionSecretsGuardSubscriber.php` | 004 FR-SEC-001 |
 | `EventSubscriber/RestoreRequestSubscriber.php` | FR-HTTP-002 |
 | `EventSubscriber/SetupDbDoneRedirectSubscriber.php` | FR-HTTP-002 |
@@ -110,7 +118,7 @@ Every production source under `src/` is listed exactly once, grouped by domain (
 | `Security/PasswordSiteBackupAccessGate.php` | FR-SEC-001 |
 | `Security/SiteBackupAccessCheckerInterface.php` | FR-SEC-001 |
 | `Security/SiteBackupAccessGateInterface.php` | FR-SEC-001 |
-| `Security/ThrottledSiteBackupAccessGate.php` | FR-SEC-001, 005 FR-THR-002 |
+| `Security/ThrottledSiteBackupAccessGate.php` | FR-SEC-001, 005 FR-THR-002, FR-DI-003 |
 
 ## Forms
 
@@ -140,21 +148,21 @@ Every production source under `src/` is listed exactly once, grouped by domain (
 | Source file | Requirement IDs |
 | --- | --- |
 | `Setup/AdminUserProvisionerInterface.php` | FR-SETUP-001 |
-| `Setup/ConsoleProcessRunner.php` | FR-SETUP-001 |
+| `Setup/ConsoleProcessRunner.php` | FR-SETUP-001, FR-RUNTIME-001 |
 | `Setup/DurableSetupDoneStoreInterface.php` | FR-SETUP-001 |
 | `Setup/NullAdminUserProvisioner.php` | FR-SETUP-001 |
 | `Setup/NullDurableSetupDoneStore.php` | FR-SETUP-001 |
 | `Setup/SetupContext.php` | FR-SETUP-001 |
-| `Setup/SetupDbDoneGuard.php` | FR-SETUP-001 |
+| `Setup/SetupDbDoneGuard.php` | FR-SETUP-001, FR-DI-003 |
 | `Setup/SetupNeedDetectorInterface.php` | FR-SETUP-001 |
-| `Setup/SetupOrchestrator.php` | FR-SETUP-001 |
+| `Setup/SetupOrchestrator.php` | FR-SETUP-001, FR-CFG-001, FR-OBS-001, FR-DI-003 |
 | `Setup/SetupStepFactory.php` | FR-SETUP-001 |
 | `Setup/SetupStepInput.php` | FR-SETUP-001 |
 | `Setup/SetupStepInterface.php` | FR-SETUP-001 |
 | `Setup/SetupStepResult.php` | FR-SETUP-001 |
 | `Setup/SetupTabCheckResult.php` | FR-SETUP-001 |
 | `Setup/SetupTabCheckerInterface.php` | FR-SETUP-001 |
-| `Setup/SetupTabCheckerLocator.php` | FR-SETUP-001 |
+| `Setup/SetupTabCheckerLocator.php` | FR-SETUP-008, FR-DI-004, FR-OBS-001 |
 | `Setup/SetupWizardReopener.php` | FR-SETUP-005, 003 FR-DONE-001 |
 
 ## Setup wizard — cold start, detectors & worker memo
@@ -165,10 +173,10 @@ Every production source under `src/` is listed exactly once, grouped by domain (
 | `Setup/ColdStart/MemoizedSchemaExistenceChecker.php` | 004 FR-PERF-002 |
 | `Setup/ColdStart/MysqlSchemaExistenceChecker.php` | FR-SETUP-001 |
 | `Setup/ColdStart/SchemaExistenceCheckerInterface.php` | FR-SETUP-001 |
-| `Setup/Detector/DoctrineConnectDetector.php` | FR-SETUP-003 |
-| `Setup/Detector/DoctrineSchemaEmptyDetector.php` | FR-SETUP-003 |
-| `Setup/Detector/IncompleteSetupProgressDetector.php` | FR-SETUP-003 |
-| `Setup/Detector/MarkerFileDetector.php` | FR-SETUP-003 |
+| `Setup/Detector/DoctrineConnectDetector.php` | FR-SETUP-003, FR-DI-002 |
+| `Setup/Detector/DoctrineSchemaEmptyDetector.php` | FR-SETUP-003, FR-DI-002 |
+| `Setup/Detector/IncompleteSetupProgressDetector.php` | FR-SETUP-003, FR-DI-002 |
+| `Setup/Detector/MarkerFileDetector.php` | FR-SETUP-003, FR-DI-002 |
 | `Setup/Detector/SetupNeedEvaluator.php` | FR-SETUP-003 |
 | `Setup/Memo/WorkerTtlMemo.php` | 004 FR-PERF-001 |
 
@@ -201,10 +209,10 @@ Every production source under `src/` is listed exactly once, grouped by domain (
 | `Setup/Storage/CacheDoctrineSetupProgressStorage.php` | FR-SETUP-002 |
 | `Setup/Storage/CacheSetupProgressStorage.php` | FR-SETUP-002 |
 | `Setup/Storage/ChainSetupProgressStorage.php` | FR-SETUP-002 |
-| `Setup/Storage/DoctrineDbalSetupProgressStorage.php` | FR-SETUP-002 |
-| `Setup/Storage/DoctrineDbalSetupStepJournal.php` | FR-SETUP-002 |
+| `Setup/Storage/DoctrineDbalSetupProgressStorage.php` | FR-SETUP-002, FR-DI-003 |
+| `Setup/Storage/DoctrineDbalSetupStepJournal.php` | FR-SETUP-002, FR-DI-003 |
 | `Setup/Storage/FilesystemSetupProgressStorage.php` | FR-SETUP-002 |
-| `Setup/Storage/SetupMarkerManager.php` | FR-SETUP-002 |
+| `Setup/Storage/SetupMarkerManager.php` | FR-SETUP-002, FR-DI-003 |
 | `Setup/Storage/SetupProgressStorageInterface.php` | FR-SETUP-002 |
 
 ## Twig & UiKit page views
@@ -214,6 +222,7 @@ Every production source under `src/` is listed exactly once, grouped by domain (
 | `Twig/SiteBackupExtension.php` | FR-TWIG-002 |
 | `View/PanelPages.php` | FR-TWIG-003, FR-UI-001 |
 | `View/SetupPages.php` | FR-TWIG-003, FR-UI-001 |
+| `View/SetupTokenGate.php` | FR-SETUP-011, FR-UI-001 |
 | `View/SiteBackupView.php` | FR-TWIG-003, FR-UI-001 |
 
 ## Twig templates
@@ -255,10 +264,11 @@ Every production source under `src/` is listed exactly once, grouped by domain (
 
 | Category | Files |
 | --- | ---: |
-| Bundle & dependency injection | 5 |
+| Bundle & dependency injection | 6 |
 | Configuration & routing | 7 |
 | Attributes & exclusions | 4 |
 | Backup, database dump & restore | 14 |
+| Runtime: subprocess deadlines & log redaction | 2 |
 | Console commands | 10 |
 | HTTP controllers & request subscribers | 10 |
 | Domain events | 10 |
@@ -269,9 +279,9 @@ Every production source under `src/` is listed exactly once, grouped by domain (
 | Setup wizard — cold start, detectors & worker memo | 10 |
 | Setup wizard — steps | 17 |
 | Setup wizard — progress storage | 8 |
-| Twig & UiKit page views | 4 |
+| Twig & UiKit page views | 5 |
 | Twig templates | 18 |
 | Translations | 7 |
-| **Total production sources** | **160** |
+| **Total production sources** | **164** |
 
-Audit command: `git ls-files src | wc -l` → 160.
+Audit command: `git ls-files src | wc -l` → 164.

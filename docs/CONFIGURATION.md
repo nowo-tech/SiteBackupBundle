@@ -2,13 +2,24 @@
 
 Root key: `nowo_site_backup`.
 
+## Table of contents
+
+- [Keys](#keys)
+  - [Setup locales from a parameter or env var](#setup-locales-from-a-parameter-or-env-var)
+  - [Setup step / tab keys](#setup-step--tab-keys)
+- [Profiles (REQ-CFG-001)](#profiles-req-cfg-001)
+- [Timeouts (REQ-RUNTIME-001)](#timeouts-req-runtime-001)
+- [Example](#example)
+
+## Keys
+
 | Key | Default | Notes |
 | --- | --- | --- |
 | `enabled` | `true` | Master switch for the restore loading page |
 | `default_message` | `restore.page.message` | Translation id (domain `NowoSiteBackupBundle`) or literal for the public loading page. v1.19+: always rendered as the page's lead text; the current step (`restore.message.*` translation ids written by the orchestrator) is shown below it. JSON responses use the step message and fall back to `default_message` |
 | `status_code` | `503` | HTTP status while restore is active |
 | `subscriber_priority` | `31` | After router (exclusions / attributes) |
-| `process_timeout` | `600` | Seconds for `tar` / dump processes (REQ-RUNTIME-001) |
+| `process_timeout` | `600` | Hard **and** idle timeout (seconds, min 30) of every subprocess: `tar`, `database_dump_command`, `nowo:site-backup:db-dump` and console setup steps. On expiry the process tree is killed — see [Timeouts](#timeouts-req-runtime-001) |
 | `bump_time_limit` | `false` | (v1.16+) `set_time_limit()` on main requests under `panel.path_prefix` and `setup.path_prefix` (incl. `/{locale}` variants) so a short prod `max_execution_time` / FrankenPHP worker timer does not kill dump, restore or migrate subprocesses mid-pipe. Other requests keep the host limit |
 | `bump_time_limit_seconds` | `null` | Value for `set_time_limit()` when `bump_time_limit` is on; `null` = `process_timeout`, `0` = unlimited |
 | `security_guard.enabled` | `false` | (v1.16+) Opt-in production safety guard (`ProductionSecretsGuardSubscriber`): outside `local_environments`, main HTTP requests and console commands fail with a `RuntimeException` while secrets are empty / placeholders |
@@ -98,7 +109,7 @@ Root key: `nowo_site_backup`.
 | `setup.admin_provisioner` | `null` | Service id implementing `AdminUserProvisionerInterface` (`admin_user` step); `null` = `NullAdminUserProvisioner` |
 | `setup.trigger_after_restore` | `true` | After a successful restore write `setup.required` with `post_restore_profile` so the wizard finishes the DB bootstrap |
 | `setup.post_restore_profile` | `post_restore` | Profile used after a restore |
-| `setup.default_profile` | `fresh_install` | Profile used when none is requested / stored |
+| `setup.default_profile` | `fresh_install` | Profile used when none is requested / stored. Must be a key of `setup.profiles` (container compile fails otherwise) — see [Profiles](#profiles-req-cfg-001) |
 | Custom setup-need detectors | — | `#[AsSetupNeedDetector]` + `SetupNeedDetectorInterface` → tag `nowo.site_backup.setup_need_detector`. Distinct from tab `checker:` / `SetupTabCheckerInterface`. |
 | `setup.advance_mode` | `automatic` | `automatic` \| `manual` — chain auto tabs vs one Continuar per auto tab (CLI always chains) |
 | `setup.profiles.*.advance_mode` | inherit | Optional per-profile override |
@@ -149,9 +160,81 @@ Each entry of `setup.profiles.*.steps` and `setup.profiles.*.tabs` (and the nest
 | `label_domain` / `description` | tabs | Translation domain (default `NowoSiteBackupBundle`) and subtitle translation id |
 | `runner` | tabs | Nested step config (same keys) executed by a `custom` tab |
 
-Profiles (`default_profile` / `profiles`) are **not** used for backup state: backup state is global (REQ-CFG-001 N/A for backups).
+## Profiles (REQ-CFG-001)
 
-**Setup wizard profiles** (`setup.profiles.*`) are documented in [SETUP-WIZARD.md](SETUP-WIZARD.md) (`fresh_install`, `post_restore`, `minimal`, custom).
+The setup wizard is the bundle's multi-config surface: canonical keys `setup.default_profile` + `setup.profiles`
+(REQ-CFG-001, nested feature node). Backup / restore state is global and has no profiles.
+
+| Key | Role |
+| --- | --- |
+| `setup.profiles` | Map of named profiles (stable public names). Each profile is a complete flow: `tabs` (preferred) or legacy `steps`, plus an optional `advance_mode`. **Declaring the map replaces the bundle defaults** (`fresh_install`, `post_restore`, `full_database`, `minimal`): copy the ones you still use. |
+| `setup.default_profile` | Profile used when nothing else selects one. It **must** be a key of `setup.profiles`: the container refuses to compile otherwise (`Invalid nowo_site_backup.setup.default_profile "x": it must be a key of nowo_site_backup.setup.profiles (defined: …)`). Not checked while `setup.enabled` is false. |
+| `setup.post_restore_profile` | Profile written into `setup.required` after a restore (`trigger_after_restore`). An unknown name falls back to the resolution below. |
+
+**Runtime selection** (`SetupOrchestrator::resolveProfileName()`), first match wins:
+
+1. an explicit, existing name — `?profile=…` on the wizard (only before a run started), `--profile=…` on
+   `nowo:site-backup:setup`, the `profile` field of `POST /_setup/api/advance`;
+2. the profile recorded in `var/site-backup/setup.required` (e.g. `post_restore` after a restore);
+3. the profile of the stored, unfinished progress;
+4. `setup.default_profile`.
+
+There are no legacy synonym keys (`default_config` / `configs`) and no flat (profile-less) setup layout to normalize.
+
+```yaml
+nowo_site_backup:
+    setup:
+        default_profile: cloud
+        profiles:
+            cloud:                     # used by default
+                advance_mode: manual
+                tabs:
+                    - { type: requirements }
+                    - { type: database_create }
+                    - { type: migrations }
+                    - { type: admin_user }
+                    - { type: marker, write_done: true }
+            post_restore:              # kept: setup.post_restore_profile
+                steps:
+                    - { type: database_create }
+                    - { type: sql_file, paths: [var/site-backup/last-restore-dump.sql], if_exists: true }
+                    - { type: migrations }
+                    - { type: marker, write_done: true }
+```
+
+Step and tab keys: [Setup step / tab keys](#setup-step--tab-keys); the stock profiles and the wizard flow:
+[SETUP-WIZARD.md](SETUP-WIZARD.md#profiles).
+
+## Timeouts (REQ-RUNTIME-001)
+
+Every subprocess the bundle starts runs under `process_timeout` (default **600 s**) as both the Symfony `Process`
+timeout and idle timeout:
+
+| Subprocess | Started by |
+| --- | --- |
+| `backup.database_dump_command` (`sh -c "… > dump.sql"`) | `nowo:site-backup:create`, panel *Create* |
+| `mysqldump` / `mariadb-dump` | `nowo:site-backup:db-dump` (usually as the dump command above) |
+| `tar -czf` / `tar -xzf` | backup creation / restore extraction |
+| `php bin/console …` | setup steps `database_create`, `migrations`, `schema_update`, `cache_clear`, `console`, `sample_data` |
+
+On expiry the whole process tree of `tar`, the dump shell and console steps is killed (descendants first — e.g. `mysqldump` under the dump shell — then the
+process itself, SIGKILL; descendants are found through `/proc` on Linux) and the operation fails with a controlled
+error: `Database dump timed out after N seconds (process_timeout).` for the dump (the message never repeats the
+configured command, which may carry credentials), Symfony's `ProcessTimedOutException` for `tar` and console steps
+(the setup step is marked failed). No partial archive is published.
+
+Keep the deadlines layered, innermost first (raise them together):
+
+| Layer | Must be |
+| --- | --- |
+| `process_timeout` | the operation deadline |
+| PHP `max_execution_time` (or `bump_time_limit_seconds` with `bump_time_limit: true`) | **greater** than `process_timeout` |
+| Reverse proxy / Caddy `servers.timeouts.write` | **greater** than the PHP limit |
+| FrankenPHP `max_wait_time` | short (e.g. 30 s): caps the wait for a free PHP thread |
+
+The nested `nowo:site-backup:db-dump` gets the same `process_timeout`; the outer dump shell's deadline kills it (and
+`mysqldump`) when it fires. Long restores are best run from the CLI (`nowo:site-backup:restore`), which no HTTP
+deadline bounds. FrankenPHP demo values: [DEMO-FRANKENPHP.md](DEMO-FRANKENPHP.md#timeout-hierarchy-req-runtime-001).
 
 ## Example
 

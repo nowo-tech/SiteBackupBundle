@@ -12,12 +12,14 @@ use Symfony\Component\Console\Input\InputInterface;
 use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\ConsoleOutputInterface;
 use Symfony\Component\Console\Output\OutputInterface;
+use Symfony\Component\Process\Exception\ProcessTimedOutException;
 use Symfony\Component\Process\Process;
 
 use function array_filter;
 use function array_values;
 use function is_array;
 use function is_string;
+use function sprintf;
 
 /**
  * Built-in `backup.database_dump_command`: streams a MySQL / MariaDB dump of DATABASE_URL to stdout.
@@ -69,15 +71,26 @@ final class DatabaseDumpCommand extends Command
             return Command::INVALID;
         }
 
+        // The password stays in MYSQL_PWD (env), never in argv nor in the messages below.
+        // REQ-RUNTIME-001: hard + idle timeout. mysqldump spawns no children, so Process::stop() on expiry is enough;
+        // run() keeps the blocking pipe reads a large streamed dump needs.
         $process = new Process($spec['command'], null, $spec['env'], null, (float) $this->timeoutSeconds);
-        $process->run(static function (string $type, string $buffer) use ($output, $stderr): void {
-            if ($type === Process::OUT) {
-                $output->write($buffer, false, OutputInterface::OUTPUT_RAW);
+        $process->setIdleTimeout((float) $this->timeoutSeconds);
 
-                return;
-            }
-            $stderr->write($buffer, false, OutputInterface::OUTPUT_RAW);
-        });
+        try {
+            $process->run(static function (string $type, string $buffer) use ($output, $stderr): void {
+                if ($type === Process::OUT) {
+                    $output->write($buffer, false, OutputInterface::OUTPUT_RAW);
+
+                    return;
+                }
+                $stderr->write($buffer, false, OutputInterface::OUTPUT_RAW);
+            });
+        } catch (ProcessTimedOutException) {
+            $stderr->writeln(sprintf('nowo:site-backup:db-dump: dump timed out after %d seconds (process_timeout).', $this->timeoutSeconds));
+
+            return Command::FAILURE;
+        }
 
         $code = $process->getExitCode() ?? 1;
 

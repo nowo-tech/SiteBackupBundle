@@ -70,4 +70,18 @@ final class DatabaseDumpCommandTest extends TestCase
         self::assertSame(2, $tester->execute([]));
         self::assertStringContainsString('MySQL / MariaDB', $tester->getDisplay());
     }
+
+    /**
+     * REQ-RUNTIME-001: a hung mysqldump is killed at the configured timeout; the command fails with a clear message.
+     */
+    public function testHungDumpTimesOut(): void
+    {
+        file_put_contents($this->fakeBinary, "#!/bin/sh\nsleep 60\n");
+        $tester = new CommandTester(new DatabaseDumpCommand('mysql://app:REDACTED-TEST@db/shop', 1));
+        $code   = $tester->execute(['--binary' => $this->fakeBinary], ['capture_stderr_separately' => true]);
+
+        self::assertSame(Command::FAILURE, $code);
+        self::assertSame("nowo:site-backup:db-dump: dump timed out after 1 seconds (process_timeout).\n", $tester->getErrorOutput());
+        self::assertSame('', $tester->getDisplay());
+    }
 }

@@ -52,14 +52,14 @@ The demo is not a production deployment, but the production runtime can be repro
 
 ## Timeout hierarchy (REQ-RUNTIME-001)
 
-Backups and restores run blocking subprocesses (`tar`, `mysqldump`). Keep the deadlines layered, innermost first:
+Backups and restores run blocking subprocesses (`tar`, `mysqldump`, `php bin/console …` setup steps). Keep the deadlines layered, innermost first:
 
 | Layer | Setting | Demo / default |
 | --- | --- | --- |
-| Operation | `nowo_site_backup.process_timeout` (Symfony `Process` timeout for `tar` / dump) | demo **300 s**, bundle default **600 s** |
-| PHP | `max_execution_time`; with `bump_time_limit: true` the panel and setup requests call `set_time_limit(bump_time_limit_seconds ?? process_timeout)` — set `bump_time_limit_seconds` **above** `process_timeout` so the process timeout fires first | demo: PHP default (no bump configured) |
-| HTTP server | Caddy `servers { timeouts { write … } }` — must be **greater** than the PHP limit when set | demo Caddyfile: Caddy default (no write timeout) |
-| FrankenPHP queue | `max_wait_time` caps how long a request waits for a free PHP thread | demo: not set |
+| Operation | `nowo_site_backup.process_timeout`: Symfony `Process` timeout **and** idle timeout for `tar`, the database dump and console setup steps. On expiry the whole process tree is killed (children first, e.g. `mysqldump` under `sh -c`) and the backup / step fails with a controlled error | demo **300 s**, bundle default **600 s** |
+| PHP | `max_execution_time` / `max_input_time`; with `bump_time_limit: true` the panel and setup requests call `set_time_limit(bump_time_limit_seconds ?? process_timeout)` — set `bump_time_limit_seconds` **above** `process_timeout` so the process timeout fires first | demo **360 s** (`frankenphp { php_ini … }` in both Caddyfiles) |
+| HTTP server | Caddy `servers { timeouts { write … } }` — strictly **greater** than the PHP limit | demo **400 s** |
+| FrankenPHP queue | `max_wait_time` caps how long a request waits for a free PHP thread (504 instead of an endless queue) | demo **30 s** |
 
 When raising `process_timeout`, raise the PHP and HTTP write deadlines in the same change. Long restores should preferably run from the CLI (`nowo:site-backup:restore`), which is not bound by HTTP timeouts. See [CONFIGURATION.md](CONFIGURATION.md) (`process_timeout`, `bump_time_limit`, `restore.stale_after_seconds`).
 

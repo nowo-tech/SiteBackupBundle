@@ -4,11 +4,12 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Setup;
 
-use DateTimeImmutable;
 use Nowo\SiteBackupBundle\Model\SetupProgress;
 use Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupMarkerManager;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupProgressStorageInterface;
+use Psr\Clock\ClockInterface;
+use Symfony\Component\Clock\NativeClock;
 use Throwable;
 
 /**
@@ -24,6 +25,7 @@ final readonly class SetupDbDoneGuard
         private SetupNeedEvaluator $needEvaluator,
         private SetupMarkerManager $markers,
         private SetupProgressStorageInterface $progressStorage,
+        private ClockInterface $clock = new NativeClock(),
     ) {
     }
 
@@ -68,7 +70,7 @@ final readonly class SetupDbDoneGuard
             return;
         }
 
-        $now = new DateTimeImmutable();
+        $now = $this->clock->now();
         $this->progressStorage->save($progress->with(
             phase: SetupProgress::PHASE_COMPLETED,
             clearCurrentStepId: true,

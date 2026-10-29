@@ -121,7 +121,7 @@ Every Nowo bundle with Spec Kit must ship:
 
 ```bash
 git ls-files src | wc -l
-# Must match the "Total production sources" row in code-inventory.md (160 for this bundle)
+# Must match the "Total production sources" row in code-inventory.md (164 for this bundle)
 ```
 
 When you change product behaviour:

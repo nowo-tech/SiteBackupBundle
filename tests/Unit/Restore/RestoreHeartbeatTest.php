@@ -11,6 +11,7 @@ use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
 use Nowo\SiteBackupBundle\Storage\RestoreProgressStorageInterface;
 use PHPUnit\Framework\TestCase;
 use ReflectionProperty;
+use Symfony\Component\Clock\MockClock;
 use Symfony\Component\Filesystem\Filesystem;
 
 use function file_put_contents;
@@ -124,6 +125,27 @@ final class RestoreHeartbeatTest extends TestCase
         self::assertSame(2, $storage->countPhase(RestoreProgress::PHASE_VALIDATING));
         self::assertSame(2, $storage->countPhase(RestoreProgress::PHASE_EXTRACTING));
         self::assertSame(2, $storage->countPhase(RestoreProgress::PHASE_APPLYING));
+    }
+
+    /**
+     * REQ-DI-001: a PSR-20 clock (the framework `clock` service) works like the closure seam.
+     */
+    public function testPsrClockFreezesHeartbeatsToo(): void
+    {
+        $artifact     = $this->archiver()->create('psr-clock');
+        $storage      = new RecordingRestoreProgressStorage();
+        $orchestrator = new RestoreOrchestrator(
+            projectDir: $this->projectDir,
+            archiver: $this->archiver(),
+            progressStorage: $storage,
+            protectedRelativePaths: [],
+            staleAfterSeconds: 0,
+            clock: new MockClock(new DateTimeImmutable('@2000000')),
+        );
+
+        $orchestrator->restore($artifact);
+
+        self::assertSame(2, $storage->countPhase(RestoreProgress::PHASE_EXTRACTING));
     }
 
     public function testResetForgetsTheHeartbeatThrottle(): void

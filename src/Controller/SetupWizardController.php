@@ -28,6 +28,7 @@ use Symfony\Component\HttpFoundation\JsonResponse;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
+use Symfony\Component\HttpKernel\Attribute\AsController;
 use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 use Twig\Environment;
@@ -48,6 +49,7 @@ use const JSON_THROW_ON_ERROR;
  * Setup wizard (REQ-UI-003, v1.21+): token gate (page/auth), wizard steps and done (page/wizard), all on the guest
  * layout. No database service is needed to render these pages (cold start, broken DATABASE_URL, no users yet).
  */
+#[AsController]
 final class SetupWizardController
 {
     private readonly SiteBackupView $view;

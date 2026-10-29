@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Setup\Detector;
 
+use Nowo\SiteBackupBundle\Attribute\AsSetupNeedDetector;
 use Nowo\SiteBackupBundle\Setup\SetupNeedDetectorInterface;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupMarkerManager;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupProgressStorageInterface;
@@ -15,6 +16,7 @@ use function sprintf;
  * Forces the site gate when setup progress exists but is not completed
  * (resume after crash / wiped var/ when Doctrine storage still has the row).
  */
+#[AsSetupNeedDetector(priority: 70)]
 final class IncompleteSetupProgressDetector implements SetupNeedDetectorInterface
 {
     public function __construct(

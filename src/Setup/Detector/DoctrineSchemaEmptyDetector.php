@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Setup\Detector;
 
+use Nowo\SiteBackupBundle\Attribute\AsSetupNeedDetector;
 use Nowo\SiteBackupBundle\Setup\Memo\WorkerTtlMemo;
 use Nowo\SiteBackupBundle\Setup\SetupNeedDetectorInterface;
 use Throwable;
@@ -18,6 +19,7 @@ use function is_object;
  * (`setup.worker_memo.schema_probe_ttl` > 0) a non-empty schema is remembered per worker
  * for that TTL. Empty / unknown answers are never cached.
  */
+#[AsSetupNeedDetector(priority: 80)]
 final class DoctrineSchemaEmptyDetector implements SetupNeedDetectorInterface
 {
     public function __construct(

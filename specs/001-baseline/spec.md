@@ -2,7 +2,22 @@
 
 **Package**: `nowo-tech/site-backup-bundle`  
 **Baseline**: `001-baseline`  
-**Last amended**: 2026-09-25
+**Last amended**: 2026-10-29
+
+## Summary
+
+`nowo-tech/site-backup-bundle` (config root `nowo_site_backup`) guarantees integrators:
+
+- **Integral backups** — selected project paths + optional database dump packed into an owner-only `.tar.gz` with a
+  SHA-256 `MANIFEST.json`, from the CLI (`nowo:site-backup:*`) or the UiKit admin panel (`/_site_backup`).
+- **Safe restores** — validate → stage → apply with protected paths, while visitors get a 503 loading page and the
+  panel / progress JSON stay reachable.
+- **Setup wizard** (`/_setup`) — named profiles (`setup.default_profile` + `setup.profiles`) that bootstrap a cold or
+  freshly restored database (requirements, `DATABASE_URL`, create DB, migrations / SQL import, admin, sample data).
+- **Fail-closed security** — role checker + password gate + CSRF (compile-time check), setup token, optional
+  production secrets guard, per-IP login throttle.
+- **Bounded runtime** — every subprocess runs under `process_timeout` (hard + idle), the process tree is killed on
+  expiry; destructive operations are logged without secrets; FrankenPHP worker-safe services.
 
 ## User scenarios
 
@@ -38,6 +53,15 @@ Given `setup.progress_storage: chain` (or `doctrine`) and a working DBAL connect
 2. **Given** `progress_storage: filesystem` only, **When** `var/site-backup/setup-progress.json` is deleted mid-wizard, **Then** progress is lost (documented trade-off).
 3. **Given** chain mode, **When** save succeeds **and** DBAL is usable, **Then** both JSON and DBAL table (`setup.progress_table`, default `nowo_site_backup_setup_progress`) are updated; payload includes `started_at` / `completed_at`. When `progress_step_rows` is true, per-step rows are upserted into `setup.progress_steps_table` via runtime DDL (not Symfony Migrations). Early steps before a DB exists keep filesystem-only progress (DB mirror soft-fails).
 4. **Given** step rows with `status=completed`, **When** progress JSON lacks those ids, **Then** load merges them from the journal so resume stays correct.
+### US-6 — Configurable setup path
+**Priority**: P2  
+Given `setup.path_prefix: /install`, When the container compiles, Then the wizard routes, the site gate redirect and the exclusion matcher use `/install` (and `/{locale}/install` when `setup.locale.in_path` is not `never`).
+
+**Acceptance**:
+
+1. **Given** the default config, **When** routes are listed, **Then** the wizard lives under `/_setup`.
+2. **Given** a custom prefix, **When** setup is required and GET `/`, **Then** redirect to the custom prefix.
+
 ### US-7 — Gate until setup is 100% complete
 **Priority**: P1  
 Given the operator has started the setup wizard (or `setup.required` / incomplete progress / `require_done_marker`), When a visitor hits a normal route before `setup.done` exists, Then the site gate redirects to `/_setup`. Starting the wizard writes `setup.required` so the gate cannot be left mid-flight.
@@ -71,19 +95,68 @@ Given `setup.profiles.*.tabs` (ordered), When the wizard runs, Then each tab may
 4. **Given** a custom tab with `checker` returning needs_input, **When** the operator opens the wizard, **Then** the configured Twig `template` is shown.
 5. **Given** only legacy `steps` (no `tabs`), **When** the profile runs, **Then** behaviour matches pre-tabs profiles (BC).
 
+### US-10 — Hung subprocesses are bounded
+**Priority**: P1  
+Given `process_timeout: 600`, When the database dump, `tar` or a console setup step hangs, Then it is killed (with its child processes) after 600 s and the backup / step fails with a controlled error that does not repeat the dump command.
+
+**Acceptance**:
+
+1. **Given** a dump command that never ends, **When** a backup runs, **Then** `Database dump timed out after N seconds (process_timeout).` is raised, no archive is published and no `mysqldump` child survives.
+2. **Given** `tar` fails or times out, **When** the backup aborts, **Then** no partial archive stays in `storage_dir`.
+3. **Given** the FrankenPHP demo, **When** its Caddyfiles load, **Then** PHP `max_execution_time` (360 s) and Caddy `write` (400 s) are above `process_timeout` (300 s) and `max_wait_time` is 30 s.
+
+### US-11 — Operators can audit destructive operations
+**Priority**: P2  
+Given MonologBundle, When a backup is created, deleted or restored, or a setup run starts / fails / completes, Then a record is written on the `site_backup` channel with the action and backup id / profile / step — never credentials, actors or labels.
+
+### US-12 — Profile misconfiguration fails early
+**Priority**: P2  
+Given `setup.profiles` without the `setup.default_profile` key, When the container compiles, Then it fails with `Invalid nowo_site_backup.setup.default_profile "…": it must be a key of nowo_site_backup.setup.profiles (defined: …)`.
+
 ## Functional requirements
+
+### Bundle, DI & configuration
 
 | ID | Requirement |
 | --- | --- |
 | FR-BUNDLE-001 | Bundle registers DI, Twig paths, routes, commands |
-| FR-CFG-001 | Strict `Configuration` tree with safe defaults |
-| FR-BACKUP-001 | Create archive + checksums; optional DB dump with timeout |
-| FR-BACKUP-002 | Exclusion matcher (paths / attributes) |
-| FR-RESTORE-001 | Validate → stage → apply with protected paths |
+| FR-DI-001 | `services.yaml` / routes attribute loader with path-prefix parameters |
+| FR-DI-002 | Attribute wiring (REQ-SF-003): `#[AsSetupNeedDetector(priority)]` built-in detectors, `#[AsEventListener]` time-limit listener, `#[AsController]` controllers, event subscribers via autoconfigure; manual tags only for config-driven listener priorities, route loaders, the UiKit area-nav provider and the login-throttle storage pass |
+| FR-DI-003 | Time-dependent services take `Psr\Clock\ClockInterface` (framework `clock`; default `NativeClock`) |
+| FR-DI-004 | `SetupTabCheckerLocator` is a closed-set ServiceLocator of the configured tab `checker:` ids (documented registry, not a grab-bag container) |
+| FR-CFG-001 | Strict `Configuration` tree with safe defaults; setup profiles use canonical `setup.default_profile` + `setup.profiles` |
+| FR-CFG-002 | `setup.default_profile` must be a key of `setup.profiles` (compile-time error naming the path and the defined profiles; skipped while setup is disabled) |
+
+### Backup, restore & runtime
+
+| ID | Requirement |
+| --- | --- |
+| FR-BACKUP-001 | Create archive + checksums; optional DB dump; owner-only archive |
+| FR-BACKUP-002 | Exclusion matcher (paths / attributes); runtime state never archived |
+| FR-RESTORE-001 | Validate → stage → apply with protected paths; heartbeats + stale detection |
+| FR-RUNTIME-001 | `ProcessDeadline`: `process_timeout` is the hard and idle timeout of `tar`, the dump, `db-dump` and console steps; on expiry descendants then the process are killed; dump timeout message without the command; partial archive removed |
+| FR-SVC-001 | `SiteBackupManager` façade |
+| FR-STORE-001 | Filesystem history + restore progress storage |
+| FR-MODEL-001 | Artifact / progress / history / `SetupProgress` models |
+| FR-ATTR-001 | `#[ExcludeFromRestore]` |
+| FR-EVT-001 | Domain events for backup/restore/setup lifecycle |
+| FR-WORKER-001 | FrankenPHP worker scenario B (no kernel reset): no cross-request mutable state in shared services; DBAL setup storages self-heal schema memo + `ResetInterface`; after restore / `cache_clear` / `database_url` env write, `WorkerRestartSignal` + `WorkerRestartRequiredEvent` require an operational worker restart |
+| FR-OBS-001 | PSR-3 logging on channel `site_backup`: start / success / failure of create, delete, restore and setup runs; structured context; `SecretRedactor` masks credentials; no actors / labels / secrets |
+
+### HTTP, security & CLI
+
+| ID | Requirement |
+| --- | --- |
 | FR-HTTP-001 | Panel + setup controllers use `#[Route]` + CSRF fail-closed |
 | FR-HTTP-002 | Restore/setup request subscribers gate the public site |
-| FR-SEC-001 | Password gate fail-closed when hash missing; `isMisconfigured()` |
-| FR-CLI-001 | Console commands for backup/restore/setup/hash |
+| FR-SEC-001 | Password gate fail-closed when hash missing; `isMisconfigured()`; role checker; login throttle |
+| FR-SEC-002 | `CsrfProtectionPass`: the container refuses to compile while the panel or the setup wizard is registered without form CSRF (`form.type_extension.csrf`, token manager, `framework.form.csrf_protection`) |
+| FR-CLI-001 | Console commands for backup/restore/verify/list/setup/hash/db-dump/worker-restart |
+
+### Setup wizard
+
+| ID | Requirement |
+| --- | --- |
 | FR-SETUP-001 | Wizard steps, orchestrator, markers, profiles, admin provisioner |
 | FR-SETUP-002 | Progress storage: `filesystem` \| `doctrine` \| `chain`; `started_at` / `completed_at`; optional DBAL table auto-create (runtime DDL, not migrations); optional per-step journal (`progress_step_rows`) |
 | FR-SETUP-003 | Detectors: marker, doctrine connect, schema empty, **incomplete progress** (toggleable) + **app-tagged** `SetupNeedDetectorInterface`; evaluator ORs enabled detectors |
@@ -94,24 +167,23 @@ Given `setup.profiles.*.tabs` (ordered), When the wizard runs, Then each tab may
 | FR-SETUP-008 | Profiles may declare ordered `tabs` with `checker`, `template`, `runner`; legacy `steps` still work |
 | FR-SETUP-009 | `advance_mode` `automatic`\|`manual` (setup + per-profile override); interactive tabs always pause |
 | FR-SETUP-010 | Tab `label` / `description` are translation ids; domain default `NowoSiteBackupBundle`; `#[AsSetupTabChecker]` autoconfigures checkers |
+| FR-SETUP-011 | Setup token gate page (`SetupTokenGate`): configurable illustration (`<picture>` WebP + fallback) and how-to steps (`setup.token_gate`) |
+
+### Twig, UI & i18n
+
+| ID | Requirement |
+| --- | --- |
 | FR-TWIG-001 | Twig namespace `NowoSiteBackupBundle` with app overrides first (`templates/bundles/NowoSiteBackupBundle/`) |
 | FR-TWIG-002 | Twig functions for restore progress |
 | FR-TWIG-003 | Panel / restore / setup Twig templates (apps may restyle via overrides) |
+| FR-UI-001 | Panel and setup pages render on the UiKit page contract (REQ-UI-003, v1.21+): `View\PanelPages` / `View\SetupPages` build the view models, `View\SiteBackupView` resolves per-page templates and layouts; `_legacy_layout.html.twig` bridges 1.x layouts; panel tabs carry UiKit 2.17 icons |
 | FR-I18N-001 | Translations en/es/it/fr/pt/de/nl including `setup.tab.*` |
-| FR-EVT-001 | Domain events for backup/restore/setup lifecycle |
-| FR-STORE-001 | Filesystem history + restore progress storage |
-| FR-SVC-001 | `SiteBackupManager` façade |
-| FR-MODEL-001 | Artifact / progress / history / `SetupProgress` models |
-| FR-ATTR-001 | `#[ExcludeFromRestore]` |
-| FR-DI-001 | `services.yaml` / routes attribute loader with path-prefix parameters |
-| FR-WORKER-001 | FrankenPHP worker scenario B (no kernel reset): no cross-request mutable state in shared services; DBAL setup storages self-heal schema memo + `ResetInterface`; after restore / `cache_clear` / `database_url` env write, `WorkerRestartSignal` + `WorkerRestartRequiredEvent` require an operational worker restart |
-| FR-UI-001 | Panel and setup pages render on the UiKit page contract (REQ-UI-003, v1.21+): `View\PanelPages` / `View\SetupPages` build the view models, `View\SiteBackupView` resolves per-page templates and layouts; `_legacy_layout.html.twig` bridges 1.x layouts |
 
 ## Success criteria
 
 | ID | Criterion |
 | --- | --- |
-| SC-INV-001 | `code-inventory.md` lists 100% of production sources under `src/` — **160/160** (PHP, config YAML, Twig views, translations; audited 2026-10-20), grouped by domain |
+| SC-INV-001 | `code-inventory.md` lists 100% of production sources under `src/` — **164/164** (PHP, config YAML, Twig views, translations; audited 2026-10-29), grouped by domain |
 | SC-TEST-001 | PHPUnit Lines coverage ≥ 99% (`make coverage-check`) |
 | SC-SEC-001 | Panel denied without hash; CSRF required for POSTs |
 | SC-SETUP-001 | Incomplete progress detector + doctrine/chain storage covered by unit tests |
@@ -119,14 +191,32 @@ Given `setup.profiles.*.tabs` (ordered), When the wizard runs, Then each tab may
 | SC-SETUP-003 | `bootstrap_mode` + `when_answer` + full SQL import path covered by unit tests |
 | SC-SETUP-004 | Tabs + checker + `advance_mode` covered by unit tests; tab labels use translation ids |
 | SC-QA-001 | `make phpstan` / `cs-check` clean |
+| SC-RUNTIME-001 | Timeout tests: `ProcessDeadlineTest` (child process killed), `BackupArchiverTimeoutTest`, `ConsoleProcessRunnerTest::testHungCommandTimesOut`, `DatabaseDumpCommandTest::testHungDumpTimesOut` |
+| SC-CFG-001 | `ConfigurationTest`: two profiles + default boot; unknown / missing default rejected; skipped while setup disabled |
+| SC-OBS-001 | `SiteBackupManagerLoggingTest`, `SetupObservabilityTest`: records, levels, redaction |
+| SC-DI-001 | `AttributeWiringKernelTest` (real kernel) + `SiteBackupExtensionTest` autoconfigure assertions |
 | SC-WORKER-001 | Safe under FrankenPHP worker with kernel not reset between requests (see `docs/FRANKENPHP-WORKER-AUDIT.md`); DBAL setup storages covered without calling `reset()` |
 
 ## Non-goals
 
 - Automatic live SQL import during HTTP restore
-- Multi-tenant CFG profiles (REQ-CFG-001 N/A)
+- Profiles for backup / restore state (global; REQ-CFG-001 applies to the setup wizard only)
+- Orphan reaping outside Linux (no `/proc`: only the direct subprocess is stopped)
 - Offsite object-storage adapters (pluggable later)
 - Host-app visual theme (Beacon-style UI lives in the consuming app via Twig overrides)
+
+## Key entities
+
+- **BackupArtifact** — archive id (`Ymd-His-<hex>`), path, SHA-256, checksums, meta, label, actor (sidecar `*.meta.json`).
+- **BackupHistoryEntry** — JSONL history line (action, actor, backup id, message).
+- **RestoreProgress** / **SetupProgress** — phase, percent, message, log, timestamps.
+- **Setup profile** — named ordered `tabs` / `steps` + `advance_mode`.
+
+## Assumptions
+
+- `tar` is on the PATH; MySQL / MariaDB dumps use `mysqldump` / `mariadb-dump` (password via `MYSQL_PWD`).
+- FrameworkBundle provides autoconfiguration, the `clock` service and (optionally) Monolog `logger`.
+- Operators configure `database_dump_command` and console steps (never taken from HTTP input).
 
 ## Edge cases
 

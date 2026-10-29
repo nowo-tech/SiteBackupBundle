@@ -4,12 +4,12 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Setup;
 
-use DateTimeImmutable;
 use InvalidArgumentException;
 use Nowo\SiteBackupBundle\Event\SetupCompletedEvent;
 use Nowo\SiteBackupBundle\Event\SetupStartedEvent;
 use Nowo\SiteBackupBundle\Event\SetupStepCompletedEvent;
 use Nowo\SiteBackupBundle\Event\SetupStepFailedEvent;
+use Nowo\SiteBackupBundle\Log\SecretRedactor;
 use Nowo\SiteBackupBundle\Model\SetupProgress;
 use Nowo\SiteBackupBundle\Setup\Step\CacheClearStep;
 use Nowo\SiteBackupBundle\Setup\Step\ConditionalAnswerStep;
@@ -18,8 +18,12 @@ use Nowo\SiteBackupBundle\Setup\Step\TabStep;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupMarkerManager;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupProgressStorageInterface;
 use Nowo\SiteBackupBundle\Worker\WorkerRestartSignal;
+use Psr\Clock\ClockInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
+use Psr\Log\LoggerInterface;
+use Psr\Log\NullLogger;
 use RuntimeException;
+use Symfony\Component\Clock\NativeClock;
 
 use function array_slice;
 use function count;
@@ -45,6 +49,8 @@ final class SetupOrchestrator
         private readonly ?EventDispatcherInterface $eventDispatcher = null,
         private readonly string $defaultAdvanceMode = self::ADVANCE_AUTOMATIC,
         private readonly ?WorkerRestartSignal $workerRestartSignal = null,
+        private readonly ClockInterface $clock = new NativeClock(),
+        private readonly LoggerInterface $logger = new NullLogger(),
     ) {
     }
 
@@ -122,7 +128,8 @@ final class SetupOrchestrator
                 $this->markers->markRequired($profile);
             }
             $this->eventDispatcher?->dispatch(new SetupStartedEvent($profile));
-            $now      = new DateTimeImmutable();
+            $this->logger->info('SiteBackup: setup started.', ['bundle' => 'site_backup', 'action' => 'setup', 'profile' => $profile]);
+            $now      = $this->clock->now();
             $progress = new SetupProgress(
                 phase: SetupProgress::PHASE_RUNNING,
                 profile: $profile,
@@ -155,7 +162,7 @@ final class SetupOrchestrator
                 percent: $this->percent($index, $total),
                 message: $step->getLabel(),
                 clearError: true,
-                updatedAt: new DateTimeImmutable(),
+                updatedAt: $this->clock->now(),
             );
             $this->progressStorage->save($progress);
 
@@ -166,7 +173,7 @@ final class SetupOrchestrator
                     phase: SetupProgress::PHASE_WAITING,
                     message: $result->getMessage() !== '' ? $result->getMessage() : $step->getLabel(),
                     answers: $ctx->getAnswers(),
-                    updatedAt: new DateTimeImmutable(),
+                    updatedAt: $this->clock->now(),
                 );
                 $this->progressStorage->save($progress);
 
@@ -181,10 +188,17 @@ final class SetupOrchestrator
                     error: $result->getMessage(),
                     log: $log,
                     answers: $ctx->getAnswers(),
-                    updatedAt: new DateTimeImmutable(),
+                    updatedAt: $this->clock->now(),
                 );
                 $this->progressStorage->save($progress);
                 $this->eventDispatcher?->dispatch(new SetupStepFailedEvent($profile, $step->getId(), $result->getMessage()));
+                $this->logger->error('SiteBackup: setup step failed.', [
+                    'bundle'  => 'site_backup',
+                    'action'  => 'setup',
+                    'profile' => $profile,
+                    'step'    => $step->getId(),
+                    'error'   => SecretRedactor::redact($result->getMessage()),
+                ]);
 
                 return $progress;
             }
@@ -200,10 +214,11 @@ final class SetupOrchestrator
                 completedStepIds: $ctx->getCompletedStepIds(),
                 log: $log,
                 answers: $ctx->getAnswers(),
-                updatedAt: new DateTimeImmutable(),
+                updatedAt: $this->clock->now(),
             );
             $this->progressStorage->save($progress);
             $this->eventDispatcher?->dispatch(new SetupStepCompletedEvent($profile, $step->getId()));
+            $this->logger->info('SiteBackup: setup step completed.', ['bundle' => 'site_backup', 'action' => 'setup', 'profile' => $profile, 'step' => $step->getId()]);
 
             // Manual UI: pause after one successful auto tab so the operator presses Continuar.
             // CLI / forceAutomatic keeps chaining (FR-SETUP-009).
@@ -212,7 +227,7 @@ final class SetupOrchestrator
                     phase: SetupProgress::PHASE_RUNNING,
                     currentStepId: $step->getId(),
                     message: $result->getMessage() !== '' ? $result->getMessage() : $step->getLabel(),
-                    updatedAt: new DateTimeImmutable(),
+                    updatedAt: $this->clock->now(),
                 );
                 $this->progressStorage->save($progress);
 
@@ -223,7 +238,7 @@ final class SetupOrchestrator
             $input = new SetupStepInput();
         }
 
-        $now      = new DateTimeImmutable();
+        $now      = $this->clock->now();
         $progress = $progress->with(
             phase: SetupProgress::PHASE_COMPLETED,
             clearCurrentStepId: true,
@@ -238,12 +253,14 @@ final class SetupOrchestrator
         );
         $this->progressStorage->save($progress);
         $this->eventDispatcher?->dispatch(new SetupCompletedEvent($profile));
+        $this->logger->info('SiteBackup: setup completed.', ['bundle' => 'site_backup', 'action' => 'setup', 'profile' => $profile]);
 
         return $progress;
     }
 
     public function resetProgress(): void
     {
+        $this->logger->warning('SiteBackup: setup progress reset.', ['bundle' => 'site_backup', 'action' => 'setup_reset']);
         $this->progressStorage->save(new SetupProgress());
     }
 
@@ -292,7 +309,7 @@ final class SetupOrchestrator
      */
     private function appendLog(array $existing, array $extra, string $message): array
     {
-        $line = (new DateTimeImmutable())->format('H:i:s') . ' ' . $message;
+        $line = $this->clock->now()->format('H:i:s') . ' ' . $message;
         $log  = $existing;
         foreach ($extra as $e) {
             if ($e !== '') {

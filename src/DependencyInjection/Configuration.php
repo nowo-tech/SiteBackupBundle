@@ -584,7 +584,10 @@ final class Configuration implements ConfigurationInterface
                                 ->end()
                             ->end()
                         ->end()
-                        ->scalarNode('default_profile')->defaultValue('fresh_install')->end()
+                        ->scalarNode('default_profile')
+                            ->info('Profile used when none is requested, stored or marked (REQ-CFG-001). Must be a key of setup.profiles.')
+                            ->defaultValue('fresh_install')
+                        ->end()
                         ->enumNode('advance_mode')
                             ->values(['automatic', 'manual'])
                             ->info('automatic = chain auto tabs until interaction; manual = one auto tab per Continuar.')
@@ -620,6 +623,14 @@ final class Configuration implements ConfigurationInterface
                             ->end()
                         ->end()
                         ->append($this->setupProfilesNode())
+                    ->end()
+                    // REQ-CFG-001 / REQ-CFG-002: the default profile must be a key of setup.profiles (else the wizard
+                    // would fail at runtime with "Unknown setup profile"). Skipped while the wizard is disabled.
+                    ->validate()
+                        ->ifTrue(static fn (array $v): bool => (bool) ($v['enabled'] ?? true) && !isset($v['profiles'][$v['default_profile'] ?? '']))
+                        ->then(static function (array $v): array {
+                            throw new InvalidArgumentException(sprintf('Invalid nowo_site_backup.setup.default_profile "%s": it must be a key of nowo_site_backup.setup.profiles (defined: %s).', (string) ($v['default_profile'] ?? ''), $v['profiles'] === [] ? 'none' : implode(', ', array_keys($v['profiles']))));
+                        })
                     ->end()
                 ->end()
             ->end();

@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Setup\Detector;
 
+use Nowo\SiteBackupBundle\Attribute\AsSetupNeedDetector;
 use Nowo\SiteBackupBundle\Setup\Memo\WorkerTtlMemo;
 use Nowo\SiteBackupBundle\Setup\SetupNeedDetectorInterface;
 use Throwable;
@@ -13,6 +14,7 @@ use function is_object;
 /**
  * Optional: when a DBAL Connection is available, failed connect ⇒ setup required.
  */
+#[AsSetupNeedDetector(priority: 90)]
 final class DoctrineConnectDetector implements SetupNeedDetectorInterface
 {
     public function __construct(

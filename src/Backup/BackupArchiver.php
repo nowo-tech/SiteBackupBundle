@@ -4,12 +4,15 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Backup;
 
-use DateTimeImmutable;
 use JsonException;
 use Nowo\SiteBackupBundle\Model\BackupArtifact;
+use Nowo\SiteBackupBundle\Process\ProcessDeadline;
+use Psr\Clock\ClockInterface;
 use RuntimeException;
+use Symfony\Component\Clock\NativeClock;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Finder\Finder;
+use Symfony\Component\Process\Exception\ProcessTimedOutException;
 use Symfony\Component\Process\Process;
 
 use function bin2hex;
@@ -43,7 +46,6 @@ use function str_starts_with;
 use function strlen;
 use function substr;
 use function sys_get_temp_dir;
-use function usleep;
 
 use const DATE_ATOM;
 use const JSON_PRETTY_PRINT;
@@ -56,8 +58,7 @@ use const PHP_VERSION;
  */
 final class BackupArchiver
 {
-    private const HASH_CHUNK_BYTES          = 8 * 1024 * 1024;
-    private const EXTRACT_POLL_MICROSECONDS = 200_000;
+    private const HASH_CHUNK_BYTES = 8 * 1024 * 1024;
 
     /** @var list<string> project-relative runtime state paths never packed into an archive */
     private readonly array $runtimeStateRelativePaths;
@@ -77,6 +78,7 @@ final class BackupArchiver
         private readonly int $processTimeoutSeconds,
         private readonly Filesystem $filesystem = new Filesystem(),
         array $runtimeStatePaths = [],
+        private readonly ClockInterface $clock = new NativeClock(),
     ) {
         $this->runtimeStateRelativePaths = RuntimeStatePaths::relativeTo($projectDir, [$storageDir, ...$runtimeStatePaths]);
     }
@@ -95,7 +97,7 @@ final class BackupArchiver
     {
         $this->filesystem->mkdir($this->storageDir);
 
-        $id         = (new DateTimeImmutable())->format('Ymd-His') . '-' . bin2hex(random_bytes(4));
+        $id         = $this->clock->now()->format('Ymd-His') . '-' . bin2hex(random_bytes(4));
         $filename   = $id . '.tar.gz';
         $target     = rtrim($this->storageDir, '/\\') . '/' . $filename;
         $workDir    = sys_get_temp_dir() . '/nowo-site-backup-' . $id;
@@ -109,7 +111,7 @@ final class BackupArchiver
                 'project_dir' => $this->projectDir,
                 'includes'    => $this->includePaths,
                 'excludes'    => $this->excludePatterns,
-                'created_at'  => (new DateTimeImmutable())->format(DATE_ATOM),
+                'created_at'  => $this->clock->now()->format(DATE_ATOM),
                 'label'       => $label,
                 'created_by'  => $createdBy,
                 'php_version' => PHP_VERSION,
@@ -152,7 +154,7 @@ final class BackupArchiver
                 id: $id,
                 filename: $filename,
                 absolutePath: $target,
-                createdAt: new DateTimeImmutable(),
+                createdAt: $this->clock->now(),
                 sizeBytes: $size,
                 archiveSha256: $archiveSha,
                 checksums: $checksums,
@@ -433,9 +435,14 @@ final class BackupArchiver
         }
 
         $process = Process::fromShellCommandline($command . ' > ' . escapeshellarg($dumpAbsolute));
-        // @igor-ignore - Service coordinates I/O or request-scoped work; not unsafe worker singleton state.
-        $process->setTimeout($this->processTimeoutSeconds);
-        $process->run();
+
+        try {
+            // @igor-ignore - Service coordinates I/O or request-scoped work; not unsafe worker singleton state.
+            ProcessDeadline::run($process, $this->processTimeoutSeconds);
+        } catch (ProcessTimedOutException) {
+            // Not chained: Symfony's message embeds the command line, which may carry credentials.
+            throw new RuntimeException(sprintf('Database dump timed out after %d seconds (process_timeout).', $this->processTimeoutSeconds));
+        }
         if (!$process->isSuccessful()) {
             throw new RuntimeException('Database dump failed: ' . $process->getErrorOutput());
         }
@@ -444,9 +451,18 @@ final class BackupArchiver
     private function createTarGz(string $payloadDir, string $target): void
     {
         $process = new Process(['tar', '-czf', $target, '-C', $payloadDir, '.']);
-        $process->setTimeout($this->processTimeoutSeconds);
-        $process->run();
+
+        try {
+            ProcessDeadline::run($process, $this->processTimeoutSeconds);
+        } catch (ProcessTimedOutException $e) {
+            // A partial archive (not yet chmod 0600) must not stay in storage_dir.
+            $this->filesystem->remove($target);
+
+            throw $e;
+        }
         if (!$process->isSuccessful()) {
+            $this->filesystem->remove($target);
+
             throw new RuntimeException('tar create failed: ' . $process->getErrorOutput());
         }
     }
@@ -457,19 +473,7 @@ final class BackupArchiver
     private function extractTarGz(string $archive, string $destination, ?callable $heartbeat = null): void
     {
         $process = new Process(['tar', '-xzf', $archive, '-C', $destination]);
-        $process->setTimeout($this->processTimeoutSeconds);
-        if ($heartbeat === null) {
-            $process->run();
-        } else {
-            $heartbeat();
-            $process->start();
-            while ($process->isRunning()) {
-                $process->checkTimeout();
-                $heartbeat();
-                usleep(self::EXTRACT_POLL_MICROSECONDS);
-            }
-            $process->wait();
-        }
+        ProcessDeadline::run($process, $this->processTimeoutSeconds, $heartbeat);
         if (!$process->isSuccessful()) {
             throw new RuntimeException('tar extract failed: ' . $process->getErrorOutput());
         }

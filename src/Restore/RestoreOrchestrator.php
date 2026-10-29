@@ -13,6 +13,7 @@ use Nowo\SiteBackupBundle\Model\RestoreProgress;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupMarkerManager;
 use Nowo\SiteBackupBundle\Storage\RestoreProgressStorageInterface;
 use Nowo\SiteBackupBundle\Worker\WorkerRestartSignal;
+use Psr\Clock\ClockInterface;
 use RuntimeException;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Finder\Finder;
@@ -79,7 +80,8 @@ final class RestoreOrchestrator implements ResetInterface
      *                                    considered abandoned (dead worker / killed process): the loading page
      *                                    stops being served and a new restore may start. null or 0 = never stale.
      *                                    Long steps write heartbeats, so this measures time since the last heartbeat
-     * @param (Closure(): DateTimeImmutable)|null $clock current time source (tests); null = system clock
+     * @param ClockInterface|(Closure(): DateTimeImmutable)|null $clock current time source (REQ-DI-001: the framework
+     *                                                                  `clock` service; a closure is still accepted); null = system clock
      */
     public function __construct(
         private readonly string $projectDir,
@@ -92,7 +94,7 @@ final class RestoreOrchestrator implements ResetInterface
         private readonly Filesystem $filesystem = new Filesystem(),
         private readonly ?WorkerRestartSignal $workerRestartSignal = null,
         private readonly ?int $staleAfterSeconds = null,
-        private readonly ?Closure $clock = null,
+        private readonly ClockInterface|Closure|null $clock = null,
     ) {
     }
 
@@ -141,7 +143,11 @@ final class RestoreOrchestrator implements ResetInterface
 
     private function now(): DateTimeImmutable
     {
-        return $this->clock instanceof Closure ? ($this->clock)() : new DateTimeImmutable();
+        if ($this->clock instanceof Closure) {
+            return ($this->clock)();
+        }
+
+        return $this->clock instanceof ClockInterface ? $this->clock->now() : new DateTimeImmutable();
     }
 
     private function heartbeatIntervalSeconds(): int

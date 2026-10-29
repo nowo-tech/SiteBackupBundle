@@ -161,8 +161,9 @@ final class ConfigurationTest extends TestCase
     {
         $config = (new Processor())->processConfiguration(new Configuration(), [[
             'setup' => [
-                'advance_mode' => 'manual',
-                'profiles'     => [
+                'advance_mode'    => 'manual',
+                'default_profile' => 'demo',
+                'profiles'        => [
                     'demo' => [
                         'advance_mode' => 'automatic',
                         'tabs'         => [
@@ -309,5 +310,66 @@ final class ConfigurationTest extends TestCase
     {
         $this->expectException(InvalidConfigurationException::class);
         (new Processor())->processConfiguration(new Configuration(), [['setup' => ['token_gate' => ['illustration' => ['src' => 'a.png', 'width' => 0]]]]]);
+    }
+
+    /**
+     * REQ-CFG-001: two profiles + default_profile pointing at one of them boots.
+     */
+    public function testDefaultProfileSelectsOneOfSeveralProfiles(): void
+    {
+        $config = (new Processor())->processConfiguration(new Configuration(), [[
+            'setup' => [
+                'default_profile' => 'cloud',
+                'profiles'        => [
+                    'cloud'   => ['steps' => [['type' => 'migrations']]],
+                    'minimal' => ['steps' => [['type' => 'marker']]],
+                ],
+            ],
+        ]]);
+
+        self::assertSame('cloud', $config['setup']['default_profile']);
+        self::assertSame(['cloud', 'minimal'], array_keys($config['setup']['profiles']));
+    }
+
+    /**
+     * REQ-CFG-001 / REQ-CFG-002: an unknown default_profile fails with the path and the defined profiles.
+     */
+    public function testUnknownDefaultProfileRejected(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage('Invalid nowo_site_backup.setup.default_profile "missing": it must be a key of nowo_site_backup.setup.profiles (defined: fresh_install, post_restore, full_database, minimal).');
+        (new Processor())->processConfiguration(new Configuration(), [[
+            'setup' => ['default_profile' => 'missing'],
+        ]]);
+    }
+
+    /**
+     * Declaring profiles replaces the bundle defaults: the stock default (fresh_install) must then be declared or renamed.
+     */
+    public function testDeclaredProfilesWithoutTheDefaultAreRejected(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage('Invalid nowo_site_backup.setup.default_profile "fresh_install": it must be a key of nowo_site_backup.setup.profiles (defined: mine).');
+        (new Processor())->processConfiguration(new Configuration(), [[
+            'setup' => ['profiles' => ['mine' => ['steps' => [['type' => 'marker']]]]],
+        ]]);
+    }
+
+    public function testEmptyProfilesMapIsReportedAsNone(): void
+    {
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage('(defined: none)');
+        (new Processor())->processConfiguration(new Configuration(), [[
+            'setup' => ['profiles' => []],
+        ]]);
+    }
+
+    public function testDefaultProfileIsNotCheckedWhileTheWizardIsDisabled(): void
+    {
+        $config = (new Processor())->processConfiguration(new Configuration(), [[
+            'setup' => ['enabled' => false, 'default_profile' => 'missing'],
+        ]]);
+
+        self::assertSame('missing', $config['setup']['default_profile']);
     }
 }

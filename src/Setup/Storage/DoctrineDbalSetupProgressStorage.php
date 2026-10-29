@@ -4,11 +4,12 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Setup\Storage;
 
-use DateTimeImmutable;
 use JsonException;
 use Nowo\SiteBackupBundle\Model\SetupProgress;
 use Nowo\SiteBackupBundle\Setup\Memo\WorkerTtlMemo;
+use Psr\Clock\ClockInterface;
 use RuntimeException;
+use Symfony\Component\Clock\NativeClock;
 use Symfony\Contracts\Service\ResetInterface;
 use Throwable;
 
@@ -50,6 +51,7 @@ final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInte
         private readonly ?DoctrineDbalSetupStepJournal $stepJournal = null,
         private readonly bool $stepRowsEnabled = true,
         private readonly ?WorkerTtlMemo $ddlMemo = null,
+        private readonly ClockInterface $clock = new NativeClock(),
     ) {
     }
 
@@ -109,7 +111,7 @@ final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInte
             'current_step_id' => $progress->getCurrentStepId(),
             'percent'         => $progress->getPercent(),
             'started_at'      => $progress->getStartedAt()?->format('Y-m-d H:i:s'),
-            'updated_at'      => ($progress->getUpdatedAt() ?? new DateTimeImmutable())->format('Y-m-d H:i:s'),
+            'updated_at'      => ($progress->getUpdatedAt() ?? $this->clock->now())->format('Y-m-d H:i:s'),
             'completed_at'    => $progress->getCompletedAt()?->format('Y-m-d H:i:s'),
             'payload'         => $json,
         ];

@@ -5,7 +5,9 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\EventSubscriber;
 
 use Closure;
+use Symfony\Component\EventDispatcher\Attribute\AsEventListener;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
+use Symfony\Component\HttpKernel\KernelEvents;
 
 use function function_exists;
 use function max;
@@ -24,6 +26,8 @@ use function str_starts_with;
  *
  * Stateless: configuration only.
  */
+// Before the router (32) and every SiteBackup gate. Registered only when bump_time_limit is true.
+#[AsEventListener(event: KernelEvents::REQUEST, method: 'onKernelRequest', priority: 512)]
 final readonly class LongRequestTimeLimitSubscriber
 {
     /** @var list<string> */

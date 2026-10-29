@@ -62,6 +62,47 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Logging (REQ-OBS-001)**: backup create / delete / restore and setup runs log start, success and failure through
+  `Psr\Log\LoggerInterface` on the Monolog channel `site_backup` (structured context: action, backup id, profile,
+  step). Actors, labels, credentials and the dump command are never logged; error messages are redacted
+  (`SecretRedactor`). Panel login attempts are logged (success info, failure notice, throttled warning) without the
+  client IP. A misconfigured setup tab `checker:` id is logged as a warning instead of being ignored silently.
+- **Configuration docs**: `docs/CONFIGURATION.md` gains a table of contents and the *Profiles (REQ-CFG-001)* and
+  *Timeouts (REQ-RUNTIME-001)* sections.
+
+### Changed
+
+- **Subprocess deadlines (REQ-RUNTIME-001)**: `tar`, the database dump, `nowo:site-backup:db-dump` and console setup
+  steps run under `process_timeout` as both hard and idle timeout. For `tar`, the dump shell and console steps
+  (`ProcessDeadline`) the whole process tree is killed on expiry (descendants first, so `mysqldump` under the dump
+  shell does not survive as an orphan). A timed-out dump
+  reports `Database dump timed out after N seconds (process_timeout).` without repeating the command line; `db-dump`
+  prints a timeout message and exits 1. A failed or timed-out `tar` no longer leaves a partial archive in
+  `storage_dir`.
+- **Demo**: both FrankenPHP Caddyfiles set the timeout hierarchy (`process_timeout` 300 s < PHP
+  `max_execution_time` 360 s < Caddy `write` 400 s; `max_wait_time` 30 s), documented in `docs/DEMO-FRANKENPHP.md`.
+- **Clock (REQ-DI-001)**: time-dependent services (`BackupArchiver`, `SiteBackupManager`, `RestoreOrchestrator`,
+  `SetupOrchestrator`, `SetupDbDoneGuard`, `SetupMarkerManager`, `WorkerRestartSignal`, DBAL setup storages, login
+  throttle) take an optional `Psr\Clock\ClockInterface` (framework `clock` service; default `NativeClock`).
+  `symfony/clock` and `psr/log` are now explicit dependencies.
+- **Attribute wiring (REQ-SF-003)**: built-in setup-need detectors use `#[AsSetupNeedDetector(priority: …)]`, the
+  time-limit listener `#[AsEventListener]`, the controllers `#[AsController]`, and the event subscribers are tagged by
+  autoconfigure — no manual `addTag()` left except the two request listeners whose priority comes from configuration.
+
+### Fixed
+
+- **`setup.default_profile` is validated (REQ-CFG-001)**: a name that is not a key of `setup.profiles` now fails the
+  container compile with the path and the defined profiles, instead of a runtime "Unknown setup profile" error in the
+  wizard.
+
+### Documentation
+
+- Spec Kit baseline refreshed (`specs/001-baseline/`): inventory **164/164** production files (adds
+  `CsrfProtectionPass`, `SetupTokenGate`, `ProcessDeadline`, `SecretRedactor`), domain-grouped functional
+  requirements, last audited 2026-10-29.
+
 ## [1.24.1] - 2026-10-28
 
 Dependency update

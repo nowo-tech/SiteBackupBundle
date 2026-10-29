@@ -66,6 +66,7 @@ use Nowo\SiteBackupBundle\Twig\SiteBackupExtension as SiteBackupTwigExtension;
 use Nowo\SiteBackupBundle\View\SetupTokenGate;
 use Nowo\SiteBackupBundle\View\SiteBackupView;
 use Nowo\SiteBackupBundle\Worker\WorkerRestartSignal;
+use Psr\Clock\ClockInterface;
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\Argument\TaggedIteratorArgument;
 use Symfony\Component\DependencyInjection\Compiler\ServiceLocatorTagPass;
@@ -305,8 +306,8 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
         $container->register(LongRequestTimeLimitSubscriber::class, LongRequestTimeLimitSubscriber::class)
             ->setArgument('$pathPrefixes', $prefixes)
             ->setArgument('$seconds', is_int($seconds) ? $seconds : (int) $config['process_timeout'])
-            // Before the router (32) and every SiteBackup gate.
-            ->addTag('kernel.event_listener', ['event' => 'kernel.request', 'method' => 'onKernelRequest', 'priority' => 512]);
+            // REQ-SF-003: #[AsEventListener(kernel.request, priority 512)] on the class.
+            ->setAutoconfigured(true);
     }
 
     /**
@@ -345,7 +346,8 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$checkPasswordHashShape', (bool) ($guard['check_password_hash_shape'] ?? true))
             ->setArgument('$extraSecrets', array_values($guard['extra_secrets'] ?? []))
             ->setArgument('$dsnCredentials', array_values($guard['dsn_credentials'] ?? []))
-            ->addTag('kernel.event_subscriber');
+            // REQ-SF-003: EventSubscriberInterface, tagged by autoconfigure.
+            ->setAutoconfigured(true);
     }
 
     /**
@@ -492,7 +494,9 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$triggerSetupAfterRestore', (bool) ($setup['trigger_after_restore'] ?? true))
             ->setArgument('$postRestoreSetupProfile', (string) ($setup['post_restore_profile'] ?? 'post_restore'))
             ->setArgument('$workerRestartSignal', new Reference(WorkerRestartSignal::class))
-            ->setArgument('$staleAfterSeconds', $this->restoreStaleAfterSeconds($config));
+            ->setArgument('$staleAfterSeconds', $this->restoreStaleAfterSeconds($config))
+            // REQ-DI-001: framework `clock` service when available (union type: not autowired), else the system clock.
+            ->setArgument('$clock', new Reference(ClockInterface::class, ContainerBuilder::IGNORE_ON_INVALID_REFERENCE));
     }
 
     /**
@@ -568,7 +572,10 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
         // v1.17+: every gate (default or custom) is wrapped: login throttle + session id rotation.
         $container->register(self::ACCESS_GATE_ID, ThrottledSiteBackupAccessGate::class)
             ->setArgument('$inner', new Reference($innerId))
-            ->setArgument('$limiterFactory', $this->loginLimiterReference($container, $security['login_throttle'] ?? []));
+            ->setArgument('$limiterFactory', $this->loginLimiterReference($container, $security['login_throttle'] ?? []))
+            // REQ-OBS-001: login attempts on the site_backup channel (no logger service = no logging).
+            ->setArgument('$logger', new Reference('logger', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
+            ->addTag('monolog.logger', ['channel' => 'site_backup']);
 
         $container->setAlias(SiteBackupAccessGateInterface::class, self::ACCESS_GATE_ID)->setPublic(false);
     }
@@ -675,6 +682,8 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
                 : 'restore.page.message')
             ->setArgument('$translator', new Reference('translator', ContainerBuilder::NULL_ON_INVALID_REFERENCE));
 
+        // REQ-SF-003 exception: the priority comes from config (subscriber_priority) and an attribute is static, so the
+        // listener tag stays manual (no #[AsEventListener] on the class: no duplicate registration).
         $definition->clearTags();
         $definition->addTag('kernel.event_listener', [
             'event'    => 'kernel.request',
@@ -887,26 +896,22 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
         $container->getDefinition(MarkerFileDetector::class)
             ->setArgument('$markers', new Reference(SetupMarkerManager::class))
             ->setArgument('$requireDoneMarker', (bool) $setup['require_done_marker'])
-            ->setArgument('$enabled', (bool) ($setup['detectors']['marker'] ?? true))
-            ->addTag('nowo.site_backup.setup_need_detector', ['priority' => 100]);
+            ->setArgument('$enabled', (bool) ($setup['detectors']['marker'] ?? true));
 
         $container->getDefinition(DoctrineConnectDetector::class)
             ->setArgument('$connection', $dbalRef)
             ->setArgument('$enabled', (bool) ($setup['detectors']['doctrine_connect'] ?? false))
-            ->setArgument('$healthyMemo', $probeTtl > 0 ? $this->workerMemo($probeTtl) : null)
-            ->addTag('nowo.site_backup.setup_need_detector', ['priority' => 90]);
+            ->setArgument('$healthyMemo', $probeTtl > 0 ? $this->workerMemo($probeTtl) : null);
 
         $container->getDefinition(DoctrineSchemaEmptyDetector::class)
             ->setArgument('$connection', $dbalRef)
             ->setArgument('$enabled', (bool) ($setup['detectors']['doctrine_schema_empty'] ?? false))
-            ->setArgument('$healthyMemo', $probeTtl > 0 ? $this->workerMemo($probeTtl) : null)
-            ->addTag('nowo.site_backup.setup_need_detector', ['priority' => 80]);
+            ->setArgument('$healthyMemo', $probeTtl > 0 ? $this->workerMemo($probeTtl) : null);
 
         $container->getDefinition(IncompleteSetupProgressDetector::class)
             ->setArgument('$progressStorage', new Reference(SetupProgressStorageInterface::class))
             ->setArgument('$markers', new Reference(SetupMarkerManager::class))
-            ->setArgument('$enabled', (bool) ($setup['detectors']['incomplete_progress'] ?? true))
-            ->addTag('nowo.site_backup.setup_need_detector', ['priority' => 70]);
+            ->setArgument('$enabled', (bool) ($setup['detectors']['incomplete_progress'] ?? true));
 
         // Default durable store before evaluator wiring (host apps may replace the alias later).
         $container->setAlias(DurableSetupDoneStoreInterface::class, NullDurableSetupDoneStore::class)->setPublic(false);
@@ -1005,6 +1010,7 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
                 ->setArgument('$panelPathPrefix', $config['panel']['path_prefix'])
                 ->setArgument('$enabledLocales', $localeEnabled)
                 ->setArgument('$pathPrefixResolver', new Reference(SetupPathPrefixResolver::class));
+            // REQ-SF-003 exception: config-driven priority (subscriber_priority - 1), see configureSubscriber().
             $sub->clearTags();
             if ($setupEnabled) {
                 $sub->addTag('kernel.event_listener', [
@@ -1020,7 +1026,8 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
         $container->register(SetupUnlocalizedLocaleRedirectController::class, SetupUnlocalizedLocaleRedirectController::class)
             ->setArgument('$urlGenerator', new Reference('router'))
             ->setPublic(true)
-            ->addTag('controller.service_arguments');
+            // REQ-SF-003: #[AsController] on the class.
+            ->setAutoconfigured(true);
 
         if (!$container->hasDefinition(SetupWizardController::class)) {
             return;
@@ -1083,8 +1090,7 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
                 ->setArgument('$setupDbDoneGuard', new Reference(SetupDbDoneGuard::class))
                 ->setArgument('$setupPathPrefix', $setup['path_prefix'])
                 ->setArgument('$enabledLocales', $localeEnabled)
-                ->setArgument('$redirectTarget', $redirectTarget)
-                ->addTag('kernel.event_subscriber');
+                ->setArgument('$redirectTarget', $redirectTarget);
         } else {
             $container->removeDefinition(SetupDbDoneRedirectSubscriber::class);
         }
@@ -1132,7 +1138,6 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$setupPathPrefix', $setup['path_prefix'])
             ->setArgument('$safePathPrefixes', $safePrefixes)
             ->setArgument('$enabledLocales', $localeEnabled)
-            ->setArgument('$stopPropagation', (bool) ($coldStart['stop_propagation'] ?? true))
-            ->addTag('kernel.event_subscriber');
+            ->setArgument('$stopPropagation', (bool) ($coldStart['stop_propagation'] ?? true));
     }
 }

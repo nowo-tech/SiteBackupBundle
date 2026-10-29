@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Setup;
 
+use Nowo\SiteBackupBundle\Process\ProcessDeadline;
 use RuntimeException;
 use Symfony\Component\Process\Process;
 
@@ -12,7 +13,7 @@ use function sprintf;
 use function trim;
 
 /**
- * Runs `php bin/console …` with a timeout (REQ-RUNTIME-001).
+ * Runs `php bin/console …` under a hard + idle timeout (REQ-RUNTIME-001, {@see ProcessDeadline}).
  */
 final class ConsoleProcessRunner
 {
@@ -32,8 +33,8 @@ final class ConsoleProcessRunner
     {
         $command = array_merge([$this->phpBinary, 'bin/console'], $consoleArgs, ['--no-interaction']);
         $process = new Process($command, $this->projectDir);
-        $process->setTimeout($this->timeoutSeconds);
-        $process->run();
+        // Hard + idle timeout; on expiry the process tree is killed and ProcessTimedOutException is thrown.
+        ProcessDeadline::run($process, $this->timeoutSeconds);
 
         return [
             'ok'     => $process->isSuccessful(),

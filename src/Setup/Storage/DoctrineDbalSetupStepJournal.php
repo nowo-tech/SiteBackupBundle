@@ -4,10 +4,11 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Setup\Storage;
 
-use DateTimeImmutable;
 use Nowo\SiteBackupBundle\Model\SetupProgress;
 use Nowo\SiteBackupBundle\Setup\Memo\WorkerTtlMemo;
+use Psr\Clock\ClockInterface;
 use RuntimeException;
+use Symfony\Component\Clock\NativeClock;
 use Symfony\Contracts\Service\ResetInterface;
 use Throwable;
 
@@ -45,6 +46,7 @@ final class DoctrineDbalSetupStepJournal implements ResetInterface
         private readonly mixed $connection = null,
         private readonly string $tableName = self::TABLE,
         private readonly ?WorkerTtlMemo $ddlMemo = null,
+        private readonly ClockInterface $clock = new NativeClock(),
     ) {
     }
 
@@ -79,7 +81,7 @@ final class DoctrineDbalSetupStepJournal implements ResetInterface
     private function upsertFromProgress(SetupProgress $progress): void
     {
         $profile = $progress->getProfile() !== '' ? $progress->getProfile() : 'default';
-        $now     = ($progress->getUpdatedAt() ?? new DateTimeImmutable())->format('Y-m-d H:i:s');
+        $now     = ($progress->getUpdatedAt() ?? $this->clock->now())->format('Y-m-d H:i:s');
         $order   = 0;
 
         foreach ($progress->getCompletedStepIds() as $stepId) {

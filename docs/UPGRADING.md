@@ -111,6 +111,29 @@
 
 ## Unreleased
 
+From **1.24.1**:
+
+- **`setup.default_profile` is validated (REQ-CFG-001).** It must be a key of `setup.profiles`; otherwise the
+  container no longer compiles (`Invalid nowo_site_backup.setup.default_profile "fresh_install": it must be a key of
+  nowo_site_backup.setup.profiles (defined: …)`). Such a configuration already failed at runtime ("Unknown setup
+  profile") as soon as no profile was requested. Most often the host declared `setup.profiles` (which **replaces**
+  the bundle defaults) without `fresh_install`: set `setup.default_profile` to one of your profiles, or declare
+  `fresh_install`. Not checked while `setup.enabled: false`.
+- **Subprocess timeouts (REQ-RUNTIME-001).** `process_timeout` is now also the idle timeout, and on expiry the whole
+  process tree is killed (no orphan `mysqldump`). A timed-out database dump fails with
+  `RuntimeException('Database dump timed out after N seconds (process_timeout).')` instead of Symfony's
+  `ProcessTimedOutException` (whose message repeated the dump command); `tar` and console steps still throw
+  `ProcessTimedOutException`. Check that PHP / proxy / FrankenPHP deadlines stay above `process_timeout`
+  ([CONFIGURATION.md](CONFIGURATION.md#timeouts-req-runtime-001)).
+- **Logging (REQ-OBS-001).** Backups, restores, deletions and setup runs are logged on the Monolog channel
+  `site_backup` (see [SECURITY.md](SECURITY.md#logging)). Route or silence it in `monolog.yaml` if needed.
+- **Clock (REQ-DI-001).** Time-dependent services use the framework `clock` service (`symfony/clock`, now a
+  dependency). No change unless you replaced that service.
+- **Attribute wiring (REQ-SF-003).** Detectors, the time-limit listener, the production guard / cold-start / durable
+  done subscribers and the controllers are registered through attributes + autoconfigure instead of manual tags.
+  Service ids, priorities and behaviour are unchanged. A host that redefined one of these services with
+  `autoconfigure: false` must now tag it itself.
+
 ## To 1.24.1
 
 From **1.24.0**: no change needed (development dependencies updated).

@@ -34,10 +34,13 @@
 | US-11 | Post-restore profile: import dump then finish bootstrap | SETUP-WIZARD |
 | US-12 | Durable setup progress (filesystem / doctrine / chain) + incomplete gate | SETUP-WIZARD, `001-baseline` US-5 |
 | US-13 | Configurable `setup.path_prefix` (default `/_setup`) | SETUP-WIZARD, CONFIGURATION, `001-baseline` US-6 |
+| US-14 | Hung `tar` / dump / console steps are killed at `process_timeout` (process tree, no secret in the error) | CONFIGURATION (Timeouts), DEMO-FRANKENPHP, `001-baseline` US-10 |
+| US-15 | Destructive operations are logged on the `site_backup` channel without secrets | SECURITY (Logging), `001-baseline` US-11 |
+| US-16 | An unknown `setup.default_profile` fails the container compile | CONFIGURATION (Profiles), `001-baseline` US-12 |
 
 ## Functional scope
 
-**In scope:** backup archiver, MANIFEST integrity, restore orchestrator, restore request subscriber, **setup detectors (including incomplete progress) + step pipeline + wizard UI**, filesystem **and optional Doctrine/chain** setup progress, password gate, Twig panel, CLI, overrideable templates/translations, configurable `/_setup` path prefix.
+**In scope:** backup archiver, MANIFEST integrity, restore orchestrator, restore request subscriber, **setup detectors (including incomplete progress) + step pipeline + wizard UI**, filesystem **and optional Doctrine/chain** setup progress, password gate, Twig panel, CLI, overrideable templates/translations, configurable `/_setup` path prefix, **subprocess deadlines** (`process_timeout` hard + idle timeout, process-tree kill), **PSR-3 logging** of destructive operations (channel `site_backup`, redacted), validated **setup profiles** (`setup.default_profile` + `setup.profiles`), CSRF compile-time check, setup token gate.
 
 **Non-goals:** multi-tenant profiles for backup state (REQ-CFG-001 N/A for backups; setup uses named **wizard profiles**), shipping a concrete User entity, free-form shell from the browser, coupling to a single SecurityBundle setup, shipping FrankenPHP as a runtime dependency.
 
@@ -55,7 +58,9 @@ make test
 | --- | --- | --- |
 | REQ-CS-005 | phpstan-frankenphp require-dev + rulesets | `composer.json`, `phpstan.neon.dist` |
 | REQ-MAKE-001 | Root Makefile + ensure-up | `Makefile` |
-| REQ-RUNTIME-001 | `process_timeout` for tar/dump/setup console | Configuration, SETUP-WIZARD |
+| REQ-RUNTIME-001 | `process_timeout` hard + idle timeout for tar/dump/setup console; process-tree kill (`ProcessDeadline`); demo Caddy/PHP hierarchy | CONFIGURATION (Timeouts), DEMO-FRANKENPHP |
+| REQ-CFG-001/002 | `setup.default_profile` validated against `setup.profiles` | `Configuration`, CONFIGURATION (Profiles) |
+| REQ-OBS-001 | `site_backup` log channel, `SecretRedactor` | `SiteBackupManager`, `SetupOrchestrator`, SECURITY (Logging) |
 | REQ-TWIG-001/002 | Overrides + `NowoSiteBackupBundle` NS | `TwigPathsPass`, views |
 | REQ-I18N-002/003 | en+es + domain | `Resources/translations/` |
 | REQ-DEMO-002/010 | FrankenPHP demos + worker default | `demo/`, `docs/DEMO-FRANKENPHP.md` |

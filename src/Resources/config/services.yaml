@@ -18,6 +18,8 @@ services:
             - '../../Setup/Memo/'
             - '../../Setup/ColdStart/MemoizedSchemaExistenceChecker.php'
             - '../../Database/'
+            - '../../Process/'
+            - '../../Log/'
             - '../../EventSubscriber/LongRequestTimeLimitSubscriber.php'
             - '../../EventSubscriber/ProductionSecretsGuardSubscriber.php'
             - '../../NowoSiteBackupBundle.php'
@@ -66,7 +68,9 @@ services:
 
     Nowo\SiteBackupBundle\Restore\RestoreOrchestrator: ~
 
-    Nowo\SiteBackupBundle\Service\SiteBackupManager: ~
+    # REQ-OBS-001: dedicated Monolog channel (tag ignored without MonologBundle).
+    Nowo\SiteBackupBundle\Service\SiteBackupManager:
+        tags: [{ name: monolog.logger, channel: site_backup }]
 
     Nowo\SiteBackupBundle\Twig\SiteBackupExtension: ~
 
@@ -76,22 +80,22 @@ services:
 
     Nowo\SiteBackupBundle\Setup\SetupStepFactory: ~
 
-    Nowo\SiteBackupBundle\Setup\SetupTabCheckerLocator: ~
+    # REQ-OBS-001: dedicated Monolog channel (tag ignored without MonologBundle).
+    Nowo\SiteBackupBundle\Setup\SetupTabCheckerLocator:
+        tags: [{ name: monolog.logger, channel: site_backup }]
 
-    Nowo\SiteBackupBundle\Setup\SetupOrchestrator: ~
+    # REQ-OBS-001: dedicated Monolog channel (tag ignored without MonologBundle).
+    Nowo\SiteBackupBundle\Setup\SetupOrchestrator:
+        tags: [{ name: monolog.logger, channel: site_backup }]
 
-    # Tags + args set in SiteBackupExtension (avoid autoconfigure double-tag).
-    Nowo\SiteBackupBundle\Setup\Detector\MarkerFileDetector:
-        autoconfigure: false
+    # REQ-SF-003: tagged through #[AsSetupNeedDetector(priority: …)] (autoconfigure); args set in SiteBackupExtension.
+    Nowo\SiteBackupBundle\Setup\Detector\MarkerFileDetector: ~
 
-    Nowo\SiteBackupBundle\Setup\Detector\DoctrineConnectDetector:
-        autoconfigure: false
+    Nowo\SiteBackupBundle\Setup\Detector\DoctrineConnectDetector: ~
 
-    Nowo\SiteBackupBundle\Setup\Detector\DoctrineSchemaEmptyDetector:
-        autoconfigure: false
+    Nowo\SiteBackupBundle\Setup\Detector\DoctrineSchemaEmptyDetector: ~
 
-    Nowo\SiteBackupBundle\Setup\Detector\IncompleteSetupProgressDetector:
-        autoconfigure: false
+    Nowo\SiteBackupBundle\Setup\Detector\IncompleteSetupProgressDetector: ~
 
     Nowo\SiteBackupBundle\Setup\SetupWizardReopener: ~
 
@@ -101,19 +105,17 @@ services:
 
     Nowo\SiteBackupBundle\EventSubscriber\SetupRequestSubscriber: ~
 
-    Nowo\SiteBackupBundle\EventSubscriber\SetupDbDoneRedirectSubscriber:
-        autoconfigure: false
+    # EventSubscriberInterface (autoconfigure); removed by SiteBackupExtension when their feature is off.
+    Nowo\SiteBackupBundle\EventSubscriber\SetupDbDoneRedirectSubscriber: ~
 
-    Nowo\SiteBackupBundle\EventSubscriber\ColdStartSchemaGateSubscriber:
-        autoconfigure: false
+    Nowo\SiteBackupBundle\EventSubscriber\ColdStartSchemaGateSubscriber: ~
 
     Nowo\SiteBackupBundle\Setup\ColdStart\MysqlSchemaExistenceChecker:
         autoconfigure: false
 
+    # #[AsController] (autoconfigure) adds controller.service_arguments.
     Nowo\SiteBackupBundle\Controller\SiteBackupPanelController:
         public: true
-        tags: ['controller.service_arguments']
 
     Nowo\SiteBackupBundle\Controller\SetupWizardController:
         public: true
-        tags: ['controller.service_arguments']

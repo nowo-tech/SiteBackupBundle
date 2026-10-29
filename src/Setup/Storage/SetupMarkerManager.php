@@ -4,7 +4,8 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Setup\Storage;
 
-use DateTimeImmutable;
+use Psr\Clock\ClockInterface;
+use Symfony\Component\Clock\NativeClock;
 use Symfony\Component\Filesystem\Filesystem;
 
 use function dirname;
@@ -20,6 +21,7 @@ final class SetupMarkerManager
         private readonly string $requiredFile,
         private readonly string $doneFile,
         private readonly Filesystem $filesystem = new Filesystem(),
+        private readonly ClockInterface $clock = new NativeClock(),
     ) {
     }
 
@@ -56,7 +58,7 @@ final class SetupMarkerManager
     public function markDone(): void
     {
         $this->filesystem->mkdir(dirname($this->doneFile));
-        $this->filesystem->dumpFile($this->doneFile, (new DateTimeImmutable())->format(DATE_ATOM) . "\n");
+        $this->filesystem->dumpFile($this->doneFile, $this->clock->now()->format(DATE_ATOM) . "\n");
         if (is_file($this->requiredFile)) {
             $this->filesystem->remove($this->requiredFile);
         }
