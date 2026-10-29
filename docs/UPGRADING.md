@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.25.0](#to-1250)
 - [To 1.24.1](#to-1241)
 - [To 1.24.0](#to-1240)
 - [To 1.23.0](#to-1230)
@@ -110,6 +111,14 @@
   - [Breaking changes](#breaking-changes-1)
 
 ## Unreleased
+
+## To 1.25.0
+
+From **1.24.1**:
+
+```bash
+composer update nowo-tech/site-backup-bundle
+```
 
 From **1.24.1**:
 
