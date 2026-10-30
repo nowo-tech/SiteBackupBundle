@@ -13,18 +13,18 @@ final class CreateBackupType extends AbstractSiteBackupFormType
 {
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
-        $builder
-            ->add('action', HiddenType::class, [
-                'data' => 'create',
-            ])
-            ->add('label', TextType::class, [
-                'label'    => 'panel.index.label',
-                'required' => false,
-                'attr'     => [
-                    'placeholder' => 'panel.index.label_placeholder',
-                    'maxlength'   => 120,
-                ],
-            ]);
+        $this->addField($builder, 'action', HiddenType::class, [
+            'label' => null, // hidden: no FormKit convention label key
+            'data'  => 'create',
+        ]);
+        $this->addField($builder, 'label', TextType::class, [
+            'label'    => 'panel.index.label',
+            'required' => false,
+            'attr'     => [
+                'placeholder' => 'panel.index.label_placeholder',
+                'maxlength'   => 120,
+            ],
+        ]);
     }
 
     protected function csrfTokenId(): string

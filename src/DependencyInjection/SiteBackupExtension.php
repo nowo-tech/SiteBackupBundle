@@ -19,6 +19,7 @@ use Nowo\SiteBackupBundle\EventSubscriber\SetupDbDoneRedirectSubscriber;
 use Nowo\SiteBackupBundle\EventSubscriber\SetupRequestSubscriber;
 use Nowo\SiteBackupBundle\EventSubscriber\UnlocalizedDefaultLocaleSubscriber;
 use Nowo\SiteBackupBundle\Exclusion\SiteBackupExclusionMatcher;
+use Nowo\SiteBackupBundle\Form\AbstractSiteBackupFormType;
 use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
 use Nowo\SiteBackupBundle\Routing\PanelRouteLoader;
 use Nowo\SiteBackupBundle\Routing\SetupLocales;
@@ -102,6 +103,52 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
     public function prepend(ContainerBuilder $container): void
     {
         $this->prependUiKitDefaults($container);
+        $this->prependFormKitDefaults($container);
+    }
+
+    /**
+     * Registers the `site_backup` FormKit profile of the panel / setup forms (REQ-TWIG-005 rule 11) unless the host
+     * defines `nowo_form_kit.profiles.site_backup` itself. The profile adds no classes and no convention label /
+     * placeholder / help keys: the forms render exactly their explicit options until a host themes the profile.
+     */
+    private function prependFormKitDefaults(ContainerBuilder $container): void
+    {
+        if (!$container->hasExtension('nowo_form_kit')) {
+            return;
+        }
+
+        $configs = $container->getExtensionConfig('nowo_form_kit');
+        foreach ($configs as $cfg) {
+            $profiles = $cfg['profiles'] ?? null;
+            if (is_array($profiles) && array_key_exists(AbstractSiteBackupFormType::FORM_KIT_PROFILE, $profiles)) {
+                return;
+            }
+        }
+
+        $seed = ['profiles' => [AbstractSiteBackupFormType::FORM_KIT_PROFILE => self::formKitProfile()]];
+        if ($configs === []) {
+            // No FormKit config in the host: keep FormKit's implicit `default` profile as the default one (a config
+            // that only lists this profile would otherwise make it the default of every host form).
+            $seed['default_profile']     = 'default';
+            $seed['profiles']['default'] = ['alias' => 'default'];
+        }
+
+        $container->prependExtensionConfig('nowo_form_kit', $seed);
+    }
+
+    /**
+     * Default `nowo_form_kit.profiles.site_backup` (REQ-UI-003 "Form theme" row).
+     *
+     * @return array<string, mixed>
+     */
+    public static function formKitProfile(): array
+    {
+        return [
+            'alias'              => AbstractSiteBackupFormType::FORM_KIT_PROFILE,
+            'translation_domain' => 'NowoSiteBackupBundle',
+            'auto_placeholder'   => false,
+            'auto_help'          => false,
+        ];
     }
 
     /**

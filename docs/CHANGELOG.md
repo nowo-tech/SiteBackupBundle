@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.26.0] - 2026-10-30](#1260---2026-10-30)
 - [[1.25.1] - 2026-10-30](#1251---2026-10-30)
 - [[1.25.0] - 2026-10-29](#1250---2026-10-29)
 - [[1.24.1] - 2026-10-28](#1241---2026-10-28)
@@ -63,6 +64,21 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [[1.0.0] - 2026-07-26](#100---2026-07-26)
 
 ## [Unreleased]
+
+## [1.26.0] - 2026-10-30
+
+The panel and setup wizard forms are FormKit Types (REQ-TWIG-005 rule 11). See [UPGRADING](UPGRADING.md#to-1260).
+
+### Changed
+
+- **FormKit is a required dependency** (`nowo-tech/form-kit-bundle` `^2.14`). Every panel / setup form type extends
+  `AbstractSiteBackupFormType`, which carries `#[FormKitConfig('site_backup')]` + `FormOptionsTrait` and adds its fields
+  through FormKit's option merger.
+- **FormKit profile `nowo_form_kit.profiles.site_backup`** (REQ-UI-003 "Form theme" row), prepended by the extension when
+  FormKitBundle is registered and the host does not define it: translation domain `NowoSiteBackupBundle`, no classes,
+  no convention label / placeholder / help keys — the forms render exactly as in 1.25 until a host themes the profile.
+  When the host has no `nowo_form_kit` config at all, FormKit's implicit `default` profile stays the default one.
+  Without FormKitBundle in the kernel the forms keep their explicit options (no merger, same markup).
 
 ## [1.25.1] - 2026-10-30
 

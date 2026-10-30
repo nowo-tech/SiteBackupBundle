@@ -13,20 +13,19 @@ final class AdminUserType extends AbstractSiteBackupFormType
 {
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
-        $builder
-            ->add('email', EmailType::class, [
-                'label' => 'setup.admin.email',
-                'attr'  => [
-                    'autocomplete' => 'username',
-                ],
-            ])
-            ->add('password', PasswordType::class, [
-                'label'        => 'setup.admin.password',
-                'always_empty' => true,
-                'attr'         => [
-                    'autocomplete' => 'new-password',
-                ],
-            ]);
+        $this->addField($builder, 'email', EmailType::class, [
+            'label' => 'setup.admin.email',
+            'attr'  => [
+                'autocomplete' => 'username',
+            ],
+        ]);
+        $this->addField($builder, 'password', PasswordType::class, [
+            'label'        => 'setup.admin.password',
+            'always_empty' => true,
+            'attr'         => [
+                'autocomplete' => 'new-password',
+            ],
+        ]);
     }
 
     protected function csrfTokenId(): string

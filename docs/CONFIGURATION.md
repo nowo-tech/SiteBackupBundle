@@ -9,6 +9,7 @@ Root key: `nowo_site_backup`.
   - [Setup step / tab keys](#setup-step--tab-keys)
 - [Profiles (REQ-CFG-001)](#profiles-req-cfg-001)
 - [Timeouts (REQ-RUNTIME-001)](#timeouts-req-runtime-001)
+- [FormKit profile (REQ-TWIG-005)](#formkit-profile-req-twig-005)
 - [Example](#example)
 
 ## Keys
@@ -235,6 +236,27 @@ Keep the deadlines layered, innermost first (raise them together):
 The nested `nowo:site-backup:db-dump` gets the same `process_timeout`; the outer dump shell's deadline kills it (and
 `mysqldump`) when it fires. Long restores are best run from the CLI (`nowo:site-backup:restore`), which no HTTP
 deadline bounds. FrankenPHP demo values: [DEMO-FRANKENPHP.md](DEMO-FRANKENPHP.md#timeout-hierarchy-req-runtime-001).
+
+## FormKit profile (REQ-TWIG-005)
+
+The panel and setup wizard forms are Symfony Form Types built with FormKit (`#[FormKitConfig('site_backup')]`), rendered
+with `form_start` / the `{% for child in form %}{% if not child.rendered %}{{ form_row(child) }}{% endif %}{% endfor %}`
+loop / `form_end` — never raw `<form>` / `<input>` (keep it that way in overrides). Their field options come from the
+FormKit profile `nowo_form_kit.profiles.site_backup`, which the bundle prepends when FormKitBundle is registered:
+
+```yaml
+nowo_form_kit:
+    profiles:
+        site_backup:
+            alias: site_backup
+            translation_domain: NowoSiteBackupBundle
+            auto_placeholder: false   # the forms set their placeholders / help explicitly
+            auto_help: false
+```
+
+Define `profiles.site_backup` in your own `nowo_form_kit` config to theme the forms (for example
+`defaults: { attr: { class: 'form-control' } }` or `field_types`); the bundle then does not prepend its default. The
+stock profile adds no classes: the host form theme and the UiKit scaffolds style the rows.
 
 ## Example
 
