@@ -19,7 +19,7 @@ final class DatabaseUrlType extends AbstractSiteBackupFormType
         // step is typically database_create.
         $required = (bool) $options['db_connection_failed'] && !(bool) $options['optional'];
 
-        $builder->add('database_url', UrlType::class, [
+        $this->addField($builder, 'database_url', UrlType::class, [
             'label' => 'setup.database.field_label',
             'attr'  => [
                 'autocomplete' => 'off',

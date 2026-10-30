@@ -15,13 +15,15 @@ final class PanelActionType extends AbstractSiteBackupFormType
 {
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
-        $builder->add('action', HiddenType::class, [
-            'data' => $options['panel_action'],
+        $this->addField($builder, 'action', HiddenType::class, [
+            'label' => null, // hidden: no FormKit convention label key
+            'data'  => $options['panel_action'],
         ]);
 
         if (is_string($options['backup_id']) && $options['backup_id'] !== '') {
-            $builder->add('backup_id', HiddenType::class, [
-                'data' => $options['backup_id'],
+            $this->addField($builder, 'backup_id', HiddenType::class, [
+                'label' => null, // hidden: no FormKit convention label key
+                'data'  => $options['backup_id'],
             ]);
         }
     }

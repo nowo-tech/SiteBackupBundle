@@ -12,8 +12,9 @@ final class ResetType extends AbstractSiteBackupFormType
 {
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
-        $builder->add('reset', HiddenType::class, [
-            'data' => '1',
+        $this->addField($builder, 'reset', HiddenType::class, [
+            'label' => null, // hidden: no FormKit convention label key
+            'data'  => '1',
         ]);
     }
 

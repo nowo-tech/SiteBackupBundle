@@ -12,8 +12,9 @@ final class ContinueType extends AbstractSiteBackupFormType
 {
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
-        $builder->add('action', HiddenType::class, [
-            'data' => 'continue',
+        $this->addField($builder, 'action', HiddenType::class, [
+            'label' => null, // hidden: no FormKit convention label key
+            'data'  => 'continue',
         ]);
     }
 

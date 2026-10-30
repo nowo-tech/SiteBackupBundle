@@ -13,18 +13,18 @@ final class PanelLoginType extends AbstractSiteBackupFormType
 {
     public function buildForm(FormBuilderInterface $builder, array $options): void
     {
-        $builder
-            ->add('action', HiddenType::class, [
-                'data' => 'login',
-            ])
-            ->add('password', PasswordType::class, [
-                'label'        => 'panel.login.password',
-                'always_empty' => true,
-                'attr'         => [
-                    'autofocus'    => true,
-                    'autocomplete' => 'current-password',
-                ],
-            ]);
+        $this->addField($builder, 'action', HiddenType::class, [
+            'label' => null, // hidden: no FormKit convention label key
+            'data'  => 'login',
+        ]);
+        $this->addField($builder, 'password', PasswordType::class, [
+            'label'        => 'panel.login.password',
+            'always_empty' => true,
+            'attr'         => [
+                'autofocus'    => true,
+                'autocomplete' => 'current-password',
+            ],
+        ]);
     }
 
     protected function csrfTokenId(): string
