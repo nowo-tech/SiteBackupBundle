@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.25.1] - 2026-10-30](#1251---2026-10-30)
 - [[1.25.0] - 2026-10-29](#1250---2026-10-29)
 - [[1.24.1] - 2026-10-28](#1241---2026-10-28)
 - [[1.24.0] - 2026-10-28](#1240---2026-10-28)
@@ -62,6 +63,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - [[1.0.0] - 2026-07-26](#100---2026-07-26)
 
 ## [Unreleased]
+
+## [1.25.1] - 2026-10-30
+
+Bundle routes are opt-in again on Symfony >= 7.3 (REQ-SF-004 rule 7). See [UPGRADING](UPGRADING.md#to-1251).
+
+### Security
+
+- **Panel routes registered without being imported (REQ-SF-004 rule 7).** On Symfony >= 7.3 every autoconfigured `#[Route]` controller gets the `routing.controller` tag (`#[AsController]` also autoconfigured the controllers), so a host whose `config/routes.yaml` holds the default `controllers: { resource: routing.controllers }` loaded the backup panel routes **without `panel.path_prefix`** — the panel on `/` (over the host home page), `/create`, `/restore/{id}`, `/delete/{id}`, `/progress.json`, `/history`, outside any firewall or `access_control` rule written for the panel path — even when the host never imported `@NowoSiteBackupBundle/Resources/config/routes.yaml`. The controllers are no longer autoconfigured and no longer carry `#[AsController]` (explicit `controller.service_arguments` tag); the panel and setup routes come only from `PanelRouteLoader` / `SetupRouteLoader`. Regression test with a kernel that only loads `routing.controllers`.
 
 ## [1.25.0] - 2026-10-29
 

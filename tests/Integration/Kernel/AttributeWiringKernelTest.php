@@ -26,7 +26,8 @@ use function uniqid;
 
 /**
  * REQ-SF-003: on a real kernel the attribute-wired services are registered — #[AsEventListener] (time-limit
- * listener, priority 512), #[AsController] (controllers as services) and #[AsSetupNeedDetector] (built-in detectors).
+ * listener, priority 512), the controllers as services (explicit controller.service_arguments tag, REQ-SF-004) and
+ * #[AsSetupNeedDetector] (built-in detectors).
  */
 final class AttributeWiringKernelTest extends TestCase
 {

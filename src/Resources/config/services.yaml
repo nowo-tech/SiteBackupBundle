@@ -113,9 +113,16 @@ services:
     Nowo\SiteBackupBundle\Setup\ColdStart\MysqlSchemaExistenceChecker:
         autoconfigure: false
 
-    # #[AsController] (autoconfigure) adds controller.service_arguments.
+    # Controllers are not autoconfigured and carry no #[AsController] (REQ-SF-004 rules 2 and 7): on Symfony >= 7.3
+    # autoconfiguration tags every #[Route] class with `routing.controller`, and the host's default
+    # `routing.controllers` resource would then load the panel routes without the host importing routes.yaml (the
+    # panel at `/` instead of panel.path_prefix). The routes come only from the PanelRouteLoader / SetupRouteLoader.
     Nowo\SiteBackupBundle\Controller\SiteBackupPanelController:
         public: true
+        autoconfigure: false
+        tags: ['controller.service_arguments']
 
     Nowo\SiteBackupBundle\Controller\SetupWizardController:
         public: true
+        autoconfigure: false
+        tags: ['controller.service_arguments']

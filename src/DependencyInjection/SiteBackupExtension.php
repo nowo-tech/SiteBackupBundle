@@ -1026,8 +1026,9 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
         $container->register(SetupUnlocalizedLocaleRedirectController::class, SetupUnlocalizedLocaleRedirectController::class)
             ->setArgument('$urlGenerator', new Reference('router'))
             ->setPublic(true)
-            // REQ-SF-003: #[AsController] on the class.
-            ->setAutoconfigured(true);
+            // REQ-SF-004 rules 2 and 7: explicit controller tag, no autoconfiguration (its routes come from SetupRouteLoader).
+            ->setAutoconfigured(false)
+            ->addTag('controller.service_arguments');
 
         if (!$container->hasDefinition(SetupWizardController::class)) {
             return;
