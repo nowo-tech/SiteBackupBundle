@@ -6,7 +6,6 @@ namespace Nowo\SiteBackupBundle\Controller;
 
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\HttpKernel\Attribute\AsController;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 use Symfony\Component\Routing\Generator\UrlGeneratorInterface;
 
@@ -16,7 +15,6 @@ use function is_string;
 /**
  * Redirects bare setup URLs to the canonical localized route when locale.unlocalized=redirect.
  */
-#[AsController]
 final class SetupUnlocalizedLocaleRedirectController
 {
     public function __construct(

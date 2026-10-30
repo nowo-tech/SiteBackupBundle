@@ -21,9 +21,14 @@ final class LocaleTestKernel extends Kernel
 {
     use MicroKernelTrait;
 
+    /**
+     * @param bool $importBundleRoutes whether the host imports the bundle routes.yaml (panel + setup loaders); the
+     *                                 Symfony default `routing.controllers` resource is always imported
+     */
     public function __construct(
         private readonly string $baseDir,
         private readonly mixed $enabledLocales,
+        private readonly bool $importBundleRoutes = true,
     ) {
         parent::__construct('test', false);
     }
@@ -78,6 +83,10 @@ final class LocaleTestKernel extends Kernel
 
     protected function configureRoutes(RoutingConfigurator $routes): void
     {
-        $routes->import('.', 'nowo_site_backup_setup');
+        // The Symfony default `controllers: { resource: routing.controllers }` of a Flex host.
+        $routes->import('routing.controllers');
+        if ($this->importBundleRoutes) {
+            $routes->import('@NowoSiteBackupBundle/Resources/config/routes.yaml');
+        }
     }
 }

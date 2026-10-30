@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.25.1](#to-1251)
 - [To 1.25.0](#to-1250)
 - [To 1.24.1](#to-1241)
 - [To 1.24.0](#to-1240)
@@ -111,6 +112,10 @@
   - [Breaking changes](#breaking-changes-1)
 
 ## Unreleased
+
+## To 1.25.1
+
+No change needed when `config/routes.yaml` imports `@NowoSiteBackupBundle/Resources/config/routes.yaml` (see [INSTALLATION](INSTALLATION.md)). If the panel answered on your site without that import (Symfony >= 7.3 with the default `controllers: { resource: routing.controllers }`), add the import: the unprefixed copies (`/`, `/create`, `/restore/{id}`…) are gone.
 
 ## To 1.25.0
 
