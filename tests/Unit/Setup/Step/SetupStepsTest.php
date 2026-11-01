@@ -80,6 +80,25 @@ final class SetupStepsTest extends TestCase
         self::assertStringContainsString('DATABASE_URL=', $envLocal);
     }
 
+    public function testDatabaseUrlStepRejectsOptionInjectionIntoTheDumpArgv(): void
+    {
+        // REQ-SEC-004 CG F2: option-like / control-character components never reach .env.local.
+        file_put_contents($this->dir . '/.env.local', "APP_SECRET=x\n");
+        $step = new DatabaseUrlStep('db', 'DB', optional: false);
+
+        foreach ([
+            'mysql://app:pw@10.0.0.5:6379/--result-file=/var/www/public/x.php?serverVersion=8.0',
+            'mysql://--host=evil:pw@db/app',
+            'mysql://app:pw@db/app%01',
+        ] as $url) {
+            $result = $step->run($this->ctx, new SetupStepInput(['database_url' => $url]));
+            self::assertFalse($result->isSuccess(), $url);
+            self::assertStringContainsString('DATABASE_URL', $result->getMessage());
+        }
+
+        self::assertSame("APP_SECRET=x\n", file_get_contents($this->dir . '/.env.local'));
+    }
+
     public function testDatabaseUrlStepSingleQuotesValueSoDotenvNeverExpandsIt(): void
     {
         $url  = 'mysql://app:pa$HOME$(id)\1$0@db:3306/app?serverVersion=8.0';

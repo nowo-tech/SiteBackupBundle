@@ -39,7 +39,7 @@ final class DatabaseDumpCommandTest extends TestCase
 
         self::assertSame(Command::SUCCESS, $code);
         $out = $tester->getDisplay();
-        self::assertStringContainsString('-- args: --single-transaction --no-tablespaces --skip-ssl-verify-server-cert --host=db --port=3306 --user=app --column-statistics=0 shop', $out);
+        self::assertStringContainsString('-- args: --single-transaction --no-tablespaces --skip-ssl-verify-server-cert --host=db --port=3306 --user=app --column-statistics=0 -- shop', $out);
         self::assertStringContainsString('-- pwd: p@ss', $out);
         self::assertStringNotContainsString('warn', $out);
         self::assertStringContainsString('warn', $tester->getErrorOutput());
