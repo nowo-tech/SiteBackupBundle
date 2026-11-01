@@ -45,7 +45,6 @@ use function str_replace;
 use function str_starts_with;
 use function strlen;
 use function substr;
-use function sys_get_temp_dir;
 
 use const DATE_ATOM;
 use const JSON_PRETTY_PRINT;
@@ -97,13 +96,14 @@ final class BackupArchiver
     {
         $this->filesystem->mkdir($this->storageDir);
 
-        $id         = $this->clock->now()->format('Ymd-His') . '-' . bin2hex(random_bytes(4));
-        $filename   = $id . '.tar.gz';
-        $target     = rtrim($this->storageDir, '/\\') . '/' . $filename;
-        $workDir    = sys_get_temp_dir() . '/nowo-site-backup-' . $id;
+        $id       = $this->clock->now()->format('Ymd-His') . '-' . bin2hex(random_bytes(4));
+        $filename = $id . '.tar.gz';
+        $target   = rtrim($this->storageDir, '/\\') . '/' . $filename;
+        // Owner-only staging tree under an unpredictable name (CG L1): it holds the plaintext dump and .env files.
+        $workDir    = PrivateTempDirectory::create('nowo-site-backup-' . $id . '-');
         $payloadDir = $workDir . '/payload';
 
-        $this->filesystem->mkdir($payloadDir);
+        $this->filesystem->mkdir($payloadDir, 0o700);
 
         try {
             $checksums = $this->copyIncludedPaths($payloadDir);
@@ -120,7 +120,7 @@ final class BackupArchiver
             if ($this->databaseDumpCommand !== null && $this->databaseDumpCommand !== '') {
                 $dumpRelative = 'database/dump.sql';
                 $dumpAbsolute = $payloadDir . '/' . $dumpRelative;
-                $this->filesystem->mkdir(dirname($dumpAbsolute));
+                $this->filesystem->mkdir(dirname($dumpAbsolute), 0o700);
                 $this->runDatabaseDump($dumpAbsolute);
                 $checksums[$dumpRelative] = (string) hash_file('sha256', $dumpAbsolute);
                 $meta['database_dump']    = $dumpRelative;
@@ -142,6 +142,7 @@ final class BackupArchiver
             } catch (JsonException $e) {
                 throw new RuntimeException('Unable to write MANIFEST.json: ' . $e->getMessage(), 0, $e);
             }
+            $this->filesystem->chmod($manifestPath, 0o600);
 
             $this->createTarGz($payloadDir, $target);
             // Archives hold the DB dump and .env files: owner-only.
@@ -247,8 +248,7 @@ final class BackupArchiver
             $errors[] = sprintf('Archive SHA-256 mismatch (expected %s, got %s).', $artifact->getArchiveSha256(), $actualSha);
         }
 
-        $extractDir = sys_get_temp_dir() . '/nowo-site-backup-verify-' . $artifact->getId();
-        $this->filesystem->mkdir($extractDir);
+        $extractDir = PrivateTempDirectory::create('nowo-site-backup-verify-' . $artifact->getId() . '-');
 
         try {
             $this->extractTarGz($artifact->getAbsolutePath(), $extractDir, $heartbeat);
@@ -434,6 +434,9 @@ final class BackupArchiver
             return;
         }
 
+        // Pre-create the dump owner-only: the shell redirect truncates it and keeps the 0600 mode (CG L1).
+        $this->filesystem->touch($dumpAbsolute);
+        $this->filesystem->chmod($dumpAbsolute, 0o600);
         $process = Process::fromShellCommandline($command . ' > ' . escapeshellarg($dumpAbsolute));
 
         try {
