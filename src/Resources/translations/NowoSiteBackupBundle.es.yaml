@@ -156,6 +156,7 @@ setup:
     title: 'Se requiere el token de configuración'
     body: 'Abre %path% con el setup.setup_token configurado.'
     lead: 'Este asistente de configuración está protegido. Pega el token de configuración para continuar.'
+    lead_console: 'Este sitio no tiene configurado ningún token de configuración. En el servidor, ejecuta %command% y abre el enlace que muestra (o pega abajo el token de un solo uso).'
     field_label: 'Token de configuración'
     field_placeholder: 'Pega el token de configuración'
     submit: 'Continuar'

@@ -2,7 +2,7 @@
 
 **Baseline spec**: [`spec.md`](spec.md)  
 **Package**: `nowo-tech/site-backup-bundle`  
-**Last audited**: 2026-10-29 (v1.24.x + unreleased REQ-100 pass; features 002–006 included; feature IDs are prefixed with their spec number, e.g. `004 FR-PERF-001` → [`specs/004-worker-perf-dump-hardening/`](../004-worker-perf-dump-hardening/spec.md))
+**Last audited**: 2026-11-01 (v1.26.0 + unreleased REQ-SEC-004 CG fix; features 002–007 included; feature IDs are prefixed with their spec number, e.g. `004 FR-PERF-001` → [`specs/004-worker-perf-dump-hardening/`](../004-worker-perf-dump-hardening/spec.md))
 
 Every production source under `src/` is listed exactly once, grouped by domain (REQ-SPECKIT-001 / REQ-SPECKIT-003).
 
@@ -42,14 +42,16 @@ Every production source under `src/` is listed exactly once, grouped by domain (
 
 | Source file | Requirement IDs |
 | --- | --- |
-| `Backup/BackupArchiver.php` | FR-BACKUP-001, FR-RUNTIME-001, FR-DI-003 |
+| `Backup/BackupArchiver.php` | FR-BACKUP-001, FR-RUNTIME-001, FR-DI-003, 007 FR-CG-008 |
+| `Backup/PrivateTempDirectory.php` | 007 FR-CG-008 |
 | `Backup/RuntimeStatePaths.php` | FR-BACKUP-002, FR-RESTORE-001 |
-| `Database/MysqlDumpCommandFactory.php` | FR-BACKUP-001, 004 FR-DUMP-002 |
+| `Database/DatabaseUrlSafety.php` | 007 FR-CG-007 |
+| `Database/MysqlDumpCommandFactory.php` | FR-BACKUP-001, 004 FR-DUMP-002, 007 FR-CG-007 |
 | `Model/BackupArtifact.php` | FR-MODEL-001 |
 | `Model/BackupHistoryEntry.php` | FR-MODEL-001 |
 | `Model/RestoreProgress.php` | FR-MODEL-001 |
 | `Model/SetupProgress.php` | FR-MODEL-001 |
-| `Restore/RestoreOrchestrator.php` | FR-RESTORE-001, FR-DI-003 |
+| `Restore/RestoreOrchestrator.php` | FR-RESTORE-001, FR-DI-003, 007 FR-CG-008 |
 | `Service/SiteBackupManager.php` | FR-SVC-001, FR-OBS-001, FR-DI-003 |
 | `Storage/BackupHistoryStorageInterface.php` | FR-STORE-001 |
 | `Storage/FilesystemBackupHistoryStorage.php` | FR-STORE-001 |
@@ -75,6 +77,7 @@ Every production source under `src/` is listed exactly once, grouped by domain (
 | `Command/RestoreBackupCommand.php` | FR-CLI-001 |
 | `Command/SetupCommand.php` | FR-CLI-001 |
 | `Command/SetupResetCommand.php` | FR-CLI-001 |
+| `Command/SetupTokenCommand.php` | FR-CLI-001, 007 FR-CG-004 |
 | `Command/SetupStatusCommand.php` | FR-CLI-001 |
 | `Command/VerifyBackupCommand.php` | FR-CLI-001 |
 | `Command/WorkerRestartCommand.php` | FR-CLI-001 |
@@ -84,7 +87,7 @@ Every production source under `src/` is listed exactly once, grouped by domain (
 | Source file | Requirement IDs |
 | --- | --- |
 | `Controller/SetupUnlocalizedLocaleRedirectController.php` | FR-HTTP-001, FR-DI-002 |
-| `Controller/SetupWizardController.php` | FR-HTTP-001, FR-DI-002 |
+| `Controller/SetupWizardController.php` | FR-HTTP-001, FR-DI-002, 007 FR-CG-001, FR-CG-002, FR-CG-003, FR-CG-005, FR-CG-006 |
 | `Controller/SiteBackupPanelController.php` | FR-HTTP-001, FR-DI-002 |
 | `EventSubscriber/ColdStartSchemaGateSubscriber.php` | FR-HTTP-002 |
 | `EventSubscriber/LongRequestTimeLimitSubscriber.php` | 004 FR-TIME-001, FR-DI-002 |
@@ -164,6 +167,7 @@ Every production source under `src/` is listed exactly once, grouped by domain (
 | `Setup/SetupTabCheckerInterface.php` | FR-SETUP-001 |
 | `Setup/SetupTabCheckerLocator.php` | FR-SETUP-008, FR-DI-004, FR-OBS-001 |
 | `Setup/SetupWizardReopener.php` | FR-SETUP-005, 003 FR-DONE-001 |
+| `Setup/SetupAccessTokenStore.php` | 007 FR-CG-003 |
 
 ## Setup wizard — cold start, detectors & worker memo
 
@@ -192,7 +196,7 @@ Every production source under `src/` is listed exactly once, grouped by domain (
 | `Setup/Step/ConsoleStep.php` | FR-SETUP-001 |
 | `Setup/Step/CustomSetupStep.php` | FR-SETUP-001 |
 | `Setup/Step/DatabaseCreateStep.php` | FR-SETUP-001 |
-| `Setup/Step/DatabaseUrlStep.php` | FR-SETUP-001 |
+| `Setup/Step/DatabaseUrlStep.php` | FR-SETUP-001, 007 FR-CG-007 |
 | `Setup/Step/MarkerStep.php` | FR-SETUP-001 |
 | `Setup/Step/MigrationsStep.php` | FR-SETUP-001 |
 | `Setup/Step/RequirementsStep.php` | FR-SETUP-001 |
@@ -221,7 +225,7 @@ Every production source under `src/` is listed exactly once, grouped by domain (
 | --- | --- |
 | `Twig/SiteBackupExtension.php` | FR-TWIG-002 |
 | `View/PanelPages.php` | FR-TWIG-003, FR-UI-001 |
-| `View/SetupPages.php` | FR-TWIG-003, FR-UI-001 |
+| `View/SetupPages.php` | FR-TWIG-003, FR-UI-001, 007 FR-CG-003 |
 | `View/SetupTokenGate.php` | FR-SETUP-011, FR-UI-001 |
 | `View/SiteBackupView.php` | FR-TWIG-003, FR-UI-001 |
 

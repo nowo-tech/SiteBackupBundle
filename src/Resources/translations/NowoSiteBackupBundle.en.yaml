@@ -156,6 +156,7 @@ setup:
     title: 'Setup token required'
     body: 'Open %path% with the configured setup.setup_token.'
     lead: 'This setup wizard is protected. Paste the setup token to continue.'
+    lead_console: 'No setup token is configured on this site. On the server, run %command% and open the link it prints (or paste the one-time token below).'
     field_label: 'Setup token'
     field_placeholder: 'Paste the setup token'
     submit: 'Continue'

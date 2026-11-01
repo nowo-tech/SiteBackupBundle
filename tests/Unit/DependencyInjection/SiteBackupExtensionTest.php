@@ -7,6 +7,7 @@ namespace Nowo\SiteBackupBundle\Tests\Unit\DependencyInjection;
 use LogicException;
 use Nowo\SiteBackupBundle\Backup\BackupArchiver;
 use Nowo\SiteBackupBundle\Command\DatabaseDumpCommand;
+use Nowo\SiteBackupBundle\Command\SetupTokenCommand;
 use Nowo\SiteBackupBundle\Controller\SetupUnlocalizedLocaleRedirectController;
 use Nowo\SiteBackupBundle\Controller\SetupWizardController;
 use Nowo\SiteBackupBundle\Controller\SiteBackupPanelController;
@@ -41,6 +42,7 @@ use Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator;
 use Nowo\SiteBackupBundle\Setup\DurableSetupDoneStoreInterface;
 use Nowo\SiteBackupBundle\Setup\Memo\WorkerTtlMemo;
 use Nowo\SiteBackupBundle\Setup\NullDurableSetupDoneStore;
+use Nowo\SiteBackupBundle\Setup\SetupAccessTokenStore;
 use Nowo\SiteBackupBundle\Setup\SetupOrchestrator;
 use Nowo\SiteBackupBundle\Setup\SetupTabCheckerLocator;
 use Nowo\SiteBackupBundle\Setup\SetupWizardReopener;
@@ -49,6 +51,7 @@ use Nowo\SiteBackupBundle\Setup\Storage\DoctrineDbalSetupStepJournal;
 use Nowo\SiteBackupBundle\View\SetupTokenGate;
 use Nowo\SiteBackupBundle\View\SiteBackupView;
 use PHPUnit\Framework\TestCase;
+use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\DependencyInjection\Argument\TaggedIteratorArgument;
 use Symfony\Component\DependencyInjection\ChildDefinition;
 use Symfony\Component\DependencyInjection\Compiler\AttributeAutoconfigurationPass;
@@ -253,6 +256,45 @@ final class SiteBackupExtensionTest extends TestCase
         $built = SetupTokenGate::fromConfig($gate->getArgument(0));
         self::assertNull($built->illustration['webp'] ?? null, 'string shorthand: no WebP <source> unless opted in (1.22.1)');
         self::assertSame(['setup.token.step_env'], $built->howtoSteps);
+    }
+
+    public function testSetupIsDefaultDenyAndWiresTheOneTimeTokenStore(): void
+    {
+        $container = new ContainerBuilder();
+        $container->setParameter('kernel.project_dir', '/srv/app');
+
+        (new SiteBackupExtension())->load([['security' => ['allow_unauthenticated' => true]]], $container);
+
+        $controller = $container->getDefinition(SetupWizardController::class);
+        self::assertFalse($controller->getArgument('$allowWithoutToken'));
+        self::assertSame(SetupAccessTokenStore::class, (string) $controller->getArgument('$accessTokens'));
+        self::assertSame('/srv/app/var/site-backup/setup.token', $container->getParameterBag()->resolveValue($container->getDefinition(SetupAccessTokenStore::class)->getArgument('$tokenFile')));
+        self::assertSame('/_setup', $container->getDefinition(SetupTokenCommand::class)->getArgument('$pathPrefix'));
+    }
+
+    public function testAllowWithoutTokenNeedsKernelDebug(): void
+    {
+        $container = new ContainerBuilder();
+        $container->setParameter('kernel.project_dir', sys_get_temp_dir());
+        $container->setParameter('kernel.debug', true);
+
+        (new SiteBackupExtension())->load([[
+            'security' => ['allow_unauthenticated' => true],
+            'setup'    => ['allow_without_token' => true, 'access_token_file' => '/x/setup.token'],
+        ]], $container);
+        self::assertTrue($container->getDefinition(SetupWizardController::class)->getArgument('$allowWithoutToken'));
+        self::assertSame('/x/setup.token', $container->getDefinition(SetupAccessTokenStore::class)->getArgument('$tokenFile'));
+
+        $prod = new ContainerBuilder();
+        $prod->setParameter('kernel.project_dir', sys_get_temp_dir());
+        $prod->setParameter('kernel.debug', false);
+
+        $this->expectException(InvalidConfigurationException::class);
+        $this->expectExceptionMessage('only allowed when kernel.debug is true');
+        (new SiteBackupExtension())->load([[
+            'security' => ['allow_unauthenticated' => true],
+            'setup'    => ['allow_without_token' => true],
+        ]], $prod);
     }
 
     public function testGetAlias(): void

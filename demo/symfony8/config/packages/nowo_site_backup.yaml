@@ -46,6 +46,9 @@ nowo_site_backup:
                 - setup.token.step_env
                 - setup.token.step_url
                 - 'Demo: the token is not set here, so /_setup opens without it.'
+        # 1.27+: without setup_token the wizard is default-deny (one-time token from nowo:site-backup:setup-token).
+        # DEV/DEMO only, refused unless kernel.debug is true: open the wizard page without a token.
+        allow_without_token: true
         require_done_marker: false
         # Survive wiping var/ once DB exists (v1.2+)
         progress_storage: chain

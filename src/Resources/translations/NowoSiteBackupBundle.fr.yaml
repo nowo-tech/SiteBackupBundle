@@ -156,6 +156,7 @@ setup:
     title: 'Jeton de configuration requis'
     body: 'Ouvrez %path% avec le setup.setup_token configuré.'
     lead: 'Cet assistant de configuration est protégé. Collez le jeton de configuration pour continuer.'
+    lead_console: 'Aucun jeton de configuration n''est défini sur ce site. Sur le serveur, exécutez %command% et ouvrez le lien affiché (ou collez le jeton à usage unique ci-dessous).'
     field_label: 'Jeton de configuration'
     field_placeholder: 'Collez le jeton de configuration'
     submit: 'Continuer'

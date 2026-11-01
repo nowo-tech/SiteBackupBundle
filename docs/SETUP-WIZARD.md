@@ -205,7 +205,7 @@ Public setup surface (not a dashboard of cards):
 
 Templates under `@NowoSiteBackupBundle/setup/…` (REQ-TWIG-001 overridable).
 
-Progress for long steps: poll `GET /_setup/api/progress` (same pattern as restore `progress.json`). It requires the setup token (`?token=` / `X-Setup-Token`) when one is configured and never returns `answers`. `POST /_setup/api/advance` returns 404 once setup is completed; `profile` in its payload is only honoured before a run started (afterwards the stored profile is used).
+Progress for long steps: poll `GET /_setup/api/progress` (same pattern as restore `progress.json`). It requires the setup token (`?token=` / `X-Setup-Token`: the static `setup_token` or the one-time token of `nowo:site-backup:setup-token`) and never returns `answers`. `POST /_setup/api/advance` answers 404 whenever setup is not required and always needs a token; `profile` in its payload is only honoured before a run started (afterwards the stored profile is used). A `GET /_setup` never starts or advances a run (1.27+): an idle run starts with the Continue POST.
 
 ## Wizard engine
 
@@ -392,7 +392,7 @@ Restore orchestrator can set `setup.required` + preferred profile `post_restore`
 ## Security
 
 - Wizard routes are public **only while setup is required**; once `setup.done` exists, `/_setup` returns 404 or redirects home.
-- Optional **setup token** (`?token=` / env `SITE_SETUP_TOKEN`) for internet-facing first boot. With `security_guard.enabled: true` (v1.16+) an empty or documented token (`forbidden_setup_tokens`) makes every non-local request / console command fail closed.
+- **Default-deny (1.27+):** the wizard needs the **setup token** (`?token=` / env `SITE_SETUP_TOKEN`) or, without one, a one-time token from `php bin/console nowo:site-backup:setup-token [--open[=profile]]`; `setup.allow_without_token: true` is a dev-only (`kernel.debug`) opt-out. With `security_guard.enabled: true` (v1.16+) an empty or documented token (`forbidden_setup_tokens`) makes every non-local request / console command fail closed.
 - Admin password never logged; CSRF on all POSTs.
 - `database_url` step must not echo password back in HTML.
 - `console` commands are **config-defined only** (no free-form HTTP command execution).
@@ -510,6 +510,7 @@ See also [USAGE.md](USAGE.md#web-ui-on-the-uikit-page-contract-req-ui-003-121).
 | `nowo:site-backup:setup` | Run profile headless |
 | `nowo:site-backup:setup-status` | Detectors + completed steps |
 | `nowo:site-backup:setup-reset` | Remove `setup.done` (dev only; gated) |
+| `nowo:site-backup:setup-token` | 1.27+: issue the one-time web wizard token (`--open[=profile]` also writes `setup.required`, `--revoke` deletes it) |
 
 ## Events
 

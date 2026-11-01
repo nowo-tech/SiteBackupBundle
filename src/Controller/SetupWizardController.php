@@ -15,6 +15,7 @@ use Nowo\SiteBackupBundle\Form\Setup\SetupTokenType;
 use Nowo\SiteBackupBundle\Model\SetupProgress;
 use Nowo\SiteBackupBundle\Routing\SetupPathPrefixResolver;
 use Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator;
+use Nowo\SiteBackupBundle\Setup\SetupAccessTokenStore;
 use Nowo\SiteBackupBundle\Setup\SetupOrchestrator;
 use Nowo\SiteBackupBundle\Setup\SetupStepInput;
 use Nowo\SiteBackupBundle\Setup\Step\DatabaseUrlStep;
@@ -47,6 +48,14 @@ use const JSON_THROW_ON_ERROR;
 /**
  * Setup wizard (REQ-UI-003, v1.21+): token gate (page/auth), wizard steps and done (page/wizard), all on the guest
  * layout. No database service is needed to render these pages (cold start, broken DATABASE_URL, no users yet).
+ *
+ * Default-deny (1.27+, REQ-SEC-004 CG F1):
+ * - the wizard and its advance API exist only while {@see SetupNeedEvaluator::isSetupRequired()} says so (302 / or
+ *   404 otherwise), so a page view on a host that does not need setup never opens it, and setup.done closes it whatever
+ *   the progress file says;
+ * - every request needs setup.setup_token or a one-time token from `nowo:site-backup:setup-token`
+ *   ({@see SetupAccessTokenStore}), unless the host opted out with the debug-only setup.allow_without_token;
+ * - a GET never starts or advances a run: advancing is a CSRF-protected POST (the JSON API always needs a token).
  */
 final class SetupWizardController
 {
@@ -73,6 +82,8 @@ final class SetupWizardController
         private readonly ?TranslatorInterface $translator = null,
         ?SiteBackupView $view = null,
         ?SetupTokenGate $tokenGate = null,
+        private readonly ?SetupAccessTokenStore $accessTokens = null,
+        private readonly bool $allowWithoutToken = false,
     ) {
         $this->view      = $view ?? new SiteBackupView($twig, guestLayoutTemplate: $templates['setup_layout'] ?? null, templates: $templates);
         $this->pages     = new SetupPages($this->view, $brandName);
@@ -89,7 +100,11 @@ final class SetupWizardController
 
         if (!$this->isTokenValid($request)) {
             return $this->view->render('setup_token', $this->setupViewVars([
-                'page'      => $this->pages->token($this->formFactory->createNamed('', SetupTokenType::class, null, ['action' => $pathPrefix])->createView(), $pathPrefix),
+                'page' => $this->pages->token(
+                    $this->formFactory->createNamed('', SetupTokenType::class, null, ['action' => $pathPrefix])->createView(),
+                    $pathPrefix,
+                    consoleTokenOnly: !$this->hasStaticToken(),
+                ),
                 'tokenGate' => $this->tokenGate,
             ], $pathPrefix), Response::HTTP_FORBIDDEN);
         }
@@ -126,6 +141,8 @@ final class SetupWizardController
                     }
                     $progress = $this->orchestrator->advance($profile, $input);
                     if ($progress->getPhase() === SetupProgress::PHASE_COMPLETED) {
+                        $this->accessTokens?->clear();
+
                         return new RedirectResponse(rtrim($pathPrefix, '/') . '/done');
                     }
                     if ($progress->getPhase() === SetupProgress::PHASE_FAILED) {
@@ -137,13 +154,9 @@ final class SetupWizardController
                 }
             }
         } elseif ($progress->getPhase() === SetupProgress::PHASE_IDLE) {
-            $progress = $this->orchestrator->advance($profile);
-            if ($progress->getPhase() === SetupProgress::PHASE_COMPLETED) {
-                return new RedirectResponse(rtrim($pathPrefix, '/') . '/done');
-            }
-            $steps       = $this->orchestrator->getSteps($progress->getProfile());
-            $currentStep = $this->findCurrentStep($steps, $progress);
-            $wizardForm  = $this->createSetupForm($progress, $currentStep, $reasons);
+            // A GET never starts a run (no setup.required / progress write): show the requested profile and a
+            // CSRF-protected Continue form whose POST starts it.
+            $steps = $this->orchestrator->getSteps($profile);
         }
 
         $wizardView = $wizardForm?->createView();
@@ -173,7 +186,8 @@ final class SetupWizardController
 
     /**
      * Wizard progress for polling clients. Gated by the setup token; `answers` (admin email, DATABASE_URL,
-     * SQL import path…) are never exposed.
+     * SQL import path…) are never exposed. Read-only, so it keeps answering after completion (pollers see
+     * `completed`); without a static setup_token the one-time token is gone by then (403).
      */
     public function progress(?Request $request = null): JsonResponse
     {
@@ -186,13 +200,15 @@ final class SetupWizardController
 
     public function advanceApi(Request $request): JsonResponse
     {
-        if (!$this->isTokenValid($request)) {
-            return new JsonResponse(['error' => 'forbidden'], 403);
-        }
-
-        // Same gate as the wizard page: once setup is done the API no longer exists (no extra admins / re-imports).
+        // Same gate as the wizard page: when setup is not required the API does not exist (no extra admins / re-imports).
         if ($this->isSetupClosed()) {
             return new JsonResponse(['error' => 'not_found'], 404);
+        }
+
+        // The JSON API has no form CSRF token: the (static or one-time) setup token is its CSRF defence, so
+        // setup.allow_without_token never opens it.
+        if (!$this->hasProvidedValidToken($request)) {
+            return new JsonResponse(['error' => 'forbidden'], 403);
         }
 
         $payload = $request->request->all();
@@ -216,14 +232,20 @@ final class SetupWizardController
             : $current->getProfile();
 
         $progress = $this->orchestrator->advance($profile, new SetupStepInput($payload));
+        if ($progress->getPhase() === SetupProgress::PHASE_COMPLETED) {
+            $this->accessTokens?->clear();
+        }
 
         return new JsonResponse($this->publicProgress($progress));
     }
 
+    /**
+     * Closed unless a real need is detected (detectors / setup.required / an unfinished run), never from the volatile
+     * progress file alone: setup.done (or the durable store) closes it even when progress is idle or lost (CG I1).
+     */
     private function isSetupClosed(): bool
     {
-        return !$this->needEvaluator->isSetupRequired()
-            && $this->orchestrator->getProgress()->getPhase() === SetupProgress::PHASE_COMPLETED;
+        return !$this->needEvaluator->isSetupRequired();
     }
 
     /**
@@ -321,18 +343,40 @@ final class SetupWizardController
         return $this->formFactory->createNamed('', ContinueType::class, null, $this->formOptions());
     }
 
+    /**
+     * Default-deny: a static setup.setup_token or a one-time token is required, except when the host opted out with
+     * the debug-only setup.allow_without_token and configured no static token.
+     */
     private function isTokenValid(Request $request): bool
     {
-        if ($this->setupToken === null || $this->setupToken === '') {
+        if ($this->hasProvidedValidToken($request)) {
             return true;
         }
 
+        return $this->allowWithoutToken && !$this->hasStaticToken();
+    }
+
+    private function hasProvidedValidToken(Request $request): bool
+    {
         $provided = $request->query->getString('token');
         if ($provided === '') {
-            $provided = $request->headers->get('X-Setup-Token', '');
+            $provided = (string) $request->headers->get('X-Setup-Token', '');
         }
 
-        return is_string($provided) && $provided !== '' && hash_equals($this->setupToken, $provided);
+        if ($provided === '') {
+            return false;
+        }
+
+        if ($this->hasStaticToken() && hash_equals((string) $this->setupToken, $provided)) {
+            return true;
+        }
+
+        return $this->accessTokens?->isValid($provided) ?? false;
+    }
+
+    private function hasStaticToken(): bool
+    {
+        return $this->setupToken !== null && $this->setupToken !== '';
     }
 
     /**

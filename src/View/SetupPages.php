@@ -78,12 +78,21 @@ final readonly class SetupPages
     /**
      * Setup-token gate (HTTP 403): GET form `token`, on the guest layout.
      */
-    public function token(?FormView $form, string $pathPrefix): AuthPage
+    /**
+     * @param bool $consoleTokenOnly no static setup.setup_token is configured (1.27+): the lead tells the operator to
+     *                               issue a one-time token with `nowo:site-backup:setup-token`
+     */
+    public function token(?FormView $form, string $pathPrefix, bool $consoleTokenOnly = false): AuthPage
     {
+        $lead = $form instanceof FormView ? 'setup.token.lead' : 'setup.token.body';
+        if ($consoleTokenOnly) {
+            $lead = 'setup.token.lead_console';
+        }
+
         return new AuthPage(
             SiteBackupView::label('setup.token.title'),
             $form,
-            SiteBackupView::label($form instanceof FormView ? 'setup.token.lead' : 'setup.token.body', ['%path%' => $pathPrefix . '?token=…']),
+            SiteBackupView::label($lead, ['%path%' => $pathPrefix . '?token=…', '%command%' => 'php bin/console nowo:site-backup:setup-token']),
             $this->brandName,
             submitLabel: SiteBackupView::label('setup.token.submit'),
             bundle: SiteBackupView::BUNDLE,

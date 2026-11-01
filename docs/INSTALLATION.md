@@ -7,6 +7,7 @@
 - [Routes](#routes)
 - [Firewall / access control](#firewall--access-control)
 - [Panel password (required by default)](#panel-password-required-by-default)
+- [First install: open the setup wizard (default-deny, 1.27+)](#first-install-open-the-setup-wizard-default-deny-127)
 - [Twig Extra Bundle (REQ-TWIG-004)](#twig-extra-bundle-req-twig-004)
 - [Next steps](#next-steps)
 
@@ -63,6 +64,26 @@ php bin/console nowo:site-backup:hash-password
 ```
 
 Put the hash in `nowo_site_backup.security.password_hash` or `SITE_BACKUP_PASSWORD_HASH`.
+
+## First install: open the setup wizard (default-deny, 1.27+)
+
+The web wizard (`/_setup`) is closed unless setup is required **and** the request carries a token. Pick one:
+
+- **One-time token (no static secret):** on the server run
+
+  ```bash
+  php bin/console nowo:site-backup:setup-token --open          # or --open=post_restore
+  ```
+
+  and open the printed `/_setup?token=…` link. `--open` writes `setup.required` so the wizard opens even when no
+  detector reports a need. Only a hash is stored (`var/site-backup/setup.token`, `0600`); the token is deleted when the
+  wizard completes (`--revoke` deletes it earlier).
+- **Static token:** `setup.setup_token: '%env(SITE_SETUP_TOKEN)%'` with a long random value; open `/_setup?token=…` (or
+  send `X-Setup-Token`).
+- **Dev / demo only:** `setup.allow_without_token: true` (refused unless `kernel.debug` is true).
+
+A GET only shows the wizard; the run starts with the Continue button (CSRF-protected POST). Once `setup.done` exists the
+wizard answers 302 `/`. The headless alternative stays `php bin/console nowo:site-backup:setup`.
 
 ## Twig Extra Bundle (REQ-TWIG-004)
 
