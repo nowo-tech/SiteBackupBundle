@@ -333,7 +333,7 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *         }>,
  *     },
  *     validation?: bool|array{ // Validation configuration
- *         enabled?: bool|Param, // Default: false
+ *         enabled?: bool|Param, // Default: true
  *         enable_attributes?: bool|Param, // Default: true
  *         static_method?: Param|string|list<scalar|Param|null>,
  *         translation_domain?: scalar|Param|null, // Default: "validators"
@@ -1162,11 +1162,13 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *             progress_ddl_ttl?: int|Param, // Seconds the Doctrine progress / step-journal "CREATE TABLE IF NOT EXISTS" is remembered across requests (a dropped table is still re-created on the first failing query). 0 = once per request (pre-1.16 behaviour). // Default: 3600
  *         },
  *         brand_name?: scalar|Param|null, // Default: "Site Setup"
- *         setup_token?: scalar|Param|null, // Optional shared secret for /_setup (?token= or X-Setup-Token). // Default: null
+ *         setup_token?: scalar|Param|null, // Shared secret for /_setup (?token= or X-Setup-Token). 1.27+: when null, the wizard only accepts a one-time token issued on the server by nowo:site-backup:setup-token (default-deny). // Default: null
+ *         allow_without_token?: bool|Param, // DEV/DEMO only (1.27+): when true and no setup_token is set, the wizard page opens without a token (the JSON API still needs one). Literal boolean, refused unless kernel.debug is true. Never true in production. // Default: false
+ *         access_token_file?: scalar|Param|null, // Where nowo:site-backup:setup-token stores the SHA-256 hash (0600) of the one-time setup token (1.27+). // Default: "%kernel.project_dir%/var/site-backup/setup.token"
  *         token_gate?: array{ // Setup-token gate page (v1.22+): optional illustration above the auth panel and the how-to steps of its <details> disclosure.
  *             illustration?: Param|string|array{ // Asset path of the illustration (string shorthand = src), rendered as <picture>: WebP source + PNG/JPEG fallback <img> with width/height. Null = no illustration.
  *                 src?: scalar|Param|null, // Fallback image asset path (PNG / JPEG), resolved with asset(), e.g. illustrations/error-403.png.
- *                 webp?: scalar|Param|null, // WebP source asset path. Null (default) = src with a .webp extension; false = no WebP source. // Default: null
+ *                 webp?: scalar|Param|null, // WebP <source>: an asset path, true = src with a .webp extension, null / false (default) = none (1.22.1: no longer derived by default). // Default: null
  *                 width?: int|Param, // Intrinsic width in pixels (reserves the layout box). // Default: null
  *                 height?: int|Param, // Intrinsic height in pixels (reserves the layout box). // Default: null
  *                 alt?: scalar|Param|null, // Alt text: translation key (or text) of token_gate.translation_domain. // Default: "setup.token.illustration_alt"
@@ -1210,7 +1212,7 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *             doctrine_schema_empty?: bool|Param, // Default: false
  *             incomplete_progress?: bool|Param, // When true, unfinished setup progress (running/waiting/failed) forces the site gate to /_setup. // Default: true
  *         },
- *         default_profile?: scalar|Param|null, // Default: "fresh_install"
+ *         default_profile?: scalar|Param|null, // Profile used when none is requested, stored or marked (REQ-CFG-001). Must be a key of setup.profiles. // Default: "fresh_install"
  *         advance_mode?: "automatic"|"manual"|Param, // automatic = chain auto tabs until interaction; manual = one auto tab per Continuar. // Default: "automatic"
  *         locale?: array{ // Locale-in-path for setup wizard routes (mirrors AuthKit locale config).
  *             in_path?: "never"|"always"|"both"|Param, // never = bare prefix only (BC); always = /{_locale}{prefix}; both = dual URLs. // Default: "never"
@@ -1305,6 +1307,15 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *             testid?: scalar|Param|null, // Default: null
  *         }>,
  *     },
+ *     font_preload?: array{ // 2.21: <link rel="preload" as="font" crossorigin> tags printed in the <head> of the document and error layouts (Twig nowo_ui_font_preload()) for the fonts painted above the fold. Empty = no tags.
+ *         fonts?: list<scalar|Param|null>,
+ *         manifest?: array{ // Hashed builds: pick the fonts from a Vite manifest (.vite/manifest.json). A missing manifest (dev server) prints nothing.
+ *             path?: scalar|Param|null, // Absolute path of the manifest, e.g. "%kernel.project_dir%/public/build/.vite/manifest.json"; null = off. // Default: null
+ *             entry?: scalar|Param|null, // Manifest entry whose "assets" list holds the fonts. // Default: "assets/app.js"
+ *             prefixes?: list<scalar|Param|null>,
+ *             base?: scalar|Param|null, // Public URL prefix of the manifest assets. // Default: "/build/"
+ *         },
+ *     },
  *     appearance?: array{ // Optional site appearance SPI (presets, --nowo-ui-* token emitter, Twig functions). Off by default.
  *         enabled?: bool|Param, // Default: false
  *         provider?: scalar|Param|null, // Service id implementing AppearanceProviderInterface (host storage). Null = the config defaults below. // Default: null
@@ -1366,6 +1377,7 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *         tokens_dark?: array<string, mixed>,
  *         confirm_message_in_header?: bool|Param, // Confirm dialogs and the full-page confirm render the message inside the header, under the title (hosts whose dialog header is title + message). View\Confirm::messageInHeader wins when set. // Default: false
  *         popover_menus?: bool|Param, // 2.4: menu / kebab / row-action menus render their panel as a native [popover] (browser top layer: never clipped by table scrollers or cards; nowo-ui-popover.js places it). The partial option `popover` wins. // Default: false
+ *         form_errors_after_widget?: bool|Param, // 2.10: the UiKit form theme (form/nowo_ui_layout.html.twig) prints a field's errors after its widget (and before the help), instead of Symfony's order (label, errors, widget, help). // Default: false
  *         bundles?: array<string, array{ // Default: []
  *             framework_defaults?: bool|Param, // Override of theme.framework_defaults for this bundle (unset = inherit).
  *             classes?: array<string, mixed>,
@@ -1385,6 +1397,35 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *             attributes?: array<string, array<string, mixed>>,
  *             header_actions_in_filters?: bool|Param, // list only: render the page-header actions at the end of the filter row instead of the page header (ListPage::headerActionsInFilters wins when set; unset = false).
  *         }>,
+ *     },
+ *     error_pages?: array{ // Kit error pages (2.6): templates/bundles/TwigBundle/Exception/error.html.twig = {% extends '@NowoUiKit/error/status.html.twig' %}.
+ *         layout_template?: scalar|Param|null, // Document the status template extends: the kit layout, or a host template extending it (own <head> assets, brand, chat dock…). // Default: "@NowoUiKit/error/layout.html.twig"
+ *         translation_domain?: scalar|Param|null, // Domain of the page texts (e.g. messages). Keys missing there fall back to UiKit's own NowoUiKitBundle error.* texts. // Default: "NowoUiKitBundle"
+ *         translation_prefix?: scalar|Param|null, // Key prefix: <prefix>.<code>.title|lead|hint|image_alt, <prefix>.generic.*, <prefix>.home|retry|back|retry_after|auto_retry|skip_to_content. // Default: "error"
+ *         home_path?: scalar|Param|null, // Href of the "Back to home" button. // Default: "/"
+ *         illustrations?: array<string, Param|string|array{ // Default: []
+ *             path?: scalar|Param|null,
+ *             width?: int|Param, // Default: null
+ *             height?: int|Param, // Default: null
+ *             webp?: bool|Param|null, // Default: null
+ *             extension?: scalar|Param|null, // Default: null
+ *         }>,
+ *         illustration_width?: int|Param, // Default intrinsic width of the illustrations. // Default: 1024
+ *         illustration_height?: int|Param, // Default intrinsic height of the illustrations. // Default: 683
+ *         webp?: bool|Param, // Illustrations ship a .webp next to the fallback image (<source type="image/webp">). // Default: true
+ *         retry_statuses?: list<int|Param>,
+ *         back_link_statuses?: list<int|Param>,
+ *         auto_retry_seconds?: int|Param, // A 5xx on GET reloads itself after this many seconds (REQ-ERROR-001 item 10; 0 = never). Never on POST. // Default: 600
+ *         theme_storage?: scalar|Param|null, // localStorage key of the theme (data-nowo-ui-theme-storage on <html> and the toggle), e.g. the host's beacon-theme. // Default: "nowo-ui-theme"
+ *         theme_toggle?: bool|Param, // Render the light / dark toggle in the top controls. // Default: true
+ *         html_attributes?: array<string, mixed>,
+ *     },
+ *     shell?: array{ // Signed-in app shell (2.6, @NowoUiKit/shell/_open|_close|_shell|_burger.html.twig; Twig global nowo_ui_kit_shell).
+ *         kit_styles?: bool|Param, // Add the kit shell classes (nowo-ui-shell, nowo-ui-header, nowo-ui-aside…) painted by nowo-ui.css and driven by nowo-ui-shell.js. false: only the app_* slot classes (host shell CSS / JS). // Default: true
+ *         sidebar_cookie?: scalar|Param|null, // Cookie holding the desktop aside mode (e.g. beacon_sidebar), read server-side so the first paint is already collapsed / rail; null = expanded unless the template passes collapsed. // Default: null
+ *         sidebar_hidden_value?: scalar|Param|null, // Cookie value of the hidden aside. // Default: "collapsed"
+ *         sidebar_rail_value?: scalar|Param|null, // Cookie value of the icons-only rail. // Default: "rail"
+ *         sidebar_storage?: scalar|Param|null, // localStorage key of the aside mode (data-nowo-ui-sidebar-storage on the shell root; kit_styles + rail only). // Default: null
  *     },
  * }
  * @psalm-type ConfigType = array{

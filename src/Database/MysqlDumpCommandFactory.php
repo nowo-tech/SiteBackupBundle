@@ -26,6 +26,9 @@ use function strtolower;
  *   `DELIMITER` blocks.
  * - Optional `--skip-ssl-verify-server-cert` (MariaDB client only): keep TLS against a MySQL
  *   server that presents a self-signed certificate on a private network.
+ * - Argument-injection safe (1.27+, REQ-SEC-004 CG F2): the database name follows a `--` end-of-options marker, and a
+ *   database, user, host or socket that starts with `-` or holds control characters is rejected
+ *   ({@see DatabaseUrlSafety}).
  *
  * Pure: no I/O, no state.
  */
@@ -35,7 +38,8 @@ final class MysqlDumpCommandFactory
     public const SUPPORTED_SCHEMES = ['mysql', 'mysql2', 'mariadb', 'pdo-mysql'];
 
     /**
-     * @param list<string> $extraOptions appended before the database name (e.g. --column-statistics=0)
+     * @param list<string> $extraOptions appended before the `--` end-of-options marker and the database name
+     *                                   (e.g. --column-statistics=0)
      *
      * @throws InvalidArgumentException when the URL is not a usable MySQL / MariaDB URL
      *
@@ -59,6 +63,11 @@ final class MysqlDumpCommandFactory
         $database = rawurldecode(ltrim($parts['path'], '/'));
         if ($database === '') {
             throw new InvalidArgumentException('DATABASE_URL has no database name.');
+        }
+
+        $violation = DatabaseUrlSafety::violation($databaseUrl);
+        if ($violation !== null) {
+            throw new InvalidArgumentException($violation);
         }
 
         $query = [];
@@ -88,6 +97,8 @@ final class MysqlDumpCommandFactory
                 $command[] = $option;
             }
         }
+        // End of options: whatever the database name holds, mysqldump reads it as the positional db_name.
+        $command[] = '--';
         $command[] = $database;
 
         return [

@@ -156,6 +156,7 @@ setup:
     title: 'Installatietoken vereist'
     body: 'Open %path% met de geconfigureerde setup.setup_token.'
     lead: 'Deze installatiewizard is beveiligd. Plak het installatietoken om verder te gaan.'
+    lead_console: 'Op deze site is geen installatietoken ingesteld. Voer op de server %command% uit en open de link die wordt getoond (of plak hieronder het eenmalige token).'
     field_label: 'Installatietoken'
     field_placeholder: 'Plak het installatietoken'
     submit: 'Doorgaan'

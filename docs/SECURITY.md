@@ -5,7 +5,7 @@
 - [Scope](#scope)
 - [Attack surface](#attack-surface)
 - [Threat model](#threat-model)
-- [Setup token (mandatory on internet-facing hosts)](#setup-token-mandatory-on-internet-facing-hosts)
+- [Setup access: default-deny (1.27+)](#setup-access-default-deny-127)
 - [Secrets & cryptography](#secrets--cryptography)
 - [Production secrets guard (opt-in, v1.16+)](#production-secrets-guard-opt-in-v116)
 - [CSP nonces](#csp-nonces)
@@ -22,7 +22,7 @@ Covers backup creation, integrity verification, restore orchestration, restore l
 
 - Admin panel (`/_site_backup`) — create/delete/restore
 - Progress JSON endpoint (intentionally reachable during restore for the loading UI; anonymous callers get `active` / `phase` / `percent` / `message` only)
-- Setup wizard (`/_setup`, `/_setup/api/progress`, `/_setup/api/advance`) — only while setup is required; `setup_token` (**mandatory on internet-facing hosts**)
+- Setup wizard (`/_setup`, `/_setup/api/progress`, `/_setup/api/advance`) — the page and `api/advance` exist only while setup is required (302 `/` / 404 otherwise); every request needs `setup.setup_token` or a one-time token from `nowo:site-backup:setup-token` (default-deny, 1.27+)
 - CLI commands (`nowo:site-backup:*`)
 - Configured `database_dump_command` and setup `console` steps (shell — operator-configured only)
 - Archive extract/apply paths
@@ -33,18 +33,29 @@ Covers backup creation, integrity verification, restore orchestration, restore l
 | --- | --- | --- |
 | Panel password guessing / session fixation | High | `security.login_throttle` per-IP rate limit (HTTP 429 + `Retry-After`) and session id rotation after login (v1.17+) |
 | Unauthorized restore/delete | High | REQ-UI-002 `access_roles` / `SiteBackupAccessCheckerInterface` (default `ROLE_ADMIN`) unless `allow_unauthenticated`; plus password gate / custom `SiteBackupAccessGateInterface` (**fail-closed** when `password_protection` is true but `password_hash` is empty); CSRF on panel POSTs (**fail-closed** if CSRF manager missing — require `symfony/security-csrf`; `CsrfProtectionPass` also refuses to compile the container while the panel or the setup wizard is registered without `form.type_extension.csrf` or with `framework.form.csrf_protection: false`, where the token manager exists but forms would skip validation). Password gate is **additional** to role check. `allow_unauthenticated: true` is demo/dev only |
-| Unauthorized setup / admin creation | High | Wizard page and `api/advance` answer only while setup is required (`api/advance` returns 404 once completed); the profile is pinned once a run started; `setup_token` (see below); CSRF fail-closed (controller check + `CsrfProtectionPass` at compile time); `AdminUserProvisionerInterface` is app-owned |
+| Unauthorized setup / admin creation | High | **Default-deny (1.27+):** no static `setup_token` ⇒ only a one-time token issued on the server by `nowo:site-backup:setup-token` (SHA-256 hash, `0600`, removed on completion) opens the wizard; the dev-only `setup.allow_without_token` is a literal boolean refused unless `kernel.debug`, and never opens `api/advance`. The page and `api/advance` exist only while `SetupNeedEvaluator::isSetupRequired()` (302 `/` / 404); the profile is pinned once a run started; CSRF fail-closed (controller check + `CsrfProtectionPass` at compile time); `AdminUserProvisionerInterface` is app-owned |
+| Wizard started by a page view | High | **1.27+:** a GET never starts or advances a run — the first step runs on a CSRF-protected POST (or a token-authenticated `api/advance`); a host that does not need setup answers `GET /_setup` with 302 `/` and writes nothing, so the site-wide redirect to `/_setup` only follows a real need (detectors, `setup.required` from an operator / restore, an unfinished run) |
+| Wizard reopened from a stale / lost progress file | Medium | **1.27+:** the wizard is closed whenever setup is not required, and `setup.done` (or the durable store) short-circuits that check whatever the progress file says (idle after a `var/` wipe, or a stale `running`) |
 | `.env.local` injection via DATABASE_URL | High | Value always written single-quoted (no Dotenv `$VAR` / `$(cmd)` expansion); single quotes, line breaks and control characters rejected |
+| Option-like `DATABASE_URL` components reaching the `mysqldump` argv | Medium | **1.27+:** `MysqlDumpCommandFactory` puts `--` (end of options) before the database name and rejects a database, user, host or `unix_socket` that starts with `-` or holds control characters (decoded); the setup `database_url` step refuses the same values before writing `.env.local` (`DatabaseUrlSafety`). The password stays in `MYSQL_PWD`, never in argv. No other dump / client argv is built by the bundle (`database_dump_command` is operator shell config; SQL import goes through PDO) |
 | Arbitrary file import via `sql_import_path` | High | Only existing `.sql` files under `var/site-backup/` (real path, no `../` / symlink escape); SQL errors report the SQLSTATE only, never the dump contents |
 | Path traversal on apply | High | Relative paths from archive; protected paths; never overwrite `var/site-backup/` |
 | Command injection via dump/setup cmd | High | Dump / console commands are **operator-configured** only (not from free-form HTTP input) |
 | Progress info disclosure | Low | Restore `progress.json` gives the log / error / backup id only to authorised panel users; `/_setup/api/progress` needs the setup token and never returns wizard answers |
 | Archive / dump at rest | Medium | Archives (`chmod 0600`) and `var/site-backup/last-restore-dump.sql` (`0600`, deleted after the setup `sql_file` step imports it) are owner-only |
+| Backup / verify / restore staging read by another local user | Low | **1.27+:** the staging trees under the system temp dir are created `0700` with an atomic `mkdir` under an unpredictable name (`nowo-site-backup[-verify\|-restore]-<id>-<32 hex>`); the DB dump and `MANIFEST.json` are `0600`; project files keep their own modes inside the archive (restore BC) but sit under the `0700` parent. No process-wide `umask()` is changed (worker-safe) |
 | DoS via huge archives / long setup / hung subprocess | Medium | `process_timeout` is the hard **and** idle timeout of every subprocess (`tar`, dump, console steps); on expiry the whole process tree is killed (no orphan `mysqldump`) and the partial archive removed. Layer PHP / proxy / FrankenPHP deadlines above it ([CONFIGURATION.md](CONFIGURATION.md#timeouts-req-runtime-001)); ops should size storage and includes carefully |
 
-## Setup token (mandatory on internet-facing hosts)
+## Setup access: default-deny (1.27+)
 
-`setup.setup_token` defaults to `null`, which leaves `/_setup` and its JSON API open to anyone who reaches the host while setup is required (fresh install, after a restore, after `setup:reset`). Whoever gets there first can write `DATABASE_URL`, create the admin user or import a dump. Always set a long random `SITE_SETUP_TOKEN` on hosts reachable from the internet, and turn on `security_guard.enabled: true` so an empty or documented token fails closed.
+Since 1.27.0 the wizard is **default-deny**:
+
+1. It exists only while setup is required (`SetupNeedEvaluator::isSetupRequired()`): otherwise `/_setup` answers 302 `/` and `api/advance` 404 (the read-only, token-gated `api/progress` keeps answering). `setup.done` closes it whatever the progress file says.
+2. Every request needs a token: the static `setup.setup_token` (`?token=` or `X-Setup-Token`), or the **one-time token** printed by `php bin/console nowo:site-backup:setup-token` (add `--open` to write `setup.required` on a host whose detectors do not report a need; `--revoke` deletes it). Only the SHA-256 hash is stored (`setup.access_token_file`, default `var/site-backup/setup.token`, `0600`); the token is deleted when the wizard completes. Without a static token the 403 gate tells the operator to run that command.
+3. A GET never starts or advances a run; advancing is a CSRF-protected POST. `api/advance` always needs a token (the token is its CSRF defence).
+4. `setup.allow_without_token: true` (DEV/DEMO only) reopens the page without a token when no `setup_token` is set; it must be a literal boolean and the container refuses to compile it unless `kernel.debug` is true. It never opens `api/advance`.
+
+On internet-facing hosts still prefer a long random `SITE_SETUP_TOKEN` (or the one-time token) **and** firewall `/_setup`; turn on `security_guard.enabled: true` so an empty or documented static token fails closed.
 
 ## Secrets & cryptography
 
@@ -130,4 +141,4 @@ Progress JSON used by the restore loading UI may need to stay reachable during a
 | Safe cryptography | ✅ |
 | Permissions/exposure documented | ✅ |
 | Limits/DoS (`process_timeout`) | ✅ |
-| Passes AI security audit (REQ-SEC-004; grade in monorepo `BUNDLES_SECURITY_ANALYSIS.md`) | ✅ Pass (conditional) after fail-closed remedia 2026-07-29 — residuals: host must set `password_hash` + install `symfony/security-csrf`; firewall `/_site_backup` and `/_setup` |
+| Passes AI security audit (REQ-SEC-004; grade in monorepo `BUNDLES_SECURITY_ANALYSIS.md`) | ⏳ Re-audit pending for the 1.27.0 setup / dump hardening. Residuals: host must set `password_hash` + install `symfony/security-csrf`; firewall `/_site_backup` and `/_setup` |

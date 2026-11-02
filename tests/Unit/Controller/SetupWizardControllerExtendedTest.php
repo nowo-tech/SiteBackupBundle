@@ -52,6 +52,7 @@ final class SetupWizardControllerExtendedTest extends TestCase
             '/_setup',
             'Brand',
             null,
+            allowWithoutToken: true,
         );
 
         self::assertSame(302, $controller->index(Request::create('/'))->getStatusCode());
@@ -77,6 +78,7 @@ final class SetupWizardControllerExtendedTest extends TestCase
             '/_setup',
             'Brand',
             null,
+            allowWithoutToken: true,
         );
 
         foreach (['minimal', 'full_database'] as $profile) {
@@ -110,10 +112,10 @@ final class SetupWizardControllerExtendedTest extends TestCase
             ['setup_wizard' => 'wizard', 'setup_done' => 'done', 'setup_token' => 'token'],
             '/_setup',
             'Brand',
-            null,
+            'tok',
         );
 
-        $api      = Request::create('/api/advance', 'POST', [], [], [], ['CONTENT_TYPE' => 'application/json'], '{"profile":"full_database"}');
+        $api      = Request::create('/api/advance', 'POST', [], [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_X-Setup-Token' => 'tok'], '{"profile":"full_database"}');
         $response = $controller->advanceApi($api);
         self::assertSame(200, $response->getStatusCode());
         $data = json_decode((string) $response->getContent(), true);
@@ -126,7 +128,7 @@ final class SetupWizardControllerExtendedTest extends TestCase
         // Before any run (idle) the payload may still choose the profile.
         $orchestrator->resetProgress();
         $first = json_decode((string) $controller->advanceApi(
-            Request::create('/api/advance', 'POST', [], [], [], ['CONTENT_TYPE' => 'application/json'], '{"profile":"full_database"}'),
+            Request::create('/api/advance', 'POST', [], [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_X-Setup-Token' => 'tok'], '{"profile":"full_database"}'),
         )->getContent(), true);
         self::assertIsArray($first);
         self::assertSame('full_database', $first['profile']);
@@ -159,6 +161,7 @@ final class SetupWizardControllerExtendedTest extends TestCase
             'Brand',
             null,
             $csrf,
+            allowWithoutToken: true,
         );
 
         self::assertSame(200, $controller->index(Request::create('/?profile=admin_only', 'GET'))->getStatusCode());
@@ -186,6 +189,7 @@ final class SetupWizardControllerExtendedTest extends TestCase
             '/_setup',
             'Brand',
             null,
+            allowWithoutToken: true,
         );
         self::assertSame(200, $noCsrfManager->index(Request::create('/', 'POST'))->getStatusCode());
     }
@@ -217,6 +221,7 @@ final class SetupWizardControllerExtendedTest extends TestCase
             'Brand',
             null,
             $csrf,
+            allowWithoutToken: true,
         );
 
         $get = Request::create('/?profile=waiting_profile', 'GET');
@@ -235,12 +240,14 @@ final class SetupWizardControllerExtendedTest extends TestCase
             'Brand',
             null,
             $csrf,
+            allowWithoutToken: true,
         );
         $post = Request::create('/?profile=bad', 'POST', ['_csrf_token' => 'token']);
         self::assertSame(200, $failController->index($post)->getStatusCode());
 
+        // CG F1: setup.allow_without_token opens the page, never the JSON API (the token is its CSRF defence).
         $api = Request::create('/api/advance', 'POST', [], [], [], ['CONTENT_TYPE' => 'application/json'], '{bad json');
-        self::assertSame(200, $controller->advanceApi($api)->getStatusCode());
+        self::assertSame(403, $controller->advanceApi($api)->getStatusCode());
 
         $forbidden = new SetupWizardController(
             $orchestrator,
@@ -268,6 +275,9 @@ final class SetupWizardControllerExtendedTest extends TestCase
             $csrf,
         );
         self::assertSame(200, $headerController->advanceApi($headerToken)->getStatusCode());
+
+        $badJson = Request::create('/api/advance', 'POST', [], [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_X-Setup-Token' => 'secret'], '{bad json');
+        self::assertSame(200, $headerController->advanceApi($badJson)->getStatusCode());
     }
 
     public function testWizardRendersBootstrapSampleAndDatabaseUrlForms(): void
@@ -301,9 +311,12 @@ final class SetupWizardControllerExtendedTest extends TestCase
                 'Brand',
                 null,
                 $csrf,
+                allowWithoutToken: true,
             );
 
-            $response = $controller->index(Request::create('/?profile=' . $profile, 'GET'));
+            // A GET only shows the Continue form (CG F1); the POST starts the run and renders the waiting step form.
+            self::assertSame(200, $controller->index(Request::create('/?profile=' . $profile, 'GET'))->getStatusCode(), $profile);
+            $response = $controller->index(Request::create('/?profile=' . $profile, 'POST', ['_csrf_token' => 'token']));
             self::assertSame(200, $response->getStatusCode(), $profile);
         }
     }
@@ -333,6 +346,7 @@ final class SetupWizardControllerExtendedTest extends TestCase
             'Brand',
             null,
             $csrf,
+            allowWithoutToken: true,
         );
 
         $createForm = new ReflectionMethod(SetupWizardController::class, 'createSetupForm');

@@ -35,6 +35,8 @@ nowo_site_backup:
         path_prefix: '/_setup'
         # require_done_marker: true   # force wizard until setup.done exists
         brand_name: 'Site Setup'
+        # Default-deny (1.27+): without setup_token the wizard only opens with a one-time token from
+        # `php bin/console nowo:site-backup:setup-token --open`.
         # setup_token: '%env(SITE_SETUP_TOKEN)%'
         # admin_provisioner: App\Setup\AdminUserProvisioner
         # progress_storage: chain   # filesystem | doctrine | chain (DB survives var/ wipe)

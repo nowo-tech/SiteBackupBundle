@@ -156,6 +156,7 @@ setup:
     title: 'Token di configurazione richiesto'
     body: 'Apri %path% con il setup.setup_token configurato.'
     lead: 'Questa procedura di configurazione è protetta. Incolla il token di configurazione per continuare.'
+    lead_console: 'Su questo sito non è configurato alcun token di configurazione. Sul server esegui %command% e apri il link mostrato (oppure incolla qui sotto il token monouso).'
     field_label: 'Token di configurazione'
     field_placeholder: 'Incolla il token di configurazione'
     submit: 'Continua'

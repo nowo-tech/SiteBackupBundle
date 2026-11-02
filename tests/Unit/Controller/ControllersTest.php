@@ -201,18 +201,6 @@ final class ControllersTest extends TestCase
 
         self::assertSame(403, $controller->index(Request::create('/'))->getStatusCode());
 
-        $request = Request::create('/?_setup=1', 'GET');
-        $request->query->set('token', 'secret-token');
-        self::assertSame(302, $controller->index($request)->getStatusCode());
-
-        $markers->clearDone();
-        $markers->markRequired('fresh_install');
-        $orchestrator->resetProgress();
-        $post = Request::create('/', 'POST', ['_csrf_token' => 'token']);
-        $post->query->set('token', 'secret-token');
-        self::assertSame(302, $controller->index($post)->getStatusCode());
-
-        self::assertSame(200, $controller->done()->getStatusCode());
         // Progress API is token-gated and never leaks answers.
         self::assertSame(403, $controller->progress()->getStatusCode());
         self::assertSame(403, $controller->progress(Request::create('/api/progress'))->getStatusCode());
@@ -223,9 +211,24 @@ final class ControllersTest extends TestCase
         $progressData = json_decode((string) $progressResponse->getContent(), true);
         self::assertIsArray($progressData);
         self::assertArrayNotHasKey('answers', $progressData);
-        self::assertSame('completed', $progressData['phase']);
+        self::assertSame('idle', $progressData['phase']);
 
-        // Setup is done: the advance API is gone even with a valid token.
+        // CG F1: a GET (even with the token) renders the wizard but never starts the run.
+        $request = Request::create('/?_setup=1', 'GET');
+        $request->query->set('token', 'secret-token');
+        self::assertSame(200, $controller->index($request)->getStatusCode());
+        self::assertSame('idle', $orchestrator->getProgress()->getPhase());
+
+        $post = Request::create('/', 'POST', ['_csrf_token' => 'token']);
+        $post->query->set('token', 'secret-token');
+        self::assertSame(302, $controller->index($post)->getStatusCode());
+        self::assertTrue($markers->isDone());
+
+        self::assertSame(200, $controller->done()->getStatusCode());
+        // Setup is done: the wizard and the advance API are gone even with a valid token; progress stays readable.
+        self::assertSame(302, $controller->index($request)->getStatusCode());
+        self::assertSame(200, $controller->progress($progressRequest)->getStatusCode());
+
         $api = Request::create('/api/advance', 'POST', [], [], [], ['CONTENT_TYPE' => 'application/json'], '{"profile":"fresh_install"}');
         $api->query->set('token', 'secret-token');
         self::assertSame(404, $controller->advanceApi($api)->getStatusCode());

@@ -114,6 +114,36 @@
 
 ## Unreleased
 
+Proposed **1.27.0** (security hardening, REQ-SEC-004). The setup wizard is **default-deny**.
+
+**No action needed** when the host sets `nowo_site_backup.setup.setup_token` (or disables the wizard, e.g.
+`when@prod: setup.enabled: false`) or has already completed setup (`setup.done` / durable store): completed hosts keep
+the wizard closed (302 `/`), now even if the progress file is lost.
+
+**Action needed** when the host used the web wizard **without** `setup_token`:
+
+1. First install / after a restore: on the server run
+   `php bin/console nowo:site-backup:setup-token --open` (add `=<profile>` to pick one, e.g. `--open=post_restore`) and
+   open the printed `/_setup?token=…` link. Without `--open` the token is issued but the wizard stays closed unless a
+   detector (or `setup.required`) reports a need. The token is one-time: it is deleted when the wizard completes
+   (`--revoke` deletes it earlier). A host already mid-setup sees a 403 gate that says to run this command.
+2. Or set a static secret: `setup_token: '%env(SITE_SETUP_TOKEN)%'` with a long random value.
+3. Dev / demo only: `setup.allow_without_token: true` keeps the token-less page; it must be a literal boolean and the
+   container refuses it unless `kernel.debug` is true. `/_setup/api/advance` always needs a token.
+
+Behaviour changes to check in host tests / scripts:
+
+- `GET /_setup` no longer starts a run (it does not write `setup.required` or progress); the first step runs on the
+  Continue POST. A test that asserted `setup.required` after a GET must POST first (or mark it itself).
+- `/_setup` and `/_setup/api/advance` answer 302 `/` / 404 whenever setup is not required (before, `/_setup` stayed
+  open until a run completed). `/_setup/api/progress` is unchanged (token-gated, read-only). Scripts that drive `api/advance` must send the token
+  (`X-Setup-Token` or `?token=`) even when `setup_token` is null (use the one-time token).
+- `DATABASE_URL` values whose database, user, host or `unix_socket` start with `-` or contain control characters are
+  rejected by `nowo:site-backup:db-dump` and by the setup `database_url` step; the `mysqldump` argv now ends with
+  `-- <database>`.
+- Backup / verify / restore staging directories are `<tmp>/nowo-site-backup[-verify|-restore]-<id>-<32 hex>` (`0700`)
+  instead of the fixed `<tmp>/nowo-site-backup-<id>`.
+
 ## To 1.26.0
 
 `nowo-tech/form-kit-bundle` (`^2.14`) is now required. Register `Nowo\FormKitBundle\NowoFormKitBundle` in

@@ -7,6 +7,7 @@ namespace Nowo\SiteBackupBundle\Restore;
 use Closure;
 use DateTimeImmutable;
 use Nowo\SiteBackupBundle\Backup\BackupArchiver;
+use Nowo\SiteBackupBundle\Backup\PrivateTempDirectory;
 use Nowo\SiteBackupBundle\Backup\RuntimeStatePaths;
 use Nowo\SiteBackupBundle\Model\BackupArtifact;
 use Nowo\SiteBackupBundle\Model\RestoreProgress;
@@ -38,7 +39,6 @@ use function str_replace;
 use function str_starts_with;
 use function strlen;
 use function substr;
-use function sys_get_temp_dir;
 
 /**
  * Safe restore: validate → extract to staging → apply under restore mode → finalize.
@@ -227,7 +227,8 @@ final class RestoreOrchestrator implements ResetInterface
             updatedAt: $now,
         ));
 
-        $staging      = sys_get_temp_dir() . '/nowo-site-backup-restore-' . $artifact->getId();
+        // Created after the integrity check: owner-only, unpredictable name (CG L1).
+        $staging      = '';
         $filesTouched = false;
         $heartbeat    = $this->heartbeat(...);
 
@@ -239,8 +240,7 @@ final class RestoreOrchestrator implements ResetInterface
             }
             $this->appendLog('Integrity OK (' . count($integrity['checksums']) . ' files).');
 
-            $this->filesystem->remove($staging);
-            $this->filesystem->mkdir($staging);
+            $staging = PrivateTempDirectory::create('nowo-site-backup-restore-' . $artifact->getId() . '-');
 
             $this->advance(RestoreProgress::PHASE_EXTRACTING, 35.0, self::MESSAGE_EXTRACTING);
             $this->archiver->extractTo($artifact, $staging, $heartbeat);

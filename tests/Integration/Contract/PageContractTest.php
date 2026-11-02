@@ -310,8 +310,15 @@ final class PageContractTest extends PageContractTestCase
         self::assertStringContainsString('data-testid="nowo-sbb-token-gate"', (string) $gate->getContent());
         self::assertStringContainsString('X-Setup-Token', (string) $gate->getContent());
 
-        // The optional DATABASE_URL step keeps the env value (skipped on the first advance); the admin form follows.
-        $wizard = $controller->index(Request::create('/_setup?token=s3cret'));
+        // CG F1: the GET renders the wizard without starting the run (no progress written).
+        $start = $controller->index(Request::create('/_setup?token=s3cret'));
+        self::assertSame(200, $start->getStatusCode());
+        self::assertStringContainsString('data-testid="nowo-sbb-setup-wizard"', (string) $start->getContent());
+        self::assertSame('idle', $orchestrator->getProgress()->getPhase());
+
+        // The Continue POST starts it: the optional DATABASE_URL step keeps the env value (skipped on the first
+        // advance); the admin form follows.
+        $wizard = $controller->index(Request::create('/_setup?token=s3cret', 'POST', ['_csrf_token' => 't']));
         self::assertSame(200, $wizard->getStatusCode());
         $admin = (string) $wizard->getContent();
         self::assertStringContainsString('data-nowo-ui-contract-layout="guest"', $admin);

@@ -156,6 +156,7 @@ setup:
     title: 'Einrichtungstoken erforderlich'
     body: 'Öffnen Sie %path% mit dem konfigurierten setup.setup_token.'
     lead: 'Dieser Einrichtungsassistent ist geschützt. Fügen Sie das Einrichtungstoken ein, um fortzufahren.'
+    lead_console: 'Für diese Website ist kein Einrichtungstoken konfiguriert. Führen Sie auf dem Server %command% aus und öffnen Sie den ausgegebenen Link (oder fügen Sie das Einmal-Token unten ein).'
     field_label: 'Einrichtungstoken'
     field_placeholder: 'Einrichtungstoken einfügen'
     submit: 'Weiter'

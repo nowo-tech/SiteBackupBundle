@@ -22,6 +22,7 @@ final class MysqlDumpCommandFactoryTest extends TestCase
             '--host=db.internal',
             '--port=3307',
             '--user=app@x',
+            '--',
             'my_db',
         ], $spec['command']);
         self::assertSame(['MYSQL_PWD' => 's>cret'], $spec['env']);
@@ -48,6 +49,7 @@ final class MysqlDumpCommandFactoryTest extends TestCase
             '--socket=/run/mysqld/mysqld.sock',
             '--user=root',
             '--column-statistics=0',
+            '--',
             'app',
         ], $spec['command']);
         self::assertSame(['MYSQL_PWD' => ''], $spec['env']);

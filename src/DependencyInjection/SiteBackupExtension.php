@@ -7,6 +7,7 @@ namespace Nowo\SiteBackupBundle\DependencyInjection;
 use LogicException;
 use Nowo\SiteBackupBundle\Backup\BackupArchiver;
 use Nowo\SiteBackupBundle\Command\DatabaseDumpCommand;
+use Nowo\SiteBackupBundle\Command\SetupTokenCommand;
 use Nowo\SiteBackupBundle\Controller\SetupUnlocalizedLocaleRedirectController;
 use Nowo\SiteBackupBundle\Controller\SetupWizardController;
 use Nowo\SiteBackupBundle\Controller\SiteBackupPanelController;
@@ -46,6 +47,7 @@ use Nowo\SiteBackupBundle\Setup\DurableSetupDoneStoreInterface;
 use Nowo\SiteBackupBundle\Setup\Memo\WorkerTtlMemo;
 use Nowo\SiteBackupBundle\Setup\NullAdminUserProvisioner;
 use Nowo\SiteBackupBundle\Setup\NullDurableSetupDoneStore;
+use Nowo\SiteBackupBundle\Setup\SetupAccessTokenStore;
 use Nowo\SiteBackupBundle\Setup\SetupDbDoneGuard;
 use Nowo\SiteBackupBundle\Setup\SetupOrchestrator;
 use Nowo\SiteBackupBundle\Setup\SetupStepFactory;
@@ -68,6 +70,7 @@ use Nowo\SiteBackupBundle\View\SetupTokenGate;
 use Nowo\SiteBackupBundle\View\SiteBackupView;
 use Nowo\SiteBackupBundle\Worker\WorkerRestartSignal;
 use Psr\Clock\ClockInterface;
+use Symfony\Component\Config\Definition\Exception\InvalidConfigurationException;
 use Symfony\Component\Config\FileLocator;
 use Symfony\Component\DependencyInjection\Argument\TaggedIteratorArgument;
 use Symfony\Component\DependencyInjection\Compiler\ServiceLocatorTagPass;
@@ -85,6 +88,7 @@ use function array_key_exists;
 use function array_values;
 use function in_array;
 use function is_array;
+use function is_bool;
 use function is_int;
 use function is_string;
 use function trigger_deprecation;
@@ -865,6 +869,14 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$requiredFile', $setup['required_marker_file'])
             ->setArgument('$doneFile', $setup['done_marker_file']);
 
+        // One-time setup access token (1.27+, REQ-SEC-004 CG F1): issued by nowo:site-backup:setup-token.
+        $container->register(SetupAccessTokenStore::class, SetupAccessTokenStore::class)
+            ->setArgument('$tokenFile', $setup['access_token_file'] ?? '%kernel.project_dir%/var/site-backup/setup.token');
+        if ($container->hasDefinition(SetupTokenCommand::class)) {
+            $container->getDefinition(SetupTokenCommand::class)
+                ->setArgument('$pathPrefix', $setup['path_prefix']);
+        }
+
         $dbalRef = new Reference('doctrine.dbal.default_connection', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE);
 
         $container->getDefinition(FilesystemSetupProgressStorage::class)
@@ -1094,6 +1106,8 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
 
         $token = $setup['setup_token'] ?? null;
         $container->getDefinition(SetupWizardController::class)
+            ->setArgument('$accessTokens', new Reference(SetupAccessTokenStore::class))
+            ->setArgument('$allowWithoutToken', $this->allowSetupWithoutToken($container, $setup['allow_without_token'] ?? false))
             ->setArgument('$orchestrator', new Reference(SetupOrchestrator::class))
             ->setArgument('$needEvaluator', new Reference(SetupNeedEvaluator::class))
             ->setArgument('$twig', new Reference('twig'))
@@ -1107,6 +1121,24 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$view', new Reference(SiteBackupView::class))
             ->setArgument('$tokenGate', new Reference(SetupTokenGate::class))
             ->setPublic(true);
+    }
+
+    /**
+     * setup.allow_without_token (1.27+) re-opens the wizard page to anyone when no setup_token is set, so it must be a
+     * literal boolean (an %env(bool:…)% placeholder is a non-empty string at build time and would read as true) and is
+     * refused unless kernel.debug is true.
+     */
+    private function allowSetupWithoutToken(ContainerBuilder $container, mixed $value): bool
+    {
+        if (!is_bool($value)) {
+            throw new InvalidConfigurationException('nowo_site_backup.setup.allow_without_token must be a literal boolean (true or false); environment placeholders such as %env(bool:...)% are not supported for security switches.');
+        }
+
+        if ($value && (!$container->hasParameter('kernel.debug') || $container->getParameter('kernel.debug') !== true)) {
+            throw new InvalidConfigurationException('nowo_site_backup.setup.allow_without_token: true is only allowed when kernel.debug is true (dev / demo). Set setup.setup_token or issue a one-time token with "php bin/console nowo:site-backup:setup-token".');
+        }
+
+        return $value;
     }
 
     /**

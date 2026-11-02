@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Setup\Step;
 
+use Nowo\SiteBackupBundle\Database\DatabaseUrlSafety;
 use Nowo\SiteBackupBundle\Setup\SetupContext;
 use Nowo\SiteBackupBundle\Setup\SetupStepInput;
 use Nowo\SiteBackupBundle\Setup\SetupStepResult;
@@ -56,6 +57,13 @@ final class DatabaseUrlStep extends AbstractSetupStep
         // Single quotes keep Dotenv from expanding $VAR / $(cmd); a quote or line break would escape them.
         if (str_contains($url, "'") || preg_match('/[\x00-\x1F\x7F]/', $url) === 1) {
             return SetupStepResult::fail('DATABASE_URL must not contain single quotes, line breaks or control characters (percent-encode them, e.g. %27).');
+        }
+
+        // CG F2: a database / user / host that starts with "-" (or decodes to control characters) would reach the
+        // mysqldump argv as an option.
+        $violation = DatabaseUrlSafety::violation($url);
+        if ($violation !== null) {
+            return SetupStepResult::fail($violation);
         }
 
         $envLocal   = rtrim($ctx->getProjectDir(), '/\\') . '/.env.local';

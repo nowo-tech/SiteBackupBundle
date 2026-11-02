@@ -65,6 +65,41 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Security hardening of the setup wizard and the dump command (REQ-SEC-004). Proposed version **1.27.0**: the setup wizard
+is now default-deny, so a host that ran the web wizard without `setup.setup_token` must issue a one-time token (or set
+the token). See [UPGRADING](UPGRADING.md#unreleased) and [SECURITY](SECURITY.md#setup-access-default-deny-127).
+
+### Security
+
+- **Setup wizard is default-deny.** It used to be reachable without a token in the default configuration
+  (`setup_token: null`) and a page view could start a run. Now:
+  - `/_setup` and `/_setup/api/advance` exist only while
+    `SetupNeedEvaluator::isSetupRequired()` reports a real need (302 `/` / 404 otherwise). The closed state no longer
+    depends on the progress file: `setup.done` closes the wizard even when progress is idle or lost.
+  - A GET never starts or advances a run: the first step runs on a CSRF-protected POST (Continue).
+  - Every request needs `setup.setup_token` or a **one-time token** issued on the server by the new
+    `nowo:site-backup:setup-token` command (`--open` also writes `setup.required` and restarts a finished run, `--revoke`
+    deletes the token). The
+    token is stored as a SHA-256 hash (`setup.access_token_file`, default `var/site-backup/setup.token`, `0600`) and
+    removed when the wizard completes. Without a static token the 403 gate tells the operator to run the command
+    (new key `setup.token.lead_console`, 7 locales).
+  - `api/advance` always needs a token (its CSRF defence).
+  - New `setup.allow_without_token` (default `false`, DEV/DEMO only): literal boolean, refused unless `kernel.debug` is
+    true; reopens the page (never the API) without a token. The demo opts in.
+- **`mysqldump` argv hardening.** `MysqlDumpCommandFactory` adds a `--` end-of-options marker before
+  the database name and rejects a database, user, host or `unix_socket` that starts with `-` or contains control
+  characters (`InvalidArgumentException`); the setup `database_url` step refuses the same values before writing
+  `.env.local` (new `Database\DatabaseUrlSafety`).
+- **Private staging directories.** Backup, verify and restore staging trees are created `0700` under an
+  unpredictable name (`<prefix>-<id>-<32 hex>`, atomic `mkdir`, new `Backup\PrivateTempDirectory`); the DB dump and
+  `MANIFEST.json` are written `0600`.
+
+### Changed
+
+- `GET /_setup` on an idle run renders the wizard with a Continue button instead of running the first automatic steps.
+- `SetupWizardController` takes two optional constructor arguments (`$accessTokens`, `$allowWithoutToken`).
+- `mysqldump` argv ends with `-- <database>`.
+
 ## [1.26.0] - 2026-10-30
 
 The panel and setup wizard forms are FormKit Types (REQ-TWIG-005 rule 11). See [UPGRADING](UPGRADING.md#to-1260).
