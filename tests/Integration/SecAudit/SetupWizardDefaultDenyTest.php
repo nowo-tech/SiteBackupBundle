@@ -95,11 +95,11 @@ final class SetupWizardDefaultDenyTest extends TestCase
         $admin = $this->send($kernel, Request::create('/_setup', 'POST', [
             '_csrf_token' => $this->csrf((string) $gate->getContent()),
             'email'       => 'attacker@evil.example',
-            'password'    => 'attacker-pass',
+            'password'    => $this->password(),
         ]), $cookie);
         self::assertSame(403, $admin->getStatusCode());
 
-        $api = $this->send($kernel, $this->advance(['email' => 'attacker@evil.example', 'password' => 'attacker-pass']), $cookie);
+        $api = $this->send($kernel, $this->advance(['email' => 'attacker@evil.example', 'password' => $this->password()]), $cookie);
         self::assertSame(403, $api->getStatusCode());
         self::assertSame(403, $this->send($kernel, Request::create('/_setup/api/progress'), $cookie)->getStatusCode());
 
@@ -143,7 +143,7 @@ final class SetupWizardDefaultDenyTest extends TestCase
         $done = $this->send($kernel, Request::create('/_setup?token=' . $token, 'POST', [
             '_csrf_token' => $this->csrf((string) $adminForm->getContent()),
             'email'       => 'owner@example.com',
-            'password'    => 'Owner-Pass-2026!',
+            'password'    => $this->password(),
         ]), $cookie);
         self::assertSame(302, $done->getStatusCode());
         self::assertStringEndsWith('/_setup/done', (string) $done->headers->get('Location'));
@@ -192,7 +192,7 @@ final class SetupWizardDefaultDenyTest extends TestCase
             self::assertSame(302, $page->getStatusCode());
             self::assertSame('/', $page->headers->get('Location'));
 
-            $api = $this->advance(['email' => 'second@example.com', 'password' => 'x']);
+            $api = $this->advance(['email' => 'second@example.com', 'password' => $this->password()]);
             $api->headers->set('X-Setup-Token', self::STATIC_TOKEN);
             self::assertSame(404, $this->send($kernel, $api, $cookie)->getStatusCode());
             // The read-only progress API stays token-gated (pollers read the final phase).
@@ -242,6 +242,12 @@ final class SetupWizardDefaultDenyTest extends TestCase
     private function advance(array $payload): Request
     {
         return Request::create('/_setup/api/advance', 'POST', [], [], [], ['CONTENT_TYPE' => 'application/json'], (string) json_encode($payload));
+    }
+
+    /** Generated per run: the suite never carries a literal credential. */
+    private function password(): string
+    {
+        return 'Aa1!' . bin2hex(random_bytes(8));
     }
 
     private function marker(string $name): string
