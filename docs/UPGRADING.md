@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.27.0](#to-1270)
 - [To 1.26.0](#to-1260)
 - [To 1.25.1](#to-1251)
 - [To 1.25.0](#to-1250)
@@ -114,7 +115,15 @@
 
 ## Unreleased
 
-Proposed **1.27.0** (security hardening, REQ-SEC-004). The setup wizard is **default-deny**.
+## To 1.27.0
+
+From **1.26.0**:
+
+```bash
+composer update nowo-tech/site-backup-bundle
+```
+
+Security hardening (REQ-SEC-004). The setup wizard is **default-deny**.
 
 **No action needed** when the host sets `nowo_site_backup.setup.setup_token` (or disables the wizard, e.g.
 `when@prod: setup.enabled: false`) or has already completed setup (`setup.done` / durable store): completed hosts keep

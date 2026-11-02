@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.27.0] - 2026-11-02](#1270---2026-11-02)
 - [[1.26.0] - 2026-10-30](#1260---2026-10-30)
 - [[1.25.1] - 2026-10-30](#1251---2026-10-30)
 - [[1.25.0] - 2026-10-29](#1250---2026-10-29)
@@ -65,9 +66,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Security hardening of the setup wizard and the dump command (REQ-SEC-004). Proposed version **1.27.0**: the setup wizard
+## [1.27.0] - 2026-11-02
+
+Security release: the setup wizard is default-deny (token required, no side effects on GET), mysqldump gets an option terminator and DSN validation, backup staging is owner-only. See [UPGRADING](https://github.com/nowo-tech/SiteBackupBundle/blob/v1.27.0/docs/UPGRADING.md#to-1270).
+
+Security hardening of the setup wizard and the dump command (REQ-SEC-004). The setup wizard
 is now default-deny, so a host that ran the web wizard without `setup.setup_token` must issue a one-time token (or set
-the token). See [UPGRADING](UPGRADING.md#unreleased) and [SECURITY](SECURITY.md#setup-access-default-deny-127).
+the token). See [UPGRADING](https://github.com/nowo-tech/SiteBackupBundle/blob/v1.27.0/docs/UPGRADING.md#to-1270) and [SECURITY](SECURITY.md#setup-access-default-deny-127).
 
 ### Security
 
@@ -898,7 +903,7 @@ First stable release of **Site Backup Bundle**.
 - Symfony `^7.0 || ^8.0` (CI / mandatory minors: **7.4**, **8.0**, **8.1**)
 - System `tar` required for archive create/extract
 
-[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.25.0...HEAD
+[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.27.0...HEAD
 [1.23.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.22.2...v1.23.0
 [1.22.2]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.22.1...v1.22.2
 [1.22.1]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.22.0...v1.22.1
