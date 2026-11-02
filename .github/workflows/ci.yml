@@ -92,6 +92,9 @@ jobs:
         if: startsWith(matrix.symfony, '8.')
         run: composer config platform.php 8.4.1
 
+      - name: Override Composer platform PHP (composer.json pins the minimum PHP for the lock)
+        run: composer config platform.php "${{ matrix.php }}.99"
+
       - name: Install dependencies with Symfony ${{ matrix.symfony }}
         run: |
           composer require symfony/config:^${{ matrix.symfony }} symfony/dependency-injection:^${{ matrix.symfony }} symfony/http-kernel:^${{ matrix.symfony }} symfony/http-foundation:^${{ matrix.symfony }} symfony/security-core:^${{ matrix.symfony }} --no-interaction --no-update
