@@ -134,7 +134,7 @@ final class ArchiverFormatsTest extends TestCase
             'slip'      => static fn (ZipArchive $z) => $z->addFromString('../evil.php', 'x'),
             'encrypted' => static function (ZipArchive $z): void {
                 $z->addFromString('MANIFEST.json', '{}');
-                $z->setEncryptionName('MANIFEST.json', ZipArchive::EM_AES_256, 'CANARY-pass-1234567');
+                $z->setEncryptionName('MANIFEST.json', ZipArchive::EM_AES_256, 'canary-zip-0000000');
             },
             'symlink' => static function (ZipArchive $z): void {
                 $z->addFromString('link', '/etc/passwd');
@@ -180,7 +180,7 @@ final class ArchiverFormatsTest extends TestCase
     {
         $bin       = EngineFixtures::tempDir('sbb-bin-');
         $inspector = new FixedSchemaInspector(SchemaSnapshot::fromRows(['user', 'event_log'], [], [], []));
-        $dumper    = new BuiltinMysqlDumper('mysql://app:' . EngineFixtures::CANARY_DB_PASSWORD . '@db/beacon', EngineFixtures::fakeMysqldump($bin), schemaInspector: $inspector);
+        $dumper    = new BuiltinMysqlDumper('mysql://app:' . EngineFixtures::DB_CANARY . '@db/beacon', EngineFixtures::fakeMysqldump($bin), schemaInspector: $inspector);
         $archiver  = $this->archiver(includePaths: ['config'], dumper: $dumper);
 
         try {

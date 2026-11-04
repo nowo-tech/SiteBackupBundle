@@ -98,7 +98,7 @@ final class SiteBackupManager
 
         try {
             if ($lock instanceof BackupOperationLockHandle) {
-                $inner   = $options->heartbeat;
+                $inner = $options->heartbeat;
                 // @igor-ignore - Per-call options; the closure lives only for this backup and is never stored on the service.
                 $options = $options->withHeartbeat(static function (BackupProgress $progress) use ($lock, $inner): void {
                     $lock->refresh();

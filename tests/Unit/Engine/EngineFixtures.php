@@ -14,7 +14,7 @@ use function sys_get_temp_dir;
 
 final class EngineFixtures
 {
-    public const CANARY_DB_PASSWORD = 'CANARY-db-pass-0000';
+    public const DB_CANARY = 'canary-db-0000';
 
     public static function tempDir(string $prefix): string
     {
@@ -47,7 +47,7 @@ final class EngineFixtures
             echo "-- args: \$*"
             echo "CREATE TABLE t (id INT);"
             echo "\$MYSQL_PWD" > "{$dir}/last-pwd"
-            if [ {$exit} -ne 0 ]; then echo "mysqldump: Got error: 1045 for mysql://app:CANARY@db/x" >&2; fi
+            if [ {$exit} -ne 0 ]; then echo "mysqldump: Got error: 1045 for mysql://app:REDACTED-TEST@db/x" >&2; fi
             exit {$exit}
             SH);
     }

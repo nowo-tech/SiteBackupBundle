@@ -24,7 +24,7 @@ use function implode;
 
 final class MysqlCommandsTest extends TestCase
 {
-    private const URL = 'mysql://app:' . EngineFixtures::CANARY_DB_PASSWORD . '@db:3307/beacon';
+    private const URL = 'mysql://app:' . EngineFixtures::DB_CANARY . '@db:3307/beacon';
 
     private string $dir;
 
@@ -43,7 +43,7 @@ final class MysqlCommandsTest extends TestCase
         $spec = MysqlDumpCommandFactory::clientFromDatabaseUrl(self::URL, true, 'mariadb', ['--batch', '']);
 
         self::assertSame(['mariadb', '--skip-ssl-verify-server-cert', '--host=db', '--port=3307', '--user=app', '--batch', '--', 'beacon'], $spec['command']);
-        self::assertSame(['MYSQL_PWD' => EngineFixtures::CANARY_DB_PASSWORD], $spec['env']);
+        self::assertSame(['MYSQL_PWD' => EngineFixtures::DB_CANARY], $spec['env']);
         self::assertSame('beacon', $spec['database']);
         self::assertSame(['a', 'x', '--', 'db'], MysqlDumpCommandFactory::withOptions(['a', '--', 'db'], ['x']));
         self::assertSame(['a', 'x'], MysqlDumpCommandFactory::withOptions(['a'], ['x']));
@@ -98,8 +98,8 @@ final class MysqlCommandsTest extends TestCase
         self::assertStringContainsString('--ignore-table=beacon.event_log --ignore-table=beacon.cache', $sql);
         self::assertStringContainsString('--no-data', $sql);
         self::assertStringContainsString('-- beacon event_log', $sql);
-        self::assertStringNotContainsString(EngineFixtures::CANARY_DB_PASSWORD, $sql, 'the password never reaches argv');
-        self::assertSame(EngineFixtures::CANARY_DB_PASSWORD . "\n", file_get_contents($this->dir . '/last-pwd'));
+        self::assertStringNotContainsString(EngineFixtures::DB_CANARY, $sql, 'the password never reaches argv');
+        self::assertSame(EngineFixtures::DB_CANARY . "\n", file_get_contents($this->dir . '/last-pwd'));
         self::assertSame(0o600, fileperms($target) & 0o777);
         self::assertFileDoesNotExist($target . '.structure');
         self::assertSame(2, $report->passes);
@@ -148,7 +148,7 @@ final class MysqlCommandsTest extends TestCase
             self::fail('Expected DumpFailedException');
         } catch (DumpFailedException $e) {
             self::assertStringStartsWith('Database dump failed: ', $e->getMessage());
-            self::assertStringNotContainsString('CANARY@', $e->getMessage());
+            self::assertStringNotContainsString('REDACTED-TEST@', $e->getMessage());
         }
 
         $cases = [
@@ -230,7 +230,7 @@ final class MysqlCommandsTest extends TestCase
 
         self::assertSame("INSERT INTO t VALUES (1);\n", file_get_contents($this->dir . '/received.sql'));
         self::assertSame("--host=db --port=3307 --user=app --batch -- beacon\n", file_get_contents($this->dir . '/argv'));
-        self::assertSame(EngineFixtures::CANARY_DB_PASSWORD . "\n", file_get_contents($this->dir . '/pwd'));
+        self::assertSame(EngineFixtures::DB_CANARY . "\n", file_get_contents($this->dir . '/pwd'));
     }
 
     public function testImporterFailuresKeepRowDataOut(): void

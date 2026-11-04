@@ -133,7 +133,7 @@ final class ManagerEngineTest extends TestCase
 
     public function testFailureDispatchesARedactedFailedEvent(): void
     {
-        $archiver = new BackupArchiver($this->project, $this->storage, ['config'], [], 'echo "mysql://app:CANARY-pw@db/x down" >&2; exit 4', 60);
+        $archiver = new BackupArchiver($this->project, $this->storage, ['config'], [], 'echo "mysql://app:REDACTED-TEST@db/x down" >&2; exit 4', 60);
         $logger   = new RecordingLogger();
         $manager  = $this->manager(archiver: $archiver, logger: $logger);
 
@@ -147,7 +147,7 @@ final class ManagerEngineTest extends TestCase
         $failed = $this->events[1];
         self::assertInstanceOf(BackupFailedEvent::class, $failed);
         self::assertStringContainsString('mysql://app:***@db/x', $failed->getMessage());
-        self::assertStringNotContainsString('CANARY-pw', (string) json_encode([$failed->getMessage(), $failed->getOptions(), $logger->records]));
+        self::assertStringNotContainsString('REDACTED-TEST', (string) json_encode([$failed->getMessage(), $failed->getOptions(), $logger->records]));
         self::assertSame('cron', $failed->getActor());
         $started = $this->events[0];
         self::assertInstanceOf(BackupStartedEvent::class, $started);
