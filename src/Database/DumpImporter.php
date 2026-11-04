@@ -26,8 +26,11 @@ use function min;
 use function preg_match;
 use function sprintf;
 use function str_ends_with;
+use function str_replace;
+use function str_starts_with;
 use function stripos;
 use function strlen;
+use function strtolower;
 use function trim;
 use function version_compare;
 
@@ -53,6 +56,12 @@ final class DumpImporter
         private readonly ?BackupOperationLock $operationLock = null,
     ) {
     }
+
+    /**
+     * EO-R1 (best effort): a statement whose target is `db`.`table` with a database other than the drill schema.
+     * Group 1 / 2 = the backtick-quoted or bare qualifier.
+     */
+    private const QUALIFIED_TARGET = '#^\s*(?:/\*!\d*\s*)?(?:(?:INSERT|REPLACE)(?:\s+(?:LOW_PRIORITY|DELAYED|HIGH_PRIORITY|IGNORE))*(?:\s+INTO)?|UPDATE(?:\s+(?:LOW_PRIORITY|IGNORE))*|DELETE(?:\s+(?:LOW_PRIORITY|QUICK|IGNORE))*\s+FROM|TRUNCATE(?:\s+TABLE)?|LOCK\s+TABLES?|RENAME\s+TABLE|(?:CREATE|DROP|ALTER)(?:\s+(?:OR\s+REPLACE|TEMPORARY|ONLINE|IGNORE))*\s+(?:TABLE|VIEW|TRIGGER|PROCEDURE|FUNCTION|EVENT|INDEX\s+\S+\s+ON)(?:\s+IF\s+(?:NOT\s+)?EXISTS)?|LOAD\s+DATA\b.*?\bINTO\s+TABLE)\s+(?:`((?:[^`]|``)+)`|([A-Za-z0-9_$]+))\s*\.#i';
 
     private const DATABASE_SWITCH = '#^\s*(?:/\*!\d*\s*)?(?:USE\b|\\\\u\b|\\\\r\b|CONNECT\b|(?:CREATE|DROP|ALTER)\s+(?:DATABASE|SCHEMA)\b|-- Current Database:)#i';
 
@@ -146,7 +155,7 @@ final class DumpImporter
 
         if ($schema !== null) {
             // EO-M3: a dump that switches database would write outside the target schema (the live one).
-            self::assertSingleDatabaseDump($file);
+            self::assertSingleDatabaseDump($file, $schema);
         }
 
         $lock = $this->operationLock?->acquire();
@@ -199,10 +208,13 @@ final class DumpImporter
     /**
      * EO-M3: refuses dumps that select or create databases (`USE`, `\u`, `CREATE/DROP/ALTER DATABASE|SCHEMA`,
      * `CONNECT`, `/*!… USE …`, `mysqldump --databases` / `--all-databases` output). Streaming scan of line starts.
+     * EO-R1: with `$schema`, also refuses statements whose target is qualified with another database
+     * (`INSERT INTO app.t …`), which `--one-database` does not stop. Best effort: names qualified inside a statement
+     * body (views, triggers, routines, sub-queries) are not parsed, hence the restricted drill account.
      *
      * @throws DumpFailedException
      */
-    public static function assertSingleDatabaseDump(string $file): void
+    public static function assertSingleDatabaseDump(string $file, ?string $schema = null): void
     {
         $handle = @fopen($file, 'r');
         if ($handle === false) {
@@ -217,6 +229,10 @@ final class DumpImporter
                     ++$lineNumber;
                     if (preg_match(self::DATABASE_SWITCH, $piece) === 1) {
                         throw new DumpFailedException(sprintf('The dump selects or creates a database (line %d): refused for an import into another schema.', $lineNumber));
+                    }
+                    if ($schema !== null && preg_match(self::QUALIFIED_TARGET, $piece, $m) === 1
+                        && strtolower($m[1] !== '' ? str_replace('``', '`', $m[1]) : ($m[2] ?? '')) !== strtolower($schema)) {
+                        throw new DumpFailedException(sprintf('The dump writes to a table of another database (line %d): refused for an import into another schema.', $lineNumber));
                     }
                 }
                 $atLineStart = str_ends_with($piece, "\n");
@@ -277,7 +293,13 @@ final class DumpImporter
             throw new DumpFailedException('SQL statement timed out.');
         }
         if (!$process->isSuccessful()) {
-            throw new DumpFailedException('SQL statement failed: ' . self::safeError($process->getErrorOutput()));
+            $error = self::safeError($process->getErrorOutput());
+            if (str_starts_with($error, 'ERROR 1049 ')) {
+                // EO-R1: the client connects to the database named in the URL before running the statement.
+                $error .= ': the database named in the connection URL must already exist';
+            }
+
+            throw new DumpFailedException('SQL statement failed: ' . $error);
         }
     }
 

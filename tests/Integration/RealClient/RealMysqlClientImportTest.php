@@ -96,11 +96,16 @@ final class RealMysqlClientImportTest extends TestCase
             $this->query($client, $url, 'CREATE TABLE ' . $table . ' (id INT); INSERT INTO ' . $table . ' VALUES (1),(2),(3),(4)');
             $dump = $shared . '/databases-' . $table . '.sql';
             file_put_contents($dump, "CREATE DATABASE /*!32312 IF NOT EXISTS*/ `beacon`;\nUSE `beacon`;\nDELETE FROM " . $table . ";\n");
+            // EO-R1: no USE at all, only names qualified with the live database.
+            $qualified = $shared . '/qualified-' . $table . '.sql';
+            file_put_contents($qualified, 'INSERT INTO beacon.' . $table . " VALUES (98);\nDELETE FROM `beacon`.`" . $table . "` WHERE id = 1;\n");
 
-            try {
-                (new DumpImporter($url, $client))->importInto($dump, 'beacon_drill');
-                self::fail('Expected DumpFailedException');
-            } catch (DumpFailedException) {
+            foreach ([$dump, $qualified] as $hostile) {
+                try {
+                    (new DumpImporter($url, $client))->importInto($hostile, 'beacon_drill');
+                    self::fail('Expected DumpFailedException');
+                } catch (DumpFailedException) {
+                }
             }
 
             self::assertSame("1\n2\n3\n4", $this->query($client, $url, 'SELECT id FROM ' . $table . ' ORDER BY id'));

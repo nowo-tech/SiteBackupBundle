@@ -131,7 +131,11 @@ Passwords on `tar.gz` / `sql.gz` need **age ≥ 1.3 with `age-plugin-batchpass` 
 absolute path. Without it those backups fail with a clear `FormatUnavailableException` (zip AES needs nothing more).
 Optional: `backup.signing.*` (Ed25519; **once a key is configured, signatures are required** in verify / import /
 prune unless `backup.signing.required: false`), `backup.remote.flysystem_storage`, `recordTableStats` +
-`nowo:site-backup:drill` (with `backup.drill.database_url` pointing at an account limited to the drill schema).
+`nowo:site-backup:drill` (with `backup.drill.database_url` pointing at an account limited to the drill schemas, whose
+URL database already exists; **required to drill imported archives**, see [USAGE.md](USAGE.md#restore-drill-129)).
+Set `backup.encryption.age.binary` to an absolute path: a bare name is resolved on PHP's PATH once and logged, and a
+relative or world-writable location is refused. Enable signing for remote targets that other writers can reach
+(unsigned sidecars can steer prune).
 
 Behaviour to know: with a password, import and `verify --file` refuse archives that are not encrypted (exit 5;
 `--allow-plaintext` to accept); `publish()` refuses a key that already exists; `prune()` ignores sidecars dated in the

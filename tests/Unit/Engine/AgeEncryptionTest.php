@@ -275,8 +275,10 @@ final class AgeEncryptionTest extends TestCase
                     $parents[$pid] = true;
                     $cmdline       = @file_get_contents('/proc/' . $pid . '/cmdline');
                     $environ       = @file_get_contents('/proc/' . $pid . '/environ');
-                    // EO-I9: a child between fork and exec still shows PHP's own cmdline and environment: skip it.
-                    if (is_string($cmdline) && is_string($environ) && $cmdline !== '' && $cmdline !== $self) {
+                    $after         = @file_get_contents('/proc/' . $pid . '/cmdline');
+                    // EO-I9: a child between fork and exec still shows PHP's own cmdline and environment, and a
+                    // child that exec'd (or exited) between the reads mixes two images: keep only stable samples.
+                    if (is_string($cmdline) && is_string($environ) && $cmdline !== '' && $environ !== '' && $cmdline !== $self && $after === $cmdline) {
                         $seen[] = ['cmdline' => $cmdline, 'environ' => $environ];
                     }
                 }

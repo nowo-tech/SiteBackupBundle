@@ -9,6 +9,7 @@ use Nowo\SiteBackupBundle\Exception\FormatUnavailableException;
 use Nowo\SiteBackupBundle\Exception\WrongPasswordException;
 use Nowo\SiteBackupBundle\Log\SecretRedactor;
 use Nowo\SiteBackupBundle\Model\ArchivePassword;
+use Psr\Log\LoggerInterface;
 use SensitiveParameter;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Process\ExecutableFinder;
@@ -16,6 +17,7 @@ use Symfony\Component\Process\Process;
 
 use function dirname;
 use function fclose;
+use function fileperms;
 use function fwrite;
 use function hrtime;
 use function is_executable;
@@ -59,8 +61,11 @@ final class AgeBinaryEncryptor implements ArchiveEncryptorInterface
 
     private const POLL_MICROSECONDS = 50_000;
 
-    /** EO-L5: the binary, resolved once when the service is built (an absolute path is recommended). */
+    /** EO-L5 / EO-R4: the binary, resolved once to an absolute path when the service is built. */
     private readonly ?string $resolvedBinary;
+
+    /** EO-R4: why the configured binary was refused (null when it resolved). */
+    private ?string $refusal = null;
 
     public function __construct(
         private readonly string $binary = 'age',
@@ -69,6 +74,7 @@ final class AgeBinaryEncryptor implements ArchiveEncryptorInterface
         private readonly int $timeoutSeconds = 600,
         private readonly Filesystem $filesystem = new Filesystem(),
         private readonly ?string $plugin = null,
+        private readonly ?LoggerInterface $logger = null,
     ) {
         if ($workFactor < 10 || $workFactor > 22 || $maxWorkFactor < $workFactor || $maxWorkFactor > 22) {
             throw new FormatUnavailableException('age work factors must satisfy 10 <= work_factor <= max_work_factor <= 22.');
@@ -95,7 +101,7 @@ final class AgeBinaryEncryptor implements ArchiveEncryptorInterface
     {
         $binary = $this->resolvedBinary;
         if ($binary === null) {
-            throw new FormatUnavailableException(sprintf('age encryption needs the "%s" binary (age >= %s with age-plugin-batchpass) on PATH.', $this->binary, self::MIN_VERSION));
+            throw new FormatUnavailableException($this->refusal ?? sprintf('age encryption needs the "%s" binary (age >= %s with age-plugin-batchpass); set backup.encryption.age.binary to its absolute path.', $this->binary, self::MIN_VERSION));
         }
 
         $process = new Process([$binary, '--version']);
@@ -212,17 +218,44 @@ final class AgeBinaryEncryptor implements ArchiveEncryptorInterface
         throw new FormatUnavailableException(sprintf('age failed (exit %d): %s', $exitCode, $message === '' ? 'no output' : $message));
     }
 
+    /**
+     * EO-R4: an absolute path is used as given (after realpath); a bare name is looked up on PHP's PATH once, here,
+     * and the result is logged. A relative path, or a binary in a world-writable directory, is refused.
+     */
     private function resolveBinary(): ?string
     {
         if (str_contains($this->binary, '/')) {
-            $real = realpath($this->binary);
+            if (!str_starts_with($this->binary, '/')) {
+                $this->refusal = sprintf('backup.encryption.age.binary "%s" is relative: use an absolute path.', $this->binary);
 
-            return $real !== false && is_file($real) && is_executable($real) ? $real : null;
+                return null;
+            }
+            $found = $this->binary;
+        } else {
+            $found = (new ExecutableFinder())->find($this->binary);
+            if (!is_string($found) || $found === '') {
+                return null;
+            }
         }
 
-        $found = (new ExecutableFinder())->find($this->binary);
+        $real = realpath($found);
+        if ($real === false || !is_file($real) || !is_executable($real)) {
+            return null;
+        }
+        foreach ([$real, dirname($real)] as $path) {
+            $mode = @fileperms($path);
+            if ($mode === false || ($mode & 0o002) !== 0) {
+                $this->refusal = sprintf('The age binary "%s" or its directory is world-writable: refused.', $real);
 
-        return is_string($found) && $found !== '' ? (realpath($found) ?: $found) : null;
+                return null;
+            }
+        }
+
+        if ($real !== $this->binary) {
+            $this->logger?->notice('age binary "{configured}" resolved to "{resolved}"; set backup.encryption.age.binary to an absolute path.', ['configured' => $this->binary, 'resolved' => $real]);
+        }
+
+        return $real;
     }
 
     private function findPlugin(string $binary): ?string

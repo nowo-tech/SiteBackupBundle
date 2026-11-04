@@ -36,6 +36,9 @@ use function sys_get_temp_dir;
  * The schema must not exist (it is created, never reused) and must differ from the live database. EO-M3: dumps that
  * select or create databases are refused, the client runs with `--one-database`, and `backup.drill.database_url`
  * lets the drill connect as an account granted only on the throwaway schema.
+ *
+ * EO-R1: that restricted account is REQUIRED to drill an imported (foreign) archive: with the live account, a dump
+ * that writes to `live_db`.`table` would still reach production (the pre-scan is best effort).
  */
 final class RestoreDrill
 {
@@ -46,6 +49,7 @@ final class RestoreDrill
         private readonly ?string $workDir = null,
         private readonly Filesystem $filesystem = new Filesystem(),
         private readonly ?DumpImporter $liveImporter = null,
+        private readonly bool $restrictedAccount = false,
     ) {
     }
 
@@ -60,6 +64,9 @@ final class RestoreDrill
         $live = ($this->liveImporter ?? $this->importer)->databaseName();
         if (preg_match('/^[A-Za-z0-9_]{1,64}$/', $schema) !== 1 || strtolower($schema) === strtolower($live)) {
             throw new InvalidArgumentException('The drill schema must match [A-Za-z0-9_]{1,64} and differ from the live database.');
+        }
+        if (!$this->restrictedAccount && isset($artifact->getMeta()['imported_from'])) {
+            throw new InvalidArgumentException('Drilling an imported archive needs backup.drill.database_url (an account granted only on the drill schema): with the live account a hostile dump could write to the live database.');
         }
         $expected = self::expected($artifact);
 

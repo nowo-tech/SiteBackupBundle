@@ -17,6 +17,7 @@ use Nowo\SiteBackupBundle\Service\SiteBackupManager;
 use Nowo\SiteBackupBundle\Tests\Unit\RecordingLogger;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Filesystem\Filesystem;
+use Symfony\Component\Process\ExecutableFinder;
 use Symfony\Component\Process\Process;
 
 use function file_get_contents;
@@ -94,6 +95,30 @@ final class EnReauditFixesTest extends TestCase
         $small  = new BackupArchiver($this->project, $this->root . '/storage', ['public'], [], null, 60, extractLimits: ['max_bytes' => 100_000]);
         $errors = implode(' ', $small->verifyIntegrity($artifact)['errors']);
         self::assertStringContainsString('backup.extract_limits', $errors);
+    }
+
+    /**
+     * EO-L2: bsdtar's listing layout (and owner names with spaces) cannot hide the size of an entry either.
+     */
+    public function testBsdtarListingsDoNotBypassTheSizeLimit(): void
+    {
+        $bsdtar = (new ExecutableFinder())->find('bsdtar');
+        if ($bsdtar === null) {
+            self::markTestSkipped('bsdtar (libarchive-tools) is not installed.');
+        }
+
+        foreach (['plain' => 'app', 'spaced' => 'a 1 b'] as $name => $owner) {
+            $tar = $this->ustar('MANIFEST.json', '{"checksums":{}}', $owner)
+                . $this->ustar('big.bin', str_repeat("\0", 300_000), $owner)
+                . str_repeat("\0", 1024);
+            $path = $this->root . '/storage/bsd-' . $name . '.tar.gz';
+            file_put_contents($path, (string) gzencode($tar, 9));
+            $artifact = new BackupArtifact('bsd-' . $name, 'bsd-' . $name . '.tar.gz', $path, new DateTimeImmutable(), 1, (string) hash_file('sha256', $path));
+
+            $small  = new BackupArchiver($this->project, $this->root . '/storage', ['public'], [], null, 60, tarBinary: $bsdtar, extractLimits: ['max_bytes' => 100_000]);
+            $errors = implode(' ', $small->verifyIntegrity($artifact)['errors']);
+            self::assertStringContainsString('backup.extract_limits', $errors, $name);
+        }
     }
 
     public function testPrefixSpellingsOfRefusedOptionsAreRefused(): void

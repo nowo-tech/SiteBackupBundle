@@ -51,3 +51,10 @@ $orphans = $publisher->orphans($target, 'backups/prod/');
 - `prune()` only considers archives with a sidecar under the prefix; it never deletes the backup just created or the
   newest one, and deletes nothing when the just-created id is not there (failed run). A delete error is reported in
   `PruneReport::$errors` and retried next time.
+- `prune()` trusts a sidecar only when it is well formed, matches its object (id, size, sha256), is not dated in the
+  future and, when signatures are required, carries a valid signature.
+- **Without signing, prune can be steered (EO-R2).** Anyone who can write to the bucket can plant objects with
+  plausible sidecars (bundle-style ids, the right sizes, recent dates). Retention counts them as backups and deletes
+  your genuine ones to keep `keepLast`. **Enable `backup.signing` for every remote target that other writers (or a
+  compromised credential) can reach**: then unsigned or forged sidecars are ignored. Prefer bucket policies that deny
+  writes to everything but the backup job, and object lock / versioning so a deleted backup can be recovered.

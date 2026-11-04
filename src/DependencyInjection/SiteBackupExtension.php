@@ -504,7 +504,9 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$workFactor', (int) $age['work_factor'])
             ->setArgument('$maxWorkFactor', (int) $age['max_work_factor'])
             ->setArgument('$plugin', $age['plugin'])
-            ->setArgument('$timeoutSeconds', $timeout);
+            ->setArgument('$timeoutSeconds', $timeout)
+            ->setArgument('$logger', new Reference('logger', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
+            ->addTag('monolog.logger', ['channel' => 'site_backup']);
         $container->setAlias(ArchiveEncryptorInterface::class, AgeBinaryEncryptor::class)->setPublic(false);
 
         $signing = $backup['signing'];
@@ -543,7 +545,8 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$importer', $drillImporter)
             ->setArgument('$collector', $drillStats)
             ->setArgument('$workDir', (string) $backup['work_dir'])
-            ->setArgument('$liveImporter', new Reference(DumpImporter::class));
+            ->setArgument('$liveImporter', new Reference(DumpImporter::class))
+            ->setArgument('$restrictedAccount', is_string($drillUrl) && $drillUrl !== '');
 
         $storage = $backup['remote']['flysystem_storage'];
         if (is_string($storage) && $storage !== '') {

@@ -21,8 +21,11 @@
 ## age (tar.gz / sql.gz) — image requirement
 
 Install **age ≥ 1.3** and its **`age-plugin-batchpass`** (both ship in the official release archive) **in the same
-directory**, and set `nowo_site_backup.backup.encryption.age.binary` to that absolute path (recommended; a bare name is
-resolved once on PATH when the service is built). The plugin is only ever taken from the binary's own directory:
+directory**, and set `nowo_site_backup.backup.encryption.age.binary` to that **absolute path** (strongly recommended,
+e.g. `/usr/local/bin/age`). The default bare name `age` is resolved once on PHP's `PATH` when the service is built, and
+the resolved path is logged at notice level (channel `site_backup`); whoever controls PHP's `PATH` at that moment
+chooses the binary that receives the passphrase (EO-R4). A relative path (`bin/age`), or a binary that is
+world-writable or sits in a world-writable directory, is refused with `FormatUnavailableException`. The plugin is only ever taken from the binary's own directory:
 age runs with `PATH` set to that directory alone, so an impostor elsewhere on PATH never receives the passphrase.
 `encryption.age.plugin` may pin the plugin path too (it must be the file next to the binary):
 

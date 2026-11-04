@@ -297,7 +297,7 @@ final class Configuration implements ConfigurationInterface
                             ->end()
                         ->end()
                         ->arrayNode('drill')
-                            ->info('1.29+: restore drill. database_url = an account granted only on the throwaway drill schema (recommended): a hostile dump then cannot touch the live database at all.')
+                            ->info('1.29+: restore drill. database_url = an account granted only on the drill schemas, whose URL database already exists (else ERROR 1049). Required to drill imported archives; recommended always: a hostile dump then cannot touch the live database.')
                             ->addDefaultsIfNotSet()
                             ->children()
                                 ->scalarNode('database_url')->defaultNull()->end()

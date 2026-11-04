@@ -30,6 +30,7 @@ use Symfony\Component\Filesystem\Filesystem;
 
 use function file_get_contents;
 use function file_put_contents;
+use function implode;
 use function iterator_to_array;
 use function json_decode;
 use function stream_get_contents;
@@ -141,6 +142,82 @@ final class DrillFlysystemTest extends TestCase
         self::assertStringContainsString('DROP DATABASE IF EXISTS `drill_y`', (string) file_get_contents($this->root . '/statements'));
     }
 
+    /**
+     * EO-R1: an imported (foreign) archive is drilled only with the restricted drill account; a missing drill
+     * database is reported as such.
+     */
+    public function testImportedArchivesNeedTheRestrictedDrillAccount(): void
+    {
+        $this->stats('beacon', ['user' => [1, '1']]);
+        $source = $this->archiver()->create(new BackupOptions(includeFiles: false, recordTableStats: true));
+        $copies = new BackupArchiver($this->root . '/project', $this->root . '/copy', ['config'], [], null, 60);
+        $copy   = $copies->import($source->getAbsolutePath());
+
+        try {
+            (new RestoreDrill($copies, $this->importer(), $this->collector()))->run($copy, 'drill_r1');
+            self::fail('Expected InvalidArgumentException');
+        } catch (InvalidArgumentException $e) {
+            self::assertStringContainsString('backup.drill.database_url', $e->getMessage());
+        }
+        self::assertFileDoesNotExist($this->root . '/statements', 'nothing ran');
+
+        $this->stats('drill_r1', ['user' => [1, '1']]);
+        self::assertTrue((new RestoreDrill($copies, $this->importer(), $this->collector(), restrictedAccount: true))->run($copy, 'drill_r1')->passed);
+        // A local archive keeps working with the live account.
+        $this->stats('drill_r2', ['user' => [1, '1']]);
+        self::assertTrue((new RestoreDrill($this->archiver(), $this->importer(), $this->collector()))->run($source, 'drill_r2')->passed);
+
+        file_put_contents($this->root . '/fail-connect', '1');
+        try {
+            (new RestoreDrill($copies, $this->importer(), $this->collector(), restrictedAccount: true))->run($copy, 'drill_r3');
+            self::fail('Expected DumpFailedException');
+        } catch (DumpFailedException $e) {
+            self::assertStringContainsString('ERROR 1049 (42000): the database named in the connection URL must already exist', $e->getMessage());
+        }
+    }
+
+    /**
+     * EO-R1 (best effort): statements aimed at `other_db`.`table` are refused before the drill import.
+     */
+    public function testQualifiedTargetsOutsideTheDrillSchemaAreRefused(): void
+    {
+        $refused = [
+            'INSERT INTO app.t VALUES (98);',
+            'insert ignore into `app`.`t` VALUES (1);',
+            '  REPLACE INTO `a``pp`.t VALUES (1);',
+            '/*!40000 ALTER TABLE `app`.`t` DISABLE KEYS */;',
+            'LOCK TABLES `app`.`t` WRITE;',
+            'UPDATE app.t SET a = 1;',
+            'DELETE FROM `app` . `t`;',
+            'TRUNCATE TABLE app.t;',
+            'CREATE TABLE IF NOT EXISTS `app`.`t` (id INT);',
+            'DROP TABLE IF EXISTS app.t;',
+            'CREATE OR REPLACE VIEW app.v AS SELECT 1;',
+            "LOAD DATA LOCAL INFILE 'x' INTO TABLE app.t;",
+        ];
+        foreach ($refused as $statement) {
+            file_put_contents($this->root . '/q.sql', "-- dump\n" . $statement . "\n");
+            try {
+                DumpImporter::assertSingleDatabaseDump($this->root . '/q.sql', 'drill_q');
+                self::fail('Expected DumpFailedException: ' . $statement);
+            } catch (DumpFailedException $e) {
+                self::assertStringContainsString('another database (line 2)', $e->getMessage());
+            }
+            // Without a target schema (a plain restore) the scan does not apply.
+            DumpImporter::assertSingleDatabaseDump($this->root . '/q.sql');
+        }
+
+        file_put_contents($this->root . '/ok.sql', implode("\n", [
+            'CREATE TABLE `t` (`id` INT);',
+            "INSERT INTO `t` VALUES (1,'app.t'),(2,'x');",
+            'INSERT INTO DRILL_Q.t VALUES (3);',
+            'LOCK TABLES `t` WRITE;',
+            'UPDATE t SET a = 1 WHERE b = app.c;',
+        ]) . "\n");
+        DumpImporter::assertSingleDatabaseDump($this->root . '/ok.sql', 'drill_q');
+        $this->addToAssertionCount(1);
+    }
+
     public function testRecordTableStatsNeedsTheCollectorAndHonoursRules(): void
     {
         $this->expectException(InvalidBackupOptionsException::class);
@@ -247,7 +324,7 @@ final class DrillFlysystemTest extends TestCase
             db=""; sql=""
             for a in "\$@"; do case "\$a" in --execute=*) sql="\${a#--execute=}";; esac; db="\$a"; done
             case "\$sql" in
-              "CREATE DATABASE"*) if [ -f "{$root}/fail-create" ]; then echo "ERROR 1007 (HY000) at line 1: database exists" >&2; exit 1; fi; echo "\$sql" >> "{$root}/statements";;
+              "CREATE DATABASE"*) if [ -f "{$root}/fail-connect" ]; then echo "ERROR 1049 (42000): Unknown database 'drill_home'" >&2; exit 1; fi; if [ -f "{$root}/fail-create" ]; then echo "ERROR 1007 (HY000) at line 1: database exists" >&2; exit 1; fi; echo "\$sql" >> "{$root}/statements";;
               "DROP DATABASE"*) echo "\$sql" >> "{$root}/statements";;
               *information_schema*) cat "{$root}/stats/\$db.names" 2>/dev/null;;
               *"UNION ALL"*|"SELECT '"*) sort "{$root}/stats/\$db.counts" 2>/dev/null;;

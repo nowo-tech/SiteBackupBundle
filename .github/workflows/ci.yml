@@ -310,6 +310,11 @@ jobs:
           sudo install -m 0755 /tmp/age/age /tmp/age/age-plugin-batchpass /usr/local/bin/
           age --version
 
+      - name: Install bsdtar (EO-L2 tar listing test)
+        run: |
+          command -v bsdtar || { sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends libarchive-tools; }
+          bsdtar --version
+
       - name: Install dependencies (Symfony 7.4)
         run: |
           composer require symfony/config:^7.4 symfony/dependency-injection:^7.4 symfony/http-kernel:^7.4 symfony/http-foundation:^7.4 symfony/security-core:^7.4 --no-interaction --no-update

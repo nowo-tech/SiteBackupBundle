@@ -125,6 +125,21 @@ contract "SiteBackupBundle 1.28 – 1.30" v1.0 with symfony-beacon).
   defaults to 20 (max 22); sidecars are read in a loop;
   stale docs fixed; the `/proc` test ignores fork-before-exec samples.
 
+### Security (REQ-SEC-004 EO re-audit residuals)
+
+- **EO-R1:** drilling an imported archive requires `backup.drill.database_url` (a restricted account): with the live
+  account, statements on `live_db.table` would still reach production. The drill pre-scan also refuses statements
+  whose target is qualified with another database (`INSERT INTO app.t`, `LOCK TABLES`, `ALTER TABLE`, …; best effort).
+  A missing URL database now says so (`ERROR 1049`). USAGE documents the drill account and grants.
+- **EO-R2:** REMOTE-TARGETS documents that, without signing, planted sidecars can steer prune into deleting genuine
+  backups, and recommends `backup.signing` for every shared remote target.
+- **EO-R4:** `encryption.age.binary` is resolved once to an absolute path when the service is built, a bare-name
+  lookup is logged (notice, `site_backup` channel), and relative paths or world-writable binaries / directories are
+  refused. An absolute path is recommended.
+- **EO-L2 / EO-I9 tests:** the tar size limit is tested with bsdtar too (CI coverage job); the `/proc` scan keeps only
+  stable samples.
+- Dev lock: `symfony/*` 7.4.23 (Symfony advisories of 2026-11-04; runtime constraints unchanged).
+
 ## [1.28.0] - 2026-11-04
 
 Scheduler-friendly local backup engine (1.28.0, contract "SiteBackupBundle 1.28 – 1.30" v1.0 with symfony-beacon,
