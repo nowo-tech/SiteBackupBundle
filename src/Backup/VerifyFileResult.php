@@ -17,6 +17,7 @@ final readonly class VerifyFileResult
     public const WRONG_PASSWORD = 2;
     public const UNSUPPORTED    = 3;
     public const SIGNATURE      = 4;
+    public const NOT_ENCRYPTED  = 5;
 
     /**
      * @param list<string> $errors

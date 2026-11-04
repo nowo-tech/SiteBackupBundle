@@ -165,7 +165,7 @@ jobs:
           echo "::add-mask::$PW"
           docker run -d --name sbb-mysql -p 127.0.0.1:3306:3306 -e MYSQL_ROOT_PASSWORD="$PW" -e MYSQL_DATABASE=beacon mysql:8.4 --mysql-native-password=ON
           for i in $(seq 1 60); do docker exec -e MYSQL_PWD="$PW" sbb-mysql mysql -uroot -e "SELECT 1" >/dev/null 2>&1 && break; sleep 2; done
-          docker exec -e MYSQL_PWD="$PW" sbb-mysql mysql -uroot -e "CREATE USER 'app'@'%' IDENTIFIED WITH mysql_native_password BY '$PW'; GRANT ALL ON beacon.* TO 'app'@'%';"
+          docker exec -e MYSQL_PWD="$PW" sbb-mysql mysql -uroot -e "CREATE USER 'app'@'%' IDENTIFIED WITH mysql_native_password BY '$PW'; GRANT ALL ON beacon.* TO 'app'@'%'; CREATE DATABASE beacon_drill; GRANT ALL ON beacon_drill.* TO 'app'@'%';"
           SHARED="$RUNNER_TEMP/sbb-shared"
           mkdir -p "$SHARED" "$RUNNER_TEMP/bin"
           for flavour in oracle mariadb; do
@@ -182,7 +182,7 @@ jobs:
             echo "SBB_REAL_CLIENT_MARIADB=$RUNNER_TEMP/bin/mariadb-client"
           } >> "$GITHUB_ENV"
 
-      - name: Tampered dumps must not run client commands (system, tee, source)
+      - name: Tampered dumps must not run client commands nor switch database (EN-M1, EO-M3)
         run: vendor/bin/phpunit --no-coverage --display-skipped --fail-on-skipped tests/Integration/RealClient
 
       - name: Stop MySQL

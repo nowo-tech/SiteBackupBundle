@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\Command;
 
 use InvalidArgumentException;
+use JsonException;
+use Nowo\SiteBackupBundle\Model\ImportOptions;
 use Nowo\SiteBackupBundle\Service\SiteBackupManager;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -15,7 +17,15 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Throwable;
 
+use function file_get_contents;
+use function is_array;
+use function is_bool;
+use function is_file;
+use function is_string;
+use function json_decode;
 use function sprintf;
+
+use const JSON_THROW_ON_ERROR;
 
 /**
  * Imports an archive made elsewhere into `storage_dir` (1.29+); restore it afterwards with nowo:site-backup:restore.
@@ -32,7 +42,11 @@ final class ImportArchiveCommand extends Command
     {
         $this
             ->addArgument('file', InputArgument::REQUIRED, 'Archive to import')
-            ->addOption('actor', null, InputOption::VALUE_REQUIRED, 'Who imported it', 'cli');
+            ->addOption('actor', null, InputOption::VALUE_REQUIRED, 'Who imported it', 'cli')
+            ->addOption('sidecar', null, InputOption::VALUE_REQUIRED, 'The archive\'s .backup.json / .meta.json (its signature)')
+            ->addOption('require-signature', null, InputOption::VALUE_NEGATABLE, 'Require a valid signed sidecar (default: backup.signing.required)')
+            ->addOption('allow-plaintext', null, InputOption::VALUE_NONE, 'With a password, also accept an archive that is not encrypted')
+            ->addOption('keep-after-restore', null, InputOption::VALUE_NONE, 'Keep the plaintext copy after it has been restored');
         PasswordInput::configure($this);
     }
 
@@ -47,8 +61,32 @@ final class ImportArchiveCommand extends Command
             return Command::INVALID;
         }
 
+        $sidecar     = null;
+        $sidecarPath = $input->getOption('sidecar');
+        if (is_string($sidecarPath) && $sidecarPath !== '') {
+            try {
+                $data = is_file($sidecarPath) ? json_decode((string) file_get_contents($sidecarPath), true, 32, JSON_THROW_ON_ERROR) : null;
+            } catch (JsonException) {
+                $data = null;
+            }
+            if (!is_array($data)) {
+                $io->error('--sidecar must be a readable JSON sidecar.');
+
+                return Command::INVALID;
+            }
+            /** @var array<string, mixed> $data */
+            $sidecar = $data;
+        }
+        $require = $input->getOption('require-signature');
+        $options = new ImportOptions(
+            allowPlaintext: (bool) $input->getOption('allow-plaintext'),
+            sidecar: $sidecar,
+            requireSignature: is_bool($require) ? $require : null,
+            deleteAfterRestore: !(bool) $input->getOption('keep-after-restore'),
+        );
+
         try {
-            $artifact = $this->manager->importArchive((string) $input->getArgument('file'), $password, (string) $input->getOption('actor'));
+            $artifact = $this->manager->importArchive((string) $input->getArgument('file'), $password, (string) $input->getOption('actor'), $options);
         } catch (Throwable $e) {
             $io->error($e->getMessage());
 
@@ -60,7 +98,7 @@ final class ImportArchiveCommand extends Command
         foreach ($artifact->getWarnings() as $warning) {
             $io->warning($warning);
         }
-        $io->success(sprintf('Imported as backup %s (plaintext tar.gz, owner-only). Restore it with nowo:site-backup:restore %s, then delete it.', $artifact->getId(), $artifact->getId()));
+        $io->success(sprintf('Imported as backup %s (plaintext tar.gz, owner-only). Restore it with nowo:site-backup:restore %s%s.', $artifact->getId(), $artifact->getId(), $options->deleteAfterRestore ? ' (it is deleted after the restore)' : ', then delete it'));
 
         return Command::SUCCESS;
     }

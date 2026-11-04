@@ -39,9 +39,12 @@ use const SODIUM_CRYPTO_SIGN_SEEDBYTES;
 /**
  * Optional Ed25519 signature of a backup's sidecar fields (1.29+, owner decision Q-O3: shipped, off by default).
  *
- * The signed message is the canonical JSON of: id, created_at, format, encrypted, encryption, key_id, sha256 (archive
- * bytes), size, plaintext_sha256 and checksums_sha256 (SHA-256 of the canonical per-file checksum map). It protects
- * the sidecars that retention and import trust, and unencrypted archives, against a bucket writer.
+ * The signed message is `nowo-site-backup-signature-v1\n` + the canonical JSON (keys sorted) of exactly: id,
+ * created_at, format, encrypted, encryption, key_id, sha256 (archive bytes), size, plaintext_sha256 and
+ * checksums_sha256 (SHA-256 of the canonical per-file checksum map, so every archived file's content). It does NOT
+ * cover content, table_rules, table_stats, label, created_by, extra_meta or warnings. It protects the sidecars that
+ * retention and import trust, and unencrypted archives, against a bucket writer. With `backup.signing.required`
+ * (default when a verification key is configured) an unsigned sidecar is refused (EO-M2).
  *
  * - `backup.signing.secret_key`: base64 of a 32-byte seed or a 64-byte secret key, from the environment (keys apart
  *   from the backups); never logged nor stored by the bundle.
@@ -62,6 +65,7 @@ final class BackupSigner
         ?string $secretKey = null,
         private readonly string $keyId = 'default',
         array $publicKeys = [],
+        private readonly ?bool $required = null,
     ) {
         if (preg_match('/^[A-Za-z0-9_.-]{1,64}$/', $keyId) !== 1) {
             throw new InvalidArgumentException('backup.signing.key_id must match [A-Za-z0-9_.-]{1,64}.');
@@ -102,6 +106,15 @@ final class BackupSigner
     public function canVerify(): bool
     {
         return $this->publicKeys !== [];
+    }
+
+    /**
+     * EO-M2: whether an unsigned (or wrongly signed) sidecar must be refused. `backup.signing.required`; null = true
+     * whenever a verification key is configured.
+     */
+    public function isRequired(): bool
+    {
+        return $this->required ?? $this->canVerify();
     }
 
     /**

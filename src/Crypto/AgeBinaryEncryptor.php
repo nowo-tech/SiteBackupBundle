@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Crypto;
 
+use Nowo\SiteBackupBundle\Exception\CorruptArchiveException;
 use Nowo\SiteBackupBundle\Exception\FormatUnavailableException;
 use Nowo\SiteBackupBundle\Exception\WrongPasswordException;
 use Nowo\SiteBackupBundle\Log\SecretRedactor;
@@ -16,7 +17,6 @@ use Symfony\Component\Process\Process;
 use function dirname;
 use function fclose;
 use function fwrite;
-use function getenv;
 use function hrtime;
 use function is_executable;
 use function is_file;
@@ -34,12 +34,9 @@ use function str_contains;
 use function str_starts_with;
 use function stream_get_contents;
 use function stream_set_blocking;
-use function strlen;
 use function trim;
 use function usleep;
 use function version_compare;
-
-use const PATH_SEPARATOR;
 
 /**
  * age passphrase encryption through the `age` binary ≥ 1.3 and `age-plugin-batchpass` (1.29+, owner decision Q-O4
@@ -62,16 +59,21 @@ final class AgeBinaryEncryptor implements ArchiveEncryptorInterface
 
     private const POLL_MICROSECONDS = 50_000;
 
+    /** EO-L5: the binary, resolved once when the service is built (an absolute path is recommended). */
+    private readonly ?string $resolvedBinary;
+
     public function __construct(
         private readonly string $binary = 'age',
         private readonly int $workFactor = 18,
-        private readonly int $maxWorkFactor = 22,
+        private readonly int $maxWorkFactor = 20,
         private readonly int $timeoutSeconds = 600,
         private readonly Filesystem $filesystem = new Filesystem(),
+        private readonly ?string $plugin = null,
     ) {
-        if ($workFactor < 10 || $workFactor > 22 || $maxWorkFactor < $workFactor || $maxWorkFactor > 30) {
-            throw new FormatUnavailableException('age work factors must satisfy 10 <= work_factor <= 22 and work_factor <= max_work_factor <= 30.');
+        if ($workFactor < 10 || $workFactor > 22 || $maxWorkFactor < $workFactor || $maxWorkFactor > 22) {
+            throw new FormatUnavailableException('age work factors must satisfy 10 <= work_factor <= max_work_factor <= 22.');
         }
+        $this->resolvedBinary = $this->resolveBinary();
     }
 
     public function name(): string
@@ -91,7 +93,7 @@ final class AgeBinaryEncryptor implements ArchiveEncryptorInterface
 
     public function assertAvailable(): void
     {
-        $binary = $this->resolveBinary();
+        $binary = $this->resolvedBinary;
         if ($binary === null) {
             throw new FormatUnavailableException(sprintf('age encryption needs the "%s" binary (age >= %s with age-plugin-batchpass) on PATH.', $this->binary, self::MIN_VERSION));
         }
@@ -108,7 +110,7 @@ final class AgeBinaryEncryptor implements ArchiveEncryptorInterface
         }
 
         if ($this->findPlugin($binary) === null) {
-            throw new FormatUnavailableException('age-plugin-batchpass was not found next to age nor on PATH (it ships with age >= 1.3).');
+            throw new FormatUnavailableException('age-plugin-batchpass must sit next to the age binary (it ships with age >= 1.3); a plugin elsewhere on PATH is never used.');
         }
     }
 
@@ -130,9 +132,10 @@ final class AgeBinaryEncryptor implements ArchiveEncryptorInterface
      */
     private function run(array $arguments, string $output, #[SensitiveParameter] ArchivePassword $password, ?callable $tick, bool $decrypting): void
     {
-        $binary = (string) $this->resolveBinary();
+        $binary = (string) $this->resolvedBinary;
         $env    = [
-            'PATH'                           => dirname($binary) . PATH_SEPARATOR . (string) (getenv('PATH') ?: '/usr/local/bin:/usr/bin:/bin'),
+            // EO-L5: only the pinned binary's directory, so age can only start the plugin that sits next to it.
+            'PATH'                           => dirname($binary),
             'AGE_PASSPHRASE_FD'              => '3',
             'AGE_PASSPHRASE_WORK_FACTOR'     => (string) $this->workFactor,
             'AGE_PASSPHRASE_MAX_WORK_FACTOR' => (string) $this->maxWorkFactor,
@@ -195,8 +198,15 @@ final class AgeBinaryEncryptor implements ArchiveEncryptorInterface
 
         $this->filesystem->remove($output);
         $message = mb_substr(SecretRedactor::redact(trim($stderr)), 0, 300);
-        if ($decrypting && preg_match('/passphrase|identit|decrypt/i', $stderr) === 1) {
-            throw new WrongPasswordException('Unable to decrypt the archive: wrong password or corrupt data.');
+        // EO-I1: a wrong passphrase, a hostile work factor and a tampered / truncated file are told apart.
+        if ($decrypting && str_contains($stderr, 'incorrect passphrase')) {
+            throw new WrongPasswordException('Unable to decrypt the archive: wrong password.');
+        }
+        if ($decrypting && str_contains($stderr, 'work factor')) {
+            throw new CorruptArchiveException('The age header asks for a scrypt work factor above backup.encryption.age.max_work_factor.');
+        }
+        if ($decrypting) {
+            throw new CorruptArchiveException('The age archive failed its integrity check (tampered or truncated).', CorruptArchiveException::CHECKSUM);
         }
 
         throw new FormatUnavailableException(sprintf('age failed (exit %d): %s', $exitCode, $message === '' ? 'no output' : $message));
@@ -217,8 +227,14 @@ final class AgeBinaryEncryptor implements ArchiveEncryptorInterface
 
     private function findPlugin(string $binary): ?string
     {
-        $found = (new ExecutableFinder())->find('age-plugin-batchpass', null, [dirname($binary)]);
+        $beside = dirname($binary) . '/age-plugin-batchpass';
+        if (!is_file($beside) || !is_executable($beside)) {
+            return null;
+        }
+        if ($this->plugin !== null && realpath($this->plugin) !== realpath($beside)) {
+            return null;
+        }
 
-        return is_string($found) && strlen($found) > 0 ? $found : null;
+        return $beside;
     }
 }

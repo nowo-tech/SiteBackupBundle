@@ -264,7 +264,8 @@ final class AgeEncryptionTest extends TestCase
             self::markTestSkipped('/proc is not available.');
         }
         $seen = [];
-        $tick = static function () use (&$seen): void {
+        $self = (string) @file_get_contents('/proc/self/cmdline');
+        $tick = static function () use (&$seen, $self): void {
             $parents = [(string) getmypid() => true];
             foreach (glob('/proc/[0-9]*/stat') ?: [] as $stat) {
                 $fields = explode(' ', (string) @file_get_contents($stat));
@@ -274,7 +275,8 @@ final class AgeEncryptionTest extends TestCase
                     $parents[$pid] = true;
                     $cmdline       = @file_get_contents('/proc/' . $pid . '/cmdline');
                     $environ       = @file_get_contents('/proc/' . $pid . '/environ');
-                    if (is_string($cmdline) && is_string($environ) && $cmdline !== '') {
+                    // EO-I9: a child between fork and exec still shows PHP's own cmdline and environment: skip it.
+                    if (is_string($cmdline) && is_string($environ) && $cmdline !== '' && $cmdline !== $self) {
                         $seen[] = ['cmdline' => $cmdline, 'environ' => $environ];
                     }
                 }

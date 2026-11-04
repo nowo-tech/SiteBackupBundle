@@ -21,6 +21,7 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 use function count;
 use function file_get_contents;
 use function is_array;
+use function is_bool;
 use function is_file;
 use function is_string;
 use function json_decode;
@@ -32,8 +33,9 @@ use const JSON_THROW_ON_ERROR;
 /**
  * Verifies a stored backup by id, or (1.29+) any archive file with `--file` (a download, another instance's backup).
  *
- * `--file` exit codes: 0 ok, 1 integrity failure, 2 wrong / missing password, 3 unsupported or corrupt, 4 signature
- * invalid.
+ * `--file` exit codes: 0 ok, 1 integrity failure (checksums, tampered or truncated data), 2 wrong / missing password,
+ * 3 unsupported or corrupt, 4 signature missing (when required) or invalid, 5 not encrypted although a password was
+ * given (downgrade).
  */
 #[AsCommand(name: 'nowo:site-backup:verify', description: 'Verify a backup (by id, or any archive with --file) and its MANIFEST checksums')]
 final class VerifyBackupCommand extends Command
@@ -49,7 +51,9 @@ final class VerifyBackupCommand extends Command
             ->addArgument('id', InputArgument::OPTIONAL, 'Backup id in storage_dir')
             ->addOption('file', null, InputOption::VALUE_REQUIRED, 'Verify this archive file instead (zip, tar.gz, sql.gz, .age)')
             ->addOption('sha256', null, InputOption::VALUE_REQUIRED, 'Expected SHA-256 of the archive file (--file)')
-            ->addOption('sidecar', null, InputOption::VALUE_REQUIRED, 'Its .backup.json / .meta.json (--file): checksums and signature');
+            ->addOption('sidecar', null, InputOption::VALUE_REQUIRED, 'Its .backup.json / .meta.json (--file): checksums and signature')
+            ->addOption('allow-plaintext', null, InputOption::VALUE_NONE, 'With a password, also accept an archive that is not encrypted (--file)')
+            ->addOption('require-signature', null, InputOption::VALUE_NEGATABLE, 'Require a valid signed sidecar (--file; default: backup.signing.required)');
         PasswordInput::configure($this);
     }
 
@@ -121,7 +125,8 @@ final class VerifyBackupCommand extends Command
             $sidecar = $data;
         }
 
-        $result = $this->manager->verifyFile($file, $password, is_string($sha) ? $sha : null, $sidecar);
+        $require = $input->getOption('require-signature');
+        $result  = $this->manager->verifyFile($file, $password, is_string($sha) ? $sha : null, $sidecar, (bool) $input->getOption('allow-plaintext'), is_bool($require) ? $require : null);
 
         if ($result->isOk()) {
             $io->success(sprintf('Integrity OK (%s%s, %d files).', $result->format !== null ? $result->format->value : '?', $result->encryption !== null ? ', ' . $result->encryption : '', count($result->checksums)));

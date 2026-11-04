@@ -15,6 +15,9 @@ use Symfony\Component\Process\Process;
 
 use function array_map;
 use function escapeshellarg;
+use function fclose;
+use function fgets;
+use function fopen;
 use function hrtime;
 use function implode;
 use function is_file;
@@ -22,6 +25,7 @@ use function is_readable;
 use function min;
 use function preg_match;
 use function sprintf;
+use function str_ends_with;
 use function stripos;
 use function strlen;
 use function trim;
@@ -49,6 +53,8 @@ final class DumpImporter
         private readonly ?BackupOperationLock $operationLock = null,
     ) {
     }
+
+    private const DATABASE_SWITCH = '#^\s*(?:/\*!\d*\s*)?(?:USE\b|\\\\u\b|\\\\r\b|CONNECT\b|(?:CREATE|DROP|ALTER)\s+(?:DATABASE|SCHEMA)\b|-- Current Database:)#i';
 
     /** Minimum MariaDB client per major.minor for `--sandbox`; later lines all have it. */
     private const MARIADB_SANDBOX = ['10.5' => '10.5.25', '10.6' => '10.6.18', '10.11' => '10.11.8', '11.0' => '11.0.6', '11.1' => '11.1.5', '11.2' => '11.2.4', '11.3' => '11.3.2', '11.4' => '11.4.2'];
@@ -138,6 +144,11 @@ final class DumpImporter
             throw new DumpFailedException('SQL import: the dump file is missing or not readable.');
         }
 
+        if ($schema !== null) {
+            // EO-M3: a dump that switches database would write outside the target schema (the live one).
+            self::assertSingleDatabaseDump($file);
+        }
+
         $lock = $this->operationLock?->acquire();
         try {
             $this->run($file, $schema, $tick, $lock);
@@ -156,7 +167,12 @@ final class DumpImporter
         } catch (InvalidArgumentException $e) {
             throw new DumpFailedException('SQL import: ' . $e->getMessage(), 0, $e);
         }
-        $spec = MysqlDumpCommandFactory::clientFromDatabaseUrl((string) $this->databaseUrl, $this->skipSslVerifyServerCert, $this->clientBinary, ['--batch', $this->safetyOption()], $schema);
+        $options = ['--batch', $this->safetyOption()];
+        if ($schema !== null) {
+            // EO-M3: the client itself skips statements for any other database (Oracle and MariaDB clients).
+            $options[] = '--one-database';
+        }
+        $spec = MysqlDumpCommandFactory::clientFromDatabaseUrl((string) $this->databaseUrl, $this->skipSslVerifyServerCert, $this->clientBinary, $options, $schema);
 
         $commandLine = 'exec ' . implode(' ', array_map(escapeshellarg(...), $spec['command'])) . ' < ' . escapeshellarg($file);
         $process     = Process::fromShellCommandline($commandLine, null, $spec['env']);
@@ -177,6 +193,36 @@ final class DumpImporter
         }
         if (!$process->isSuccessful()) {
             throw new DumpFailedException('SQL import failed: ' . self::safeError($process->getErrorOutput()));
+        }
+    }
+
+    /**
+     * EO-M3: refuses dumps that select or create databases (`USE`, `\u`, `CREATE/DROP/ALTER DATABASE|SCHEMA`,
+     * `CONNECT`, `/*!… USE …`, `mysqldump --databases` / `--all-databases` output). Streaming scan of line starts.
+     *
+     * @throws DumpFailedException
+     */
+    public static function assertSingleDatabaseDump(string $file): void
+    {
+        $handle = @fopen($file, 'r');
+        if ($handle === false) {
+            throw new DumpFailedException('SQL import: the dump file is missing or not readable.');
+        }
+
+        try {
+            $atLineStart = true;
+            $lineNumber  = 0;
+            while (($piece = fgets($handle, 65536)) !== false) {
+                if ($atLineStart) {
+                    ++$lineNumber;
+                    if (preg_match(self::DATABASE_SWITCH, $piece) === 1) {
+                        throw new DumpFailedException(sprintf('The dump selects or creates a database (line %d): refused for an import into another schema.', $lineNumber));
+                    }
+                }
+                $atLineStart = str_ends_with($piece, "\n");
+            }
+        } finally {
+            fclose($handle);
         }
     }
 

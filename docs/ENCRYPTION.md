@@ -20,8 +20,11 @@
 
 ## age (tar.gz / sql.gz) — image requirement
 
-Install **age ≥ 1.3** and its **`age-plugin-batchpass`** (both ship in the official release archive) on `PATH`, or
-set `nowo_site_backup.backup.encryption.age.binary` to an absolute path (the plugin must sit next to it or on `PATH`):
+Install **age ≥ 1.3** and its **`age-plugin-batchpass`** (both ship in the official release archive) **in the same
+directory**, and set `nowo_site_backup.backup.encryption.age.binary` to that absolute path (recommended; a bare name is
+resolved once on PATH when the service is built). The plugin is only ever taken from the binary's own directory:
+age runs with `PATH` set to that directory alone, so an impostor elsewhere on PATH never receives the passphrase.
+`encryption.age.plugin` may pin the plugin path too (it must be the file next to the binary):
 
 ```dockerfile
 # Example (Debian/Alpine, amd64): pin the version and check the sha256 published on the GitHub release.
@@ -38,8 +41,11 @@ RUN curl -fsSL -o /tmp/age.tgz https://github.com/FiloSottile/age/releases/downl
 - **The passphrase never touches argv or the environment**: it is written to a dedicated pipe that age sees as fd 3
   (`AGE_PASSPHRASE_FD=3`); the child environment holds only `PATH`, the fd number and the work factors. A test reads
   `/proc/<pid>/cmdline` and `/proc/<pid>/environ` of age and its plugin while they run.
-- scrypt work factor 18 when encrypting (`encryption.age.work_factor`, 10–22) and at most 22 accepted when decrypting
-  (`encryption.age.max_work_factor`), so a hostile file cannot cost gigabytes of RAM.
+- scrypt work factor 18 when encrypting (`encryption.age.work_factor`, 10–22) and at most **20** accepted when
+  decrypting (`encryption.age.max_work_factor`, ≤ 22): a hostile header can cost at most 1 GiB of scrypt memory at the
+  default (4 GiB at 22).
+- A wrong passphrase reports `WrongPasswordException` (exit 2); a tampered or truncated file reports an integrity
+  failure (exit 1) and leaves no output.
 - Passwords with CR / LF are refused (the plugin strips trailing newlines).
 
 ## Key derivation caveat (zip)
@@ -51,16 +57,35 @@ warning to the backup when a password scores below about 100 bits.
 ## What the encryption does not hide
 
 The zip central directory (file names, sizes, dates) is not encrypted. For database-only backups that is
-`database/dump.sql` and `MANIFEST.json`.
+`database/dump.sql` and `MANIFEST.json`. libzip also stores the plaintext CRC-32 of entries of 20 bytes and more
+(AE-1 behaviour even when labelled AE-2); the content stays AES-256 encrypted.
 
 ## Integrity
 
 `MANIFEST.json` (SHA-256 per file) is inside the encrypted archive; the SHA-256 of the archive bytes is in the
 sidecar and in the remote metadata (`nowo-sha256`), so a download can be checked without the password. AE-2 also
-authenticates every entry (HMAC-SHA1): a wrong password or a modified byte fails before anything is written.
+authenticates every entry (HMAC-SHA1) and age every 64 KiB chunk: a wrong password or a modified byte fails the
+extraction. Partial output (libzip writes the entry before its check fails; age stops at the bad chunk) stays inside
+the owner-only work directory and is removed.
+
+**No downgrade (EO-M1):** when a password is given, `importArchive()` and `verify --file` accept only an age container
+or a zip whose **every** entry is AES-256; a plaintext archive is refused (exit 5) unless `allowPlaintext` /
+`--allow-plaintext`, and a zip mixing AES and plaintext entries is always refused. Whether an import was encrypted
+comes from the container, never from the MANIFEST.
+
+## Signatures (optional, EO-M2)
+
+The Ed25519 signature covers exactly: `id`, `created_at`, `format`, `encrypted`, `encryption`, `key_id`, `sha256`
+(the archive bytes), `size`, `plaintext_sha256` and `checksums_sha256` (every archived file's content), as canonical
+JSON after the prefix `nowo-site-backup-signature-v1`. It does **not** cover `content`, `table_rules`, `table_stats`,
+`label`, `created_by`, `extra_meta` or `warnings`. With `backup.signing.required` (the default as soon as a secret or
+public key is configured) an unsigned or wrongly signed sidecar is refused by `verifyIntegrity()`, `verify --file`
+(exit 4), `importArchive()` (pass the sidecar: `ImportOptions::$sidecar` / `--sidecar`) and `prune()` (unsigned
+sidecars are ignored, so those objects are never deleted).
 
 ## Restore
 
 `importArchive($path, $password)` (or `nowo:site-backup:import`) decrypts, verifies and stores a **plaintext**
-`tar.gz` (`0600`) in `storage_dir`; restore it, then delete it. A restore also needs the keys the host keeps apart
+`tar.gz` (`0600`) in `storage_dir`; it is deleted automatically after a successful restore
+(`ImportOptions::$deleteAfterRestore`, default true; `--keep-after-restore`). A restore also needs the keys the host keeps apart
 (e.g. the Halite key and vault decrypt keys).

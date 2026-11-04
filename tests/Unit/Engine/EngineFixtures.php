@@ -72,6 +72,7 @@ final class EngineFixtures
         }
 
         return self::script($dir, 'age', <<<SH
+            PATH=/usr/local/bin:/usr/bin:/bin
             if [ "\$1" = "--version" ]; then echo "{$version}"; exit 0; fi
             mode=\$1; shift
             out=""; in=""

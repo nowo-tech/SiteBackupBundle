@@ -26,6 +26,7 @@ use Nowo\SiteBackupBundle\Model\BackupArtifact;
 use Nowo\SiteBackupBundle\Model\BackupHistoryEntry;
 use Nowo\SiteBackupBundle\Model\BackupOptions;
 use Nowo\SiteBackupBundle\Model\BackupProgress;
+use Nowo\SiteBackupBundle\Model\ImportOptions;
 use Nowo\SiteBackupBundle\Model\RestoreProgress;
 use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
 use Nowo\SiteBackupBundle\Retention\RetentionItem;
@@ -248,9 +249,9 @@ final class SiteBackupManager
      *
      * @param array<string, mixed>|null $sidecar
      */
-    public function verifyFile(string $path, #[SensitiveParameter] ?ArchivePassword $password = null, ?string $expectedSha256 = null, ?array $sidecar = null): VerifyFileResult
+    public function verifyFile(string $path, #[SensitiveParameter] ?ArchivePassword $password = null, ?string $expectedSha256 = null, ?array $sidecar = null, bool $allowPlaintext = false, ?bool $requireSignature = null): VerifyFileResult
     {
-        return $this->archiver->verifyFile($path, $password, $expectedSha256, $sidecar);
+        return $this->archiver->verifyFile($path, $password, $expectedSha256, $sidecar, $allowPlaintext, $requireSignature);
     }
 
     /**
@@ -259,13 +260,13 @@ final class SiteBackupManager
      *
      * @throws BackupAlreadyRunningException|CorruptArchiveException|WrongPasswordException
      */
-    public function importArchive(string $path, #[SensitiveParameter] ?ArchivePassword $password = null, ?string $actor = null): BackupArtifact
+    public function importArchive(string $path, #[SensitiveParameter] ?ArchivePassword $password = null, ?string $actor = null, ?ImportOptions $options = null): BackupArtifact
     {
         $lock = $this->operationLock?->acquire();
 
         try {
             try {
-                $artifact = $this->archiver->import($path, $password, $actor);
+                $artifact = $this->archiver->import($path, $password, $actor, $options);
             } catch (Throwable $e) {
                 $this->logger->error('SiteBackup: import failed.', $this->context('import', null, $e));
 
@@ -341,6 +342,11 @@ final class SiteBackupManager
             ));
             $this->eventDispatcher?->dispatch(new RestoreCompletedEvent($artifact, $progress, $actor));
             $this->logger->info('SiteBackup: restore completed.', $this->context('restore', $backupId));
+
+            // EO-L6 / Q-O6: an imported (plaintext) archive is removed once it has been restored.
+            if (($artifact->getMeta()['delete_after_restore'] ?? false) === true) {
+                $this->doDelete($backupId, $actor ?? 'restore');
+            }
 
             return $progress;
         } catch (Throwable $e) {

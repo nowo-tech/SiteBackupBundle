@@ -26,6 +26,7 @@ use Nowo\SiteBackupBundle\Model\ArchivePassword;
 use Nowo\SiteBackupBundle\Model\BackupArtifact;
 use Nowo\SiteBackupBundle\Model\BackupOptions;
 use Nowo\SiteBackupBundle\Model\BackupProgress;
+use Nowo\SiteBackupBundle\Model\ImportOptions;
 use Nowo\SiteBackupBundle\Process\ProcessDeadline;
 use Nowo\SiteBackupBundle\Signing\BackupSigner;
 use OutOfBoundsException;
@@ -385,10 +386,16 @@ final class BackupArchiver
      *
      * @throws CorruptArchiveException|FormatUnavailableException|WrongPasswordException
      */
-    public function import(string $path, #[SensitiveParameter] ?ArchivePassword $password = null, ?string $createdBy = null): BackupArtifact
+    public function import(string $path, #[SensitiveParameter] ?ArchivePassword $password = null, ?string $createdBy = null, ?ImportOptions $options = null): BackupArtifact
     {
+        $options ??= new ImportOptions();
         if (!is_file($path) || !is_readable($path)) {
             throw new CorruptArchiveException('The archive to import is missing or not readable.');
+        }
+        // EO-M2: a required signature is checked against the archive bytes before anything is unpacked.
+        $signatureError = $this->signatureError($options->sidecar, $this->hashFile($path, null), $options->requireSignature);
+        if ($signatureError !== null) {
+            throw new CorruptArchiveException($signatureError, CorruptArchiveException::SIGNATURE);
         }
 
         $this->filesystem->mkdir($this->storageDir);
@@ -403,7 +410,7 @@ final class BackupArchiver
 
         try {
             $sourceSha = $this->hashFile($path, null);
-            $unpacked  = $this->unpack($path, $password, $workDir, $payloadDir);
+            $unpacked  = $this->unpack($path, $password, $workDir, $payloadDir, $options->allowPlaintext);
             $source    = $unpacked['source'];
             $dropped   = $unpacked['dropped'];
             $checksums = $unpacked['checksums'];
@@ -437,15 +444,17 @@ final class BackupArchiver
                     default                   => 'files',
                 },
                 'imported_from' => [
-                    'format'      => $source->value,
-                    'sha256'      => $sourceSha,
-                    'encrypted'   => $unpacked['encryption'] !== null || ($original['encrypted'] ?? false) === true,
+                    'format' => $source->value,
+                    'sha256' => $sourceSha,
+                    // EO-M1: from the container itself, never from the (attacker-controllable) MANIFEST.
+                    'encrypted'   => $unpacked['encryption'] !== null,
                     'encryption'  => $unpacked['encryption'],
                     'key_id'      => is_string($original['key_id'] ?? null) ? $original['key_id'] : null,
                     'original_id' => is_string($original['id'] ?? null) ? $original['id'] : null,
                     'created_at'  => is_string($original['created_at'] ?? null) ? $original['created_at'] : null,
                 ],
-                'warnings' => $warnings,
+                'warnings'             => $warnings,
+                'delete_after_restore' => $options->deleteAfterRestore,
             ];
             if ($hasDump) {
                 $meta['database_dump'] = 'database/dump.sql';
@@ -463,7 +472,7 @@ final class BackupArchiver
             }
             $published = true;
 
-            $artifact = new BackupArtifact(
+            $artifact = $this->signed(new BackupArtifact(
                 id: $id,
                 filename: $id . '.tar.gz',
                 absolutePath: $target,
@@ -474,7 +483,7 @@ final class BackupArchiver
                 meta: $meta,
                 label: $meta['label'],
                 createdBy: $createdBy,
-            );
+            ));
             $this->writeSidecar($artifact);
 
             return $artifact;
@@ -495,7 +504,7 @@ final class BackupArchiver
      *
      * @param array<string, mixed>|null $sidecar a `.backup.json` / `.meta.json` of the archive, when available
      */
-    public function verifyFile(string $path, #[SensitiveParameter] ?ArchivePassword $password = null, ?string $expectedSha256 = null, ?array $sidecar = null): VerifyFileResult
+    public function verifyFile(string $path, #[SensitiveParameter] ?ArchivePassword $password = null, ?string $expectedSha256 = null, ?array $sidecar = null, bool $allowPlaintext = false, ?bool $requireSignature = null): VerifyFileResult
     {
         if (!is_file($path) || !is_readable($path)) {
             return new VerifyFileResult(VerifyFileResult::UNSUPPORTED, ['The archive is missing or not readable.']);
@@ -507,18 +516,14 @@ final class BackupArchiver
             return new VerifyFileResult(VerifyFileResult::INTEGRITY, ['Archive SHA-256 mismatch.']);
         }
 
-        $signed    = is_array($sidecar['meta'] ?? null) ? $sidecar['meta'] : ($sidecar ?? []);
-        $signature = $signed['signature'] ?? null;
-        if ($sidecar !== null && is_string($signature) && $this->signer instanceof BackupSigner && $this->signer->canVerify()) {
-            $fields = BackupSigner::fieldsFromSidecar($sidecar);
-            if ($fields['sha256'] !== $sha || !$this->signer->verify($fields, $signature, (string) ($signed['signing_key_id'] ?? ''))) {
-                return new VerifyFileResult(VerifyFileResult::SIGNATURE, ['Signature invalid or signing key unknown.']);
-            }
+        $signatureError = $this->signatureError($sidecar, $sha, $requireSignature);
+        if ($signatureError !== null) {
+            return new VerifyFileResult(VerifyFileResult::SIGNATURE, [$signatureError]);
         }
 
         $workDir = PrivateTempDirectory::create(self::WORK_DIR_PREFIX . 'verify-file-', $this->workRoot());
         try {
-            $unpacked = $this->unpack($path, $password, $workDir, $workDir . '/payload');
+            $unpacked = $this->unpack($path, $password, $workDir, $workDir . '/payload', $allowPlaintext);
             $plain    = $sidecar['plaintext_sha256'] ?? null;
             if ($unpacked['source'] === ArchiveFormat::SqlGz && is_string($plain) && $unpacked['checksums']['database/dump.sql'] !== $plain) {
                 return new VerifyFileResult(VerifyFileResult::INTEGRITY, ['Checksum mismatch for database/dump.sql']);
@@ -528,7 +533,11 @@ final class BackupArchiver
         } catch (WrongPasswordException $e) {
             return new VerifyFileResult(VerifyFileResult::WRONG_PASSWORD, [$e->getMessage()]);
         } catch (CorruptArchiveException $e) {
-            return new VerifyFileResult($e->getCode() === CorruptArchiveException::CHECKSUM ? VerifyFileResult::INTEGRITY : VerifyFileResult::UNSUPPORTED, [$e->getMessage()]);
+            return new VerifyFileResult(match ($e->getCode()) {
+                CorruptArchiveException::CHECKSUM      => VerifyFileResult::INTEGRITY,
+                CorruptArchiveException::NOT_ENCRYPTED => VerifyFileResult::NOT_ENCRYPTED,
+                default                                => VerifyFileResult::UNSUPPORTED,
+            }, [$e->getMessage()]);
         } catch (RuntimeException $e) {
             return new VerifyFileResult(VerifyFileResult::UNSUPPORTED, [SecretRedactor::redact($e->getMessage())]);
         } finally {
@@ -541,7 +550,7 @@ final class BackupArchiver
      *
      * @return array{source: ArchiveFormat, encryption: ?string, dropped: list<string>, checksums: array<string, string>, original: array<string, mixed>}
      */
-    private function unpack(string $path, #[SensitiveParameter] ?ArchivePassword $password, string $workDir, string $payloadDir): array
+    private function unpack(string $path, #[SensitiveParameter] ?ArchivePassword $password, string $workDir, string $payloadDir, bool $allowPlaintext = false): array
     {
         $this->filesystem->mkdir($payloadDir, 0o700);
         $encryption = null;
@@ -559,6 +568,13 @@ final class BackupArchiver
         if ($encryption !== null && $source === ArchiveFormat::Zip) {
             throw new CorruptArchiveException('An age container must hold a tar.gz or sql.gz archive.');
         }
+        if ($source === ArchiveFormat::Zip && self::zipEncryption($plainPath) === 'all') {
+            $encryption = self::ENCRYPTION_ZIP_AES;
+        }
+        // EO-M1: with a password, only a fully encrypted container is accepted (no plaintext or mixed downgrade).
+        if ($password !== null && $encryption === null && !$allowPlaintext) {
+            throw new CorruptArchiveException('A password was given but the archive is not encrypted (possible downgrade); pass allowPlaintext to accept it.', CorruptArchiveException::NOT_ENCRYPTED);
+        }
         match ($source) {
             ArchiveFormat::Zip   => $this->extractZip($plainPath, $payloadDir, $password),
             ArchiveFormat::TarGz => $this->extractTarGzSafely($plainPath, $payloadDir),
@@ -567,9 +583,6 @@ final class BackupArchiver
         if ($plainPath !== $path) {
             $this->filesystem->remove($plainPath);
         }
-        if ($source === ArchiveFormat::Zip && $this->zipWasEncrypted($path)) {
-            $encryption = self::ENCRYPTION_ZIP_AES;
-        }
 
         $dropped                = $this->dropSecretPaths($payloadDir);
         [$checksums, $original] = $this->importedChecksums($payloadDir, $source, $dropped);
@@ -577,19 +590,61 @@ final class BackupArchiver
         return ['source' => $source, 'encryption' => $encryption, 'dropped' => $dropped, 'checksums' => $checksums, 'original' => $original];
     }
 
-    private function zipWasEncrypted(string $path): bool
+    /**
+     * `all` (every entry AES-256), `none` or `mixed`, from the zip central directory (EO-M1: every entry is checked).
+     */
+    public static function zipEncryption(string $path): string
     {
         $zip = new ZipArchive();
         if ($zip->open($path, ZipArchive::RDONLY) !== true) {
-            return false;
+            throw new CorruptArchiveException('zip extract failed: unable to open the archive.');
         }
+        $aes   = 0;
+        $plain = 0;
         try {
-            $stat = $zip->statIndex(0);
-
-            return $stat !== false && ($stat['encryption_method'] ?? ZipArchive::EM_NONE) !== ZipArchive::EM_NONE;
+            for ($i = 0; $i < $zip->numFiles; ++$i) {
+                $stat = $zip->statIndex($i);
+                if ($stat === false) {
+                    throw new CorruptArchiveException('zip extract failed: unreadable entry.');
+                }
+                ($stat['encryption_method'] ?? ZipArchive::EM_NONE) === ZipArchive::EM_AES_256 ? ++$aes : ++$plain;
+            }
         } finally {
             $zip->close();
         }
+
+        return match (true) {
+            $aes > 0 && $plain > 0 => 'mixed',
+            $aes > 0               => 'all',
+            default                => 'none',
+        };
+    }
+
+    /**
+     * EO-M2: why a sidecar's signature is not acceptable, or null. Required when $require is true, or by default
+     * when `backup.signing.required` is on; a missing sidecar / signature then fails too.
+     *
+     * @param array<string, mixed>|null $sidecar
+     */
+    private function signatureError(?array $sidecar, string $sha256, ?bool $require): ?string
+    {
+        $signer    = $this->signer;
+        $required  = $require ?? ($signer instanceof BackupSigner && $signer->isRequired());
+        $signed    = is_array($sidecar['meta'] ?? null) ? $sidecar['meta'] : ($sidecar ?? []);
+        $signature = $signed['signature'] ?? null;
+
+        if (!is_string($signature) || $signature === '') {
+            return $required ? 'Signature missing: a signed sidecar is required (backup.signing.required).' : null;
+        }
+        if (!$signer instanceof BackupSigner || !$signer->canVerify()) {
+            return $required ? 'Signature cannot be checked: no verification key is configured.' : null;
+        }
+        $fields = BackupSigner::fieldsFromSidecar((array) $sidecar);
+        if ($fields['sha256'] !== $sha256 || !$signer->verify($fields, $signature, (string) ($signed['signing_key_id'] ?? ''))) {
+            return 'Signature invalid or signing key unknown.';
+        }
+
+        return null;
     }
 
     /**
@@ -910,6 +965,10 @@ final class BackupArchiver
         if (is_string($signature) && $this->signer instanceof BackupSigner && $this->signer->canVerify()
             && !$this->signer->verify(BackupSigner::fieldsFromArtifact($artifact), $signature, (string) ($artifact->getMeta()['signing_key_id'] ?? ''))) {
             $errors[] = 'Signature invalid or signing key unknown.';
+        } elseif (!is_string($signature) && $this->signer instanceof BackupSigner && $this->signer->isRequired() && $this->signer->canSign()) {
+            // A host that signs every backup (and every import) never has a legitimate unsigned local sidecar.
+            // EO-M2: stripping the signature from a sidecar is not a way around a required signature.
+            $errors[] = 'Signature missing: a signed sidecar is required (backup.signing.required).';
         }
 
         $extractDir = PrivateTempDirectory::create(self::WORK_DIR_PREFIX . 'verify-' . $artifact->getId() . '-', $this->workRoot());
@@ -1706,7 +1765,8 @@ final class BackupArchiver
             throw new RuntimeException('zip extract failed: unable to open the archive.');
         }
 
-        $encrypted = false;
+        $encrypted    = false;
+        $plainEntries = false;
 
         try {
             if ($zip->numFiles > $this->extractLimits['max_entries']) {
@@ -1726,6 +1786,8 @@ final class BackupArchiver
                 }
                 if ($method === ZipArchive::EM_AES_256) {
                     $encrypted = true;
+                } else {
+                    $plainEntries = true;
                 }
                 $opsys = 0;
                 $attr  = 0;
@@ -1735,6 +1797,10 @@ final class BackupArchiver
             }
 
             $this->assertWithinLimits($total, (int) @filesize($archive));
+            // EO-M1: AES entries next to plaintext ones are a planted downgrade, refused in every case.
+            if ($encrypted && $plainEntries) {
+                throw new CorruptArchiveException('The zip mixes AES-256 and plaintext entries.', CorruptArchiveException::NOT_ENCRYPTED);
+            }
             if ($encrypted) {
                 if ($password === null) {
                     throw new WrongPasswordException('This archive is encrypted: a password is needed.');
@@ -1742,9 +1808,14 @@ final class BackupArchiver
                 $zip->setPassword($password->reveal());
             }
 
-            if (!$zip->extractTo($destination)) {
+            // The failure is reported below; the extension warning would only repeat it.
+            if (!@$zip->extractTo($destination)) {
+                // EO-I1: a wrong password and a tampered entry (CRC / HMAC) are told apart.
+                if ($encrypted && $zip->status === ZipArchive::ER_WRONGPASSWD) {
+                    throw new WrongPasswordException('Unable to decrypt the archive: wrong password.');
+                }
                 if ($encrypted) {
-                    throw new WrongPasswordException('Unable to decrypt the archive: wrong password or corrupt data.');
+                    throw new CorruptArchiveException('The encrypted archive failed its integrity check (tampered or truncated).', CorruptArchiveException::CHECKSUM);
                 }
 
                 throw new RuntimeException('zip extract failed.');

@@ -117,8 +117,7 @@ spec `specs/008-local-backup-engine`). No cryptography and no network yet (archi
 - `ArchivePassword` (≥ 16 characters, masked, never serialisable, `wipe()`), `BackupOptions::$password` /
   `$keyId` (opaque id recorded in the meta and the remote metadata). `zip` + password → WinZip AE-2 AES-256 on every
   entry (`ZipArchive::EM_AES_256`, refused when libzip lacks AES; never ZipCrypto); a warning when the password looks
-  weak for zip's PBKDF2-SHA1 × 1000. A password on `tar.gz` / `sql.gz` throws `FormatUnavailableException` (the age
-  encryptor is pending an owner decision).
+  weak for zip's PBKDF2-SHA1 × 1000. A password on `tar.gz` / `sql.gz` uses age (see below).
 - `verifyIntegrity()` / `extractTo()` / `SiteBackupManager::verifyBackup()` take the password; a missing or wrong one
   throws / reports `WrongPasswordException`.
 - `SiteBackupManager::importArchive($path, $password)` and `nowo:site-backup:import`: detects zip / tar.gz / sql.gz by
@@ -146,6 +145,27 @@ spec `specs/008-local-backup-engine`). No cryptography and no network yet (archi
   schema, always dropped; `DrillReport`) and `nowo:site-backup:drill`.
 - `FlysystemRemoteTarget` (optional, league/flysystem 3) and `backup.remote.flysystem_storage`.
 - Archive passwords refuse CR / LF.
+
+### Security (REQ-SEC-004 crypto audit EO of 1.29.0)
+
+- **EO-M1:** with a password, `importArchive()` / `verify --file` refuse plaintext archives (exit 5, `allowPlaintext`
+  to accept) and zips mixing AES and plaintext entries (always); `encrypted` comes from the container, never the
+  MANIFEST.
+- **EO-M2:** `backup.signing.required` (default true once a key is configured): unsigned or wrongly signed sidecars
+  fail verify (exit 4), import (`ImportOptions::$sidecar`, `--sidecar`, `--require-signature`) and are ignored by
+  prune. What the signature covers is documented.
+- **EO-M3:** imports into another schema (restore drill) refuse dumps that switch / create databases, run the client
+  with `--one-database`, and `backup.drill.database_url` lets the drill use an account limited to its schema.
+- **EO-L1:** `ArchivePassword` keeps its value in a weak map (nothing for `var_export`, `(array)` or VarDumper; a
+  VarDumper caster prints `***`).
+- **EO-L3 / EO-L4:** prune ignores future-dated sidecars and sidecars whose id, size or sha256 do not match the
+  object; `publish()` refuses an existing key (a failed upload can no longer delete the previous good object).
+- **EO-L5:** age and its plugin are pinned: resolved once, the plugin must sit next to the binary, and age runs with
+  `PATH` = that directory only.
+- **EO-L6:** imported archives are deleted after a successful restore (`deleteAfterRestore`, default true).
+- **Info:** tampered / truncated files are reported as integrity failures, not wrong passwords; `max_work_factor`
+  defaults to 20 (max 22); sidecars are read in a loop;
+  stale docs fixed; the `/proc` test ignores fork-before-exec samples.
 
 ### Security (REQ-SEC-004 audit EN of the 1.28.0 branch)
 

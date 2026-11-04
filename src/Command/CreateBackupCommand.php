@@ -5,7 +5,6 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\Command;
 
 use InvalidArgumentException;
-use JsonException;
 use Nowo\SiteBackupBundle\Enum\ArchiveFormat;
 use Nowo\SiteBackupBundle\Enum\TableRule;
 use Nowo\SiteBackupBundle\Exception\BackupAlreadyRunningException;
@@ -27,7 +26,7 @@ use function is_string;
 use function json_encode;
 use function sprintf;
 
-use const JSON_THROW_ON_ERROR;
+use const JSON_INVALID_UTF8_SUBSTITUTE;
 use const JSON_UNESCAPED_SLASHES;
 
 /**
@@ -83,22 +82,16 @@ final class CreateBackupCommand extends Command
         }
 
         if ((bool) $input->getOption('json')) {
-            try {
-                $output->writeln(json_encode([
-                    'id'        => $artifact->getId(),
-                    'file'      => $artifact->getAbsolutePath(),
-                    'size'      => $artifact->getSizeBytes(),
-                    'sha256'    => $artifact->getArchiveSha256(),
-                    'format'    => $artifact->getFormat()->value,
-                    'content'   => $artifact->getContent(),
-                    'encrypted' => $artifact->isEncrypted(),
-                    'warnings'  => $artifact->getWarnings(),
-                ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
-            } catch (JsonException $e) {
-                $io->error($e->getMessage());
-
-                return Command::FAILURE;
-            }
+            $output->writeln((string) json_encode([
+                'id'        => $artifact->getId(),
+                'file'      => $artifact->getAbsolutePath(),
+                'size'      => $artifact->getSizeBytes(),
+                'sha256'    => $artifact->getArchiveSha256(),
+                'format'    => $artifact->getFormat()->value,
+                'content'   => $artifact->getContent(),
+                'encrypted' => $artifact->isEncrypted(),
+                'warnings'  => $artifact->getWarnings(),
+            ], JSON_INVALID_UTF8_SUBSTITUTE | JSON_UNESCAPED_SLASHES));
 
             return Command::SUCCESS;
         }

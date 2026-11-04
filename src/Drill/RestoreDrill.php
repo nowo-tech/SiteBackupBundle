@@ -33,7 +33,9 @@ use function sys_get_temp_dir;
  * Restore drill (1.29+, Beacon Q-B8): loads a backup's dump into a throwaway schema, compares row counts and
  * `CHECKSUM TABLE` values with the `table_stats` recorded at backup time, and always drops the schema it created.
  *
- * The schema must not exist (it is created, never reused) and must differ from the live database.
+ * The schema must not exist (it is created, never reused) and must differ from the live database. EO-M3: dumps that
+ * select or create databases are refused, the client runs with `--one-database`, and `backup.drill.database_url`
+ * lets the drill connect as an account granted only on the throwaway schema.
  */
 final class RestoreDrill
 {
@@ -43,6 +45,7 @@ final class RestoreDrill
         private readonly TableStatsCollector $collector,
         private readonly ?string $workDir = null,
         private readonly Filesystem $filesystem = new Filesystem(),
+        private readonly ?DumpImporter $liveImporter = null,
     ) {
     }
 
@@ -54,7 +57,8 @@ final class RestoreDrill
      */
     public function run(BackupArtifact $artifact, string $schema, #[SensitiveParameter] ?ArchivePassword $password = null, int $rowTolerance = 0, ?callable $tick = null): DrillReport
     {
-        if (preg_match('/^[A-Za-z0-9_]{1,64}$/', $schema) !== 1 || strtolower($schema) === strtolower($this->importer->databaseName())) {
+        $live = ($this->liveImporter ?? $this->importer)->databaseName();
+        if (preg_match('/^[A-Za-z0-9_]{1,64}$/', $schema) !== 1 || strtolower($schema) === strtolower($live)) {
             throw new InvalidArgumentException('The drill schema must match [A-Za-z0-9_]{1,64} and differ from the live database.');
         }
         $expected = self::expected($artifact);

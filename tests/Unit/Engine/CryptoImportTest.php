@@ -132,7 +132,7 @@ final class CryptoImportTest extends TestCase
         $zip->close();
 
         self::assertSame(['This archive is encrypted: a password is needed.'], $archiver->verifyIntegrity($artifact)['errors']);
-        self::assertSame(['Unable to decrypt the archive: wrong password or corrupt data.'], $archiver->verifyIntegrity($artifact, null, ArchivePassword::fromString('wrong-password-0000000'))['errors']);
+        self::assertSame(['Unable to decrypt the archive: wrong password.'], $archiver->verifyIntegrity($artifact, null, ArchivePassword::fromString('wrong-password-0000000'))['errors']);
         self::assertTrue($archiver->verifyIntegrity($artifact, null, ArchivePassword::fromString(self::PHRASE))['ok']);
 
         // Import into another instance.

@@ -123,7 +123,7 @@ final class EngineWiringTest extends TestCase
         $age = $container->getDefinition(AgeBinaryEncryptor::class);
         self::assertSame('/opt/age/age', $age->getArgument('$binary'));
         self::assertSame(16, $age->getArgument('$workFactor'));
-        self::assertSame(22, $age->getArgument('$maxWorkFactor'));
+        self::assertSame(20, $age->getArgument('$maxWorkFactor'));
         self::assertSame(AgeBinaryEncryptor::class, (string) $container->getAlias(ArchiveEncryptorInterface::class));
         self::assertSame('prod', $container->getDefinition(BackupSigner::class)->getArgument('$keyId'));
         self::assertSame(['old' => 'AAAA'], $container->getDefinition(BackupSigner::class)->getArgument('$publicKeys'));
@@ -134,6 +134,18 @@ final class EngineWiringTest extends TestCase
         self::assertSame(ArchiveEncryptorInterface::class, (string) $container->getDefinition(BackupArchiver::class)->getArgument('$encryptor'));
 
         self::assertFalse($this->load([])->hasDefinition(FlysystemRemoteTarget::class));
+    }
+
+    public function testDrillDatabaseUrlWiresDedicatedClients(): void
+    {
+        $container = $this->load(['backup' => ['drill' => ['database_url' => 'mysql://drill:CANARY-drill-pass-0000@db/beacon_drill']]]);
+
+        self::assertSame('mysql://drill:CANARY-drill-pass-0000@db/beacon_drill', $container->getDefinition('nowo_site_backup.drill.importer')->getArgument('$databaseUrl'));
+        self::assertTrue($container->hasDefinition('nowo_site_backup.drill.stats'));
+        $drill = $container->getDefinition(RestoreDrill::class);
+        self::assertSame('nowo_site_backup.drill.importer', (string) $drill->getArgument('$importer'));
+        self::assertSame('nowo_site_backup.drill.stats', (string) $drill->getArgument('$collector'));
+        self::assertSame(DumpImporter::class, (string) $drill->getArgument('$liveImporter'));
     }
 
     public function testUnsafeExtraOptionsFailAtBuild(): void

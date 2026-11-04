@@ -86,6 +86,28 @@ final class RealMysqlClientImportTest extends TestCase
     }
 
     /**
+     * EO-M3 PoC: a `--databases`-style dump imported into the drill schema must not touch the live database.
+     */
+    public function testADrillImportNeverTouchesTheLiveDatabase(): void
+    {
+        foreach (['SBB_REAL_CLIENT_ORACLE', 'SBB_REAL_CLIENT_MARIADB'] as $env) {
+            [$client, $url, $shared] = $this->environment($env);
+            $table                   = 'live_' . bin2hex(random_bytes(4));
+            $this->query($client, $url, 'CREATE TABLE ' . $table . ' (id INT); INSERT INTO ' . $table . ' VALUES (1),(2),(3),(4)');
+            $dump = $shared . '/databases-' . $table . '.sql';
+            file_put_contents($dump, "CREATE DATABASE /*!32312 IF NOT EXISTS*/ `beacon`;\nUSE `beacon`;\nDELETE FROM " . $table . ";\n");
+
+            try {
+                (new DumpImporter($url, $client))->importInto($dump, 'beacon_drill');
+                self::fail('Expected DumpFailedException');
+            } catch (DumpFailedException) {
+            }
+
+            self::assertSame("1\n2\n3\n4", $this->query($client, $url, 'SELECT id FROM ' . $table . ' ORDER BY id'));
+        }
+    }
+
+    /**
      * @return array{0: string, 1: string, 2: string}
      */
     private function environment(string $clientEnv): array

@@ -4,7 +4,6 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Command;
 
-use JsonException;
 use Nowo\SiteBackupBundle\Drill\RestoreDrill;
 use Nowo\SiteBackupBundle\Model\BackupArtifact;
 use Nowo\SiteBackupBundle\Service\SiteBackupManager;
@@ -22,7 +21,7 @@ use function is_numeric;
 use function json_encode;
 use function sprintf;
 
-use const JSON_THROW_ON_ERROR;
+use const JSON_INVALID_UTF8_SUBSTITUTE;
 
 /**
  * Restore drill (1.29+): imports a stored backup's dump into a throwaway schema, compares table statistics, drops the
@@ -70,11 +69,7 @@ final class RestoreDrillCommand extends Command
         }
 
         if ((bool) $input->getOption('json')) {
-            try {
-                $output->writeln(json_encode($report->toArray(), JSON_THROW_ON_ERROR));
-            } catch (JsonException) {
-                return 2;
-            }
+            $output->writeln((string) json_encode($report->toArray(), JSON_INVALID_UTF8_SUBSTITUTE));
         } elseif ($report->passed) {
             $io->success(sprintf('Drill passed: %d tables match (%.1f s).', $report->tablesChecked, $report->durationSeconds));
         } else {

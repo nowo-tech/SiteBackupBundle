@@ -65,9 +65,16 @@ final class RemoteBackupPublisher
 
     private const SIDECAR_MAX_BYTES = 64 * 1024;
 
+    /** Bundle backup ids (`Ymd-His-<8 hex>`); other ids in a sidecar are ignored by prune (EO-L3). */
+    private const ID_PATTERN = '/^\d{8}-\d{6}-[0-9a-f]{8}$/';
+
+    /** Tolerated clock skew for sidecar dates (EO-L3: future-dated sidecars are ignored). */
+    private const FUTURE_SKEW_SECONDS = 300;
+
     public function __construct(
         private readonly ?EventDispatcherInterface $eventDispatcher = null,
         private readonly ClockInterface $clock = new NativeClock(),
+        private readonly ?BackupSigner $signer = null,
     ) {
     }
 
@@ -86,6 +93,16 @@ final class RemoteBackupPublisher
     ): RemoteObject {
         self::assertKey($prefix, $key);
         $metadata = $this->metadata($artifact, $extraMetadata);
+
+        // EO-L4: never overwrite (and so never delete on failure) an object that already exists.
+        try {
+            $existing = $target->head($key);
+        } catch (Throwable $e) {
+            throw self::wrap('head', $e);
+        }
+        if ($existing instanceof RemoteObject) {
+            throw new RemoteTargetException('The remote key already exists; publish each backup to a new key.');
+        }
 
         $stream = @fopen($artifact->getAbsolutePath(), 'r');
         if ($stream === false) {
@@ -128,6 +145,10 @@ final class RemoteBackupPublisher
      * Deletes what the policy drops among the archives with a sidecar under $prefix. Never runs without the just
      * created backup among them (a failed run prunes nothing), never deletes it nor the newest one.
      *
+     * Only trustworthy sidecars count (EO-L3 / EO-M2): a bundle id contained in the archive key and matching its
+     * `nowo-backup-id` metadata when present, the archive's size, a creation date not in the future, and — when
+     * $requireSignature (default `backup.signing.required`) — a valid signature over the archive's sha256.
+     *
      * @param (callable(array<string, mixed>): bool)|null $filter only sidecars it accepts are considered (e.g. one plan)
      */
     public function prune(
@@ -136,16 +157,19 @@ final class RemoteBackupPublisher
         RetentionPolicy $policy,
         string $justCreatedId,
         ?callable $filter = null,
+        ?bool $requireSignature = null,
     ): PruneReport {
+        $required = $requireSignature ?? ($this->signer instanceof BackupSigner && $this->signer->isRequired());
+        $latest   = $this->clock->now()->getTimestamp() + self::FUTURE_SKEW_SECONDS;
         $keysById = [];
         $items    = [];
-        foreach ($this->catalogue($target, $prefix) as $archiveKey => $sidecar) {
+        foreach ($this->catalogue($target, $prefix) as $archiveKey => [$sidecar, $object]) {
             if ($filter !== null && !$filter($sidecar)) {
                 continue;
             }
             $id        = (string) $sidecar['id'];
             $createdAt = DateTimeImmutable::createFromFormat(DATE_ATOM, (string) $sidecar['created_at']);
-            if ($createdAt === false) {
+            if ($createdAt === false || $createdAt->getTimestamp() > $latest || !$this->trusted($archiveKey, $id, $sidecar, $object, $required)) {
                 continue;
             }
             $keysById[$id] = $archiveKey;
@@ -331,15 +355,45 @@ final class RemoteBackupPublisher
     }
 
     /**
-     * Archive key => sidecar, for archives under $prefix that have a readable sidecar.
+     * EO-L3: a sidecar is only trusted for the archive object it sits next to.
      *
-     * @return array<string, array<string, mixed>>
+     * @param array<string, mixed> $sidecar
+     */
+    private function trusted(string $archiveKey, string $id, array $sidecar, RemoteObject $object, bool $requireSignature): bool
+    {
+        if (preg_match(self::ID_PATTERN, $id) !== 1 || !str_contains($archiveKey, $id)) {
+            return false;
+        }
+        $metaId = $object->metadata['nowo-backup-id'] ?? null;
+        if (is_string($metaId) && $metaId !== $id) {
+            return false;
+        }
+        if (!is_int($sidecar['size'] ?? null) || $sidecar['size'] !== $object->sizeBytes) {
+            return false;
+        }
+        $metaSha = $object->metadata['nowo-sha256'] ?? null;
+        if (is_string($metaSha) && $metaSha !== ($sidecar['sha256'] ?? null)) {
+            return false;
+        }
+        if (!$requireSignature) {
+            return true;
+        }
+        $signature = $sidecar['signature'] ?? null;
+
+        return $this->signer instanceof BackupSigner && is_string($signature)
+            && $this->signer->verify(BackupSigner::fieldsFromSidecar($sidecar), $signature, (string) ($sidecar['signing_key_id'] ?? ''));
+    }
+
+    /**
+     * Archive key => [sidecar, archive object], for archives under $prefix that have a readable sidecar.
+     *
+     * @return array<string, array{0: array<string, mixed>, 1: RemoteObject}>
      */
     private function catalogue(BackupRemoteTargetInterface $target, string $prefix): array
     {
         $keys = [];
         foreach ($this->listSafely($target, $prefix) as $object) {
-            $keys[$object->key] = true;
+            $keys[$object->key] = $object;
         }
 
         $catalogue = [];
@@ -353,7 +407,7 @@ final class RemoteBackupPublisher
             }
             $sidecar = $this->readSidecar($target, $key);
             if ($sidecar !== null) {
-                $catalogue[$archiveKey] = $sidecar;
+                $catalogue[$archiveKey] = [$sidecar, $keys[$archiveKey]];
             }
         }
 
@@ -367,7 +421,11 @@ final class RemoteBackupPublisher
     {
         try {
             $stream = $target->openRead($key);
-            $raw    = (string) fread($stream, self::SIDECAR_MAX_BYTES + 1);
+            // EO-I10: network streams return short reads; read up to the cap in a loop.
+            $raw = '';
+            while (!feof($stream) && strlen($raw) <= self::SIDECAR_MAX_BYTES) {
+                $raw .= (string) fread($stream, self::SIDECAR_MAX_BYTES + 1 - strlen($raw));
+            }
             fclose($stream);
             if (strlen($raw) > self::SIDECAR_MAX_BYTES) {
                 return null;

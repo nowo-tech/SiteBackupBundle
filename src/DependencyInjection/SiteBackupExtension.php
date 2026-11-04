@@ -503,6 +503,7 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$binary', (string) $age['binary'])
             ->setArgument('$workFactor', (int) $age['work_factor'])
             ->setArgument('$maxWorkFactor', (int) $age['max_work_factor'])
+            ->setArgument('$plugin', $age['plugin'])
             ->setArgument('$timeoutSeconds', $timeout);
         $container->setAlias(ArchiveEncryptorInterface::class, AgeBinaryEncryptor::class)->setPublic(false);
 
@@ -510,7 +511,8 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
         $container->register(BackupSigner::class, BackupSigner::class)
             ->setArgument('$secretKey', $signing['secret_key'])
             ->setArgument('$keyId', (string) $signing['key_id'])
-            ->setArgument('$publicKeys', $signing['public_keys']);
+            ->setArgument('$publicKeys', $signing['public_keys'])
+            ->setArgument('$required', $signing['required']);
 
         $container->register(TableStatsCollector::class, TableStatsCollector::class)
             ->setArgument('$databaseUrl', $url)
@@ -518,11 +520,30 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$skipSslVerifyServerCert', $skipSsl)
             ->setArgument('$timeoutSeconds', $timeout);
 
+        $drillUrl      = $backup['drill']['database_url'];
+        $drillImporter = new Reference(DumpImporter::class);
+        $drillStats    = new Reference(TableStatsCollector::class);
+        if (is_string($drillUrl) && $drillUrl !== '') {
+            $container->register('nowo_site_backup.drill.importer', DumpImporter::class)
+                ->setArgument('$databaseUrl', $drillUrl)
+                ->setArgument('$clientBinary', (string) $database['client_binary'])
+                ->setArgument('$skipSslVerifyServerCert', $skipSsl)
+                ->setArgument('$timeoutSeconds', $timeout);
+            $container->register('nowo_site_backup.drill.stats', TableStatsCollector::class)
+                ->setArgument('$databaseUrl', $drillUrl)
+                ->setArgument('$clientBinary', (string) $database['client_binary'])
+                ->setArgument('$skipSslVerifyServerCert', $skipSsl)
+                ->setArgument('$timeoutSeconds', $timeout);
+            $drillImporter = new Reference('nowo_site_backup.drill.importer');
+            $drillStats    = new Reference('nowo_site_backup.drill.stats');
+        }
+
         $container->register(RestoreDrill::class, RestoreDrill::class)
             ->setArgument('$archiver', new Reference(BackupArchiver::class))
-            ->setArgument('$importer', new Reference(DumpImporter::class))
-            ->setArgument('$collector', new Reference(TableStatsCollector::class))
-            ->setArgument('$workDir', (string) $backup['work_dir']);
+            ->setArgument('$importer', $drillImporter)
+            ->setArgument('$collector', $drillStats)
+            ->setArgument('$workDir', (string) $backup['work_dir'])
+            ->setArgument('$liveImporter', new Reference(DumpImporter::class));
 
         $storage = $backup['remote']['flysystem_storage'];
         if (is_string($storage) && $storage !== '') {
@@ -532,7 +553,8 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
         }
 
         $container->register(RemoteBackupPublisher::class, RemoteBackupPublisher::class)
-            ->setArgument('$eventDispatcher', new Reference('event_dispatcher', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE));
+            ->setArgument('$eventDispatcher', new Reference('event_dispatcher', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
+            ->setArgument('$signer', new Reference(BackupSigner::class));
 
         $container->register(BackupOperationLock::class, BackupOperationLock::class)
             ->setArgument('$lockDirectory', $backup['storage_dir'])

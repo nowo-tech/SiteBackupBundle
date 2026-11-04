@@ -7,6 +7,7 @@ namespace Nowo\SiteBackupBundle\Model;
 use InvalidArgumentException;
 use LogicException;
 use SensitiveParameter;
+use WeakMap;
 
 use function function_exists;
 use function log;
@@ -34,11 +35,46 @@ final class ArchivePassword
     /** Below this estimate a zip password gets a warning: AE-2 derives its key with PBKDF2-SHA1 × 1000 only. */
     public const WEAK_ZIP_BITS = 100;
 
-    private string $value;
+    /**
+     * EO-L1: the value never lives in an object property, so `var_export()`, an `(array)` cast or VarDumper cannot
+     * print it. Entries disappear with their object.
+     *
+     * Worker-safe: a weak map keyed by the password object, so an entry lives exactly as long as its object.
+     *
+     * @var WeakMap<self, string>|null
+     */
+    private static ?WeakMap $values = null; // @phpstan-ignore-line (object-keyed weak map, see above)
 
     private function __construct(#[SensitiveParameter] string $value)
     {
-        $this->value = $value;
+        self::store($this, $value);
+    }
+
+    public function __clone()
+    {
+        // A clone gets no value (it would otherwise be an unwipeable copy).
+        self::$values?->offsetUnset($this);
+    }
+
+    /**
+     * VarDumper caster (registered by the bundle): `ArchivePassword { value: "***" }`.
+     *
+     * @param array<string, mixed> $a
+     *
+     * @return array<string, mixed>
+     */
+    public static function castForVarDumper(self $password, array $a): array
+    {
+        return ['value' => '***'];
+    }
+
+    private static function store(self $password, #[SensitiveParameter] string $value): void
+    {
+        // @igor-ignore - Object-keyed weak map: each entry dies with its ArchivePassword; nothing outlives a request.
+        // @phpstan-ignore-next-line (weak map, see the property)
+        self::$values ??= new WeakMap();
+        // @phpstan-ignore-next-line (weak map, see the property)
+        self::$values[$password] = $value;
     }
 
     /**
@@ -60,11 +96,12 @@ final class ArchivePassword
      */
     public function reveal(): string
     {
-        if ($this->value === '') {
+        $value = self::$values[$this] ?? '';
+        if ($value === '') {
             throw new LogicException('This archive password was wiped.');
         }
 
-        return $this->value;
+        return $value;
     }
 
     /**
@@ -73,23 +110,24 @@ final class ArchivePassword
      */
     public function estimatedBits(): int
     {
-        $pool = 0;
+        $value = self::$values[$this] ?? '';
+        $pool  = 0;
         foreach (['/[a-z]/' => 26, '/[A-Z]/' => 26, '/[0-9]/' => 10, '/[^a-zA-Z0-9]/' => 33] as $pattern => $size) {
-            if (preg_match($pattern, $this->value) === 1) {
+            if (preg_match($pattern, $value) === 1) {
                 $pool += $size;
             }
         }
 
-        return (int) (mb_strlen($this->value, 'UTF-8') * log(max(2, $pool), 2));
+        return (int) (mb_strlen($value, 'UTF-8') * log(max(2, $pool), 2));
     }
 
     public function wipe(): void
     {
-        if ($this->value !== '' && function_exists('sodium_memzero')) {
-            // @phpstan-ignore-next-line (sodium_memzero() nulls its argument; the property is reset right below)
-            sodium_memzero($this->value);
+        $value = self::$values[$this] ?? '';
+        if ($value !== '' && function_exists('sodium_memzero')) {
+            sodium_memzero($value);
         }
-        $this->value = '';
+        self::$values?->offsetUnset($this);
     }
 
     /**
