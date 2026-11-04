@@ -7,7 +7,6 @@ namespace Nowo\SiteBackupBundle\Restore;
 use Closure;
 use DateTimeImmutable;
 use Nowo\SiteBackupBundle\Backup\BackupArchiver;
-use Nowo\SiteBackupBundle\Backup\PrivateTempDirectory;
 use Nowo\SiteBackupBundle\Backup\RuntimeStatePaths;
 use Nowo\SiteBackupBundle\Model\BackupArtifact;
 use Nowo\SiteBackupBundle\Model\RestoreProgress;
@@ -28,6 +27,7 @@ use function implode;
 use function intdiv;
 use function is_dir;
 use function is_file;
+use function is_link;
 use function is_string;
 use function iterator_count;
 use function ltrim;
@@ -73,6 +73,9 @@ final class RestoreOrchestrator implements ResetInterface
 
     /** Clock timestamp of the last progress write of the running restore (heartbeat throttling). */
     private ?int $lastProgressWriteAt = null;
+
+    /** @var (Closure(): void)|null per-restore liveness callback (operation lock refresh), cleared by reset() */
+    private ?Closure $onHeartbeat = null;
 
     /**
      * @param list<string> $protectedRelativePaths never overwritten during apply
@@ -177,6 +180,10 @@ final class RestoreOrchestrator implements ResetInterface
     {
         $this->progressStorage->save($progress);
         $this->lastProgressWriteAt = ($at ?? $progress->getUpdatedAt() ?? $this->now())->getTimestamp();
+        // EN-L4: every progress write (steps and throttled heartbeats) also keeps the operation lock alive.
+        if ($this->onHeartbeat instanceof Closure) {
+            ($this->onHeartbeat)();
+        }
     }
 
     /**
@@ -185,15 +192,21 @@ final class RestoreOrchestrator implements ResetInterface
     public function reset(): void
     {
         $this->lastProgressWriteAt = null;
+        $this->onHeartbeat         = null;
     }
 
     /**
      * Runs a full restore synchronously (CLI / worker). Panel may also call this.
      */
-    public function restore(BackupArtifact $artifact, ?string $actor = null): RestoreProgress
+    /**
+     * @param (Closure(): void)|null $onHeartbeat called with every progress heartbeat (1.28+: the manager refreshes the
+     *                                            operation lock with it, so a long restore keeps the lock)
+     */
+    public function restore(BackupArtifact $artifact, ?string $actor = null, ?Closure $onHeartbeat = null): RestoreProgress
     {
         // A long-lived worker may run several restores: the heartbeat throttle starts fresh for each.
         $this->reset();
+        $this->onHeartbeat = $onHeartbeat;
 
         if ($this->isRestoreActive()) {
             throw new RuntimeException('A restore is already in progress.');
@@ -240,7 +253,8 @@ final class RestoreOrchestrator implements ResetInterface
             }
             $this->appendLog('Integrity OK (' . count($integrity['checksums']) . ' files).');
 
-            $staging = PrivateTempDirectory::create('nowo-site-backup-restore-' . $artifact->getId() . '-');
+            // 1.28+: staging lives in backup.work_dir (owner-only), not in the system temp dir (often a tmpfs).
+            $staging = $this->archiver->createPrivateWorkDirectory('restore-' . $artifact->getId() . '-');
 
             $this->advance(RestoreProgress::PHASE_EXTRACTING, 35.0, self::MESSAGE_EXTRACTING);
             $this->archiver->extractTo($artifact, $staging, $heartbeat);
@@ -248,7 +262,7 @@ final class RestoreOrchestrator implements ResetInterface
 
             $this->advance(RestoreProgress::PHASE_APPLYING, 55.0, self::MESSAGE_APPLYING);
             $filesTouched = true;
-            $applied      = $this->applyFromStaging($staging);
+            $applied      = $this->applyFromStaging($staging, $integrity['checksums']);
             $this->appendLog(sprintf('Files applied (%d).', $applied));
             if ($this->workerRestartSignal instanceof WorkerRestartSignal) {
                 $this->appendLog('Restart PHP workers (FrankenPHP worker mode) so they load the restored code and config.');
@@ -319,7 +333,10 @@ final class RestoreOrchestrator implements ResetInterface
     /**
      * @return int number of files written to the project
      */
-    private function applyFromStaging(string $staging): int
+    /**
+     * @param array<string, string> $manifest the archive's MANIFEST checksums: only those paths are applied (1.28+)
+     */
+    private function applyFromStaging(string $staging, array $manifest): int
     {
         $project = rtrim($this->projectDir, '/\\');
         $finder  = (new Finder())->files()->in($staging)->ignoreDotFiles(false);
@@ -336,6 +353,17 @@ final class RestoreOrchestrator implements ResetInterface
             $relative = str_replace('\\', '/', $relative);
 
             if ($relative === 'MANIFEST.json' || str_starts_with($relative, 'database/')) {
+                continue;
+            }
+
+            // 1.28+: never follow a link entry (its target could be any file of the host) and apply only what the
+            // MANIFEST lists.
+            if (is_link($full) || !is_file($full)) {
+                $this->appendLog('Skipped link or special entry: ' . $relative);
+                continue;
+            }
+            if (!isset($manifest[$relative])) {
+                $this->appendLog('Skipped file not listed in the MANIFEST: ' . $relative);
                 continue;
             }
 

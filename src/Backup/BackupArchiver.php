@@ -19,6 +19,7 @@ use Nowo\SiteBackupBundle\Exception\DumpFailedException;
 use Nowo\SiteBackupBundle\Exception\FormatUnavailableException;
 use Nowo\SiteBackupBundle\Exception\InsufficientDiskException;
 use Nowo\SiteBackupBundle\Exception\InvalidBackupOptionsException;
+use Nowo\SiteBackupBundle\Exception\UnsafeArchiveException;
 use Nowo\SiteBackupBundle\Exception\WrongPasswordException;
 use Nowo\SiteBackupBundle\Log\SecretRedactor;
 use Nowo\SiteBackupBundle\Model\ArchivePassword;
@@ -45,7 +46,6 @@ use function array_merge;
 use function array_reverse;
 use function array_unique;
 use function array_values;
-use function basename;
 use function bin2hex;
 use function class_exists;
 use function count;
@@ -65,6 +65,7 @@ use function filesize;
 use function fnmatch;
 use function fopen;
 use function fread;
+use function function_exists;
 use function fwrite;
 use function glob;
 use function hash_equals;
@@ -140,6 +141,16 @@ final class BackupArchiver
 
     private const WORK_DIR_PREFIX = 'nowo-site-backup-';
 
+    /** Default extraction limits (EN-I8): total bytes, entries, compression ratio (checked above 64 MiB). */
+    public const DEFAULT_EXTRACT_LIMITS = ['max_bytes' => 107_374_182_400, 'max_entries' => 200_000, 'max_ratio' => 200];
+
+    private const RATIO_FLOOR_BYTES = 64 * 1024 * 1024;
+
+    private const ID_PATTERN = '/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/';
+
+    /** @var array{max_bytes: int, max_entries: int, max_ratio: int} */
+    private readonly array $extractLimits;
+
     /** @var list<string> project-relative runtime state paths never packed into an archive */
     private readonly array $runtimeStateRelativePaths;
 
@@ -153,6 +164,7 @@ final class BackupArchiver
      * @param string|null $workDir root of the owner-only staging directories (1.28+); null = the system temp dir
      * @param bool $preflightDiskCheck refuse to start when free space is below ~3× the last archive (1.28+)
      * @param string $tarBinary tar executable (tests use a stand-in)
+     * @param array{max_bytes?: int, max_entries?: int, max_ratio?: int} $extractLimits `backup.extract_limits` (EN-I8)
      */
     public function __construct(
         private readonly string $projectDir,
@@ -172,7 +184,13 @@ final class BackupArchiver
         private readonly ?ArchiveEncryptorInterface $encryptor = null,
         private readonly ?BackupSigner $signer = null,
         private readonly ?TableStatsCollector $statsCollector = null,
+        array $extractLimits = [],
     ) {
+        $this->extractLimits = [
+            'max_bytes'   => (int) ($extractLimits['max_bytes'] ?? self::DEFAULT_EXTRACT_LIMITS['max_bytes']),
+            'max_entries' => (int) ($extractLimits['max_entries'] ?? self::DEFAULT_EXTRACT_LIMITS['max_entries']),
+            'max_ratio'   => (int) ($extractLimits['max_ratio'] ?? self::DEFAULT_EXTRACT_LIMITS['max_ratio']),
+        ];
         $statePaths = [$storageDir, ...$runtimeStatePaths];
         if ($workDir !== null && $workDir !== '') {
             $statePaths[] = $workDir;
@@ -213,7 +231,7 @@ final class BackupArchiver
         }
         $this->assertSupported($options);
 
-        $this->filesystem->mkdir($this->storageDir);
+        $this->ensurePrivateDirectory($this->storageDir);
         $workRoot = $this->workRoot();
         $this->removeStaleWorkDirectories(max(3600, 4 * $this->processTimeoutSeconds));
         $this->preflight($workRoot);
@@ -230,14 +248,17 @@ final class BackupArchiver
         $published  = false;
 
         $this->filesystem->mkdir($payloadDir, 0o700);
+        // EN-I3: lets the next run remove this directory at once if this process dies (SIGTERM / OOM).
+        @file_put_contents($workDir . '/.owner', self::ownerTag());
 
         try {
             $beat     = $this->heartbeat($options->heartbeat);
             $warnings = [];
             $skipped  = 0;
+            $outside  = 0;
 
             $includes  = $options->includePaths ?? $this->includePaths;
-            $checksums = $options->includeFiles ? $this->copyIncludedPaths($payloadDir, $includes, $skipped, $beat) : [];
+            $checksums = $options->includeFiles ? $this->copyIncludedPaths($payloadDir, $includes, $skipped, $outside, $beat) : [];
             $meta      = [
                 'project_dir'       => $this->projectDir,
                 'includes'          => $options->includeFiles ? array_values($includes) : [],
@@ -286,13 +307,17 @@ final class BackupArchiver
             if ($skipped > 0) {
                 $warnings[] = sprintf('%d secret path(s) skipped (secrets floor / backup.forbidden_paths).', $skipped);
             }
+            if ($outside > 0) {
+                $warnings[] = sprintf('%d link(s) pointing outside the project skipped.', $outside);
+            }
             if ($options->password !== null && !$ageWrap && $options->password->estimatedBits() < ArchivePassword::WEAK_ZIP_BITS) {
                 $warnings[] = 'The archive password looks weak for zip AES (PBKDF2-SHA1 x 1000): prefer a generated password of 20+ characters.';
             }
             $meta['warnings'] = $warnings;
 
             // Defence in depth: nothing that matches the floor may reach the packer, whatever include_paths says.
-            $this->secretPolicy->assertNoSecrets(array_keys($checksums));
+            // EN-I1: the staged tree itself is listed, not only the collected keys.
+            $this->secretPolicy->assertNoSecrets(array_values(array_unique([...array_keys($checksums), ...$this->stagedPaths($payloadDir)])));
 
             $beat(BackupProgress::PHASE_ARCHIVING);
             $tick = static fn () => $beat();
@@ -786,7 +811,7 @@ final class BackupArchiver
         $removed = 0;
         foreach (glob(rtrim($root, '/\\') . '/' . self::WORK_DIR_PREFIX . '*', GLOB_ONLYDIR) ?: [] as $dir) {
             $mtime = @filemtime($dir);
-            if ($mtime !== false && $mtime <= $limit) {
+            if (($mtime !== false && $mtime <= $limit) || self::ownerIsGone($dir)) {
                 $this->filesystem->remove($dir);
                 ++$removed;
             }
@@ -825,6 +850,10 @@ final class BackupArchiver
 
     public function find(string $id): ?BackupArtifact
     {
+        if (preg_match(self::ID_PATTERN, $id) !== 1 || str_contains($id, '..')) {
+            return null;
+        }
+
         foreach ($this->listArtifacts() as $artifact) {
             if ($artifact->getId() === $id) {
                 return $artifact;
@@ -841,6 +870,10 @@ final class BackupArchiver
             return false;
         }
 
+        // EN-I7: a sidecar only ever deletes an archive inside storage_dir.
+        if (!$this->isInsideStorage($artifact->getAbsolutePath())) {
+            return false;
+        }
         $this->filesystem->remove($artifact->getAbsolutePath());
         $sidecar = $this->sidecarPath($artifact->getId());
         if (is_file($sidecar)) {
@@ -1026,6 +1059,76 @@ final class BackupArchiver
         }
     }
 
+    /**
+     * An owner-only (0700) directory under `backup.work_dir` (EN-I6: restore staging). The caller removes it.
+     */
+    public function createPrivateWorkDirectory(string $prefix): string
+    {
+        return PrivateTempDirectory::create(self::WORK_DIR_PREFIX . $prefix, $this->workRoot());
+    }
+
+    /**
+     * @return array{max_bytes: int, max_entries: int, max_ratio: int}
+     */
+    public function getExtractLimits(): array
+    {
+        return $this->extractLimits;
+    }
+
+    private function ensurePrivateDirectory(string $dir): void
+    {
+        if (is_dir($dir)) {
+            return;
+        }
+        // EN-I3: created owner-only whatever the umask (an existing directory keeps the host's mode).
+        $this->filesystem->mkdir($dir, 0o700);
+        $this->filesystem->chmod($dir, 0o700);
+    }
+
+    private function isInsideStorage(string $path): bool
+    {
+        $storage = realpath($this->storageDir);
+        $real    = realpath($path);
+
+        return $storage !== false && ($real === false ? str_starts_with($path, rtrim($this->storageDir, '/\\') . '/') : str_starts_with($real, $storage . '/'));
+    }
+
+    private static function ownerTag(): string
+    {
+        return (string) gethostname() . ' ' . getmypid();
+    }
+
+    /**
+     * True when the run directory was written by a process of this host that no longer exists.
+     */
+    private static function ownerIsGone(string $dir): bool
+    {
+        $tag = @file_get_contents($dir . '/.owner');
+        if (!is_string($tag) || preg_match('/^(\S+) (\d+)$/', $tag, $m) !== 1 || $m[1] !== (string) gethostname() || !is_dir('/proc/self')) {
+            return false;
+        }
+
+        return (int) $m[2] !== getmypid() && !is_dir('/proc/' . $m[2]);
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function stagedPaths(string $payloadDir): array
+    {
+        $paths = [];
+        foreach ((new Finder())->in($payloadDir)->ignoreDotFiles(false) as $entry) {
+            if ($entry->isLink()) {
+                throw new UnsafeArchiveException('A link reached the staging tree.');
+            }
+            if ($entry->isFile()) {
+                $paths[] = str_replace('\\', '/', substr($entry->getPathname(), strlen($payloadDir) + 1));
+            }
+        }
+
+        return $paths;
+    }
+
     private function workRoot(): string
     {
         if ($this->workDir === null || $this->workDir === '') {
@@ -1033,7 +1136,14 @@ final class BackupArchiver
         }
 
         $root = rtrim($this->workDir, '/\\');
+        // EN-I3: never a symlink, always owned by this process' user.
+        if (is_link($root)) {
+            throw new RuntimeException('backup.work_dir must not be a symbolic link.');
+        }
         $this->filesystem->mkdir($root, 0o700);
+        if (function_exists('posix_geteuid') && @fileowner($root) !== posix_geteuid()) {
+            throw new RuntimeException('backup.work_dir must be owned by the user running the backup.');
+        }
         // mkdir() keeps an existing directory's mode: tighten it (work_dir holds plaintext dumps).
         $this->filesystem->chmod($root, 0o700);
 
@@ -1122,10 +1232,12 @@ final class BackupArchiver
      *
      * @return array<string, string>
      */
-    private function copyIncludedPaths(string $payloadDir, array $includePaths, int &$skipped, Closure $beat): array
+    private function copyIncludedPaths(string $payloadDir, array $includePaths, int &$skipped, int &$outside, Closure $beat): array
     {
         $checksums = [];
         $project   = rtrim($this->projectDir, '/\\');
+        $verdicts  = ['secret' => 0, 'outside' => 0];
+        $floor     = null;
         $beat(BackupProgress::PHASE_COPYING);
 
         foreach ($this->resolveIncludePaths($includePaths) as $relative) {
@@ -1139,8 +1251,9 @@ final class BackupArchiver
                 if ($this->isExcludedRelative($relative)) {
                     continue;
                 }
-                if ($this->isSecret($relative, $source)) {
-                    ++$skipped;
+                $verdict = $this->classify($relative, $source, $floor);
+                if ($verdict !== null) {
+                    ++$verdicts[$verdict];
                     continue;
                 }
                 $checksums[$relative] = $this->copyOne($source, $payloadDir . '/' . $relative);
@@ -1164,14 +1277,18 @@ final class BackupArchiver
                 if ($this->isExcludedRelative($relPath)) {
                     continue;
                 }
-                if ($this->isSecret($relPath, $full)) {
-                    ++$skipped;
+                $verdict = $this->classify($relPath, $full, $floor);
+                if ($verdict !== null) {
+                    ++$verdicts[$verdict];
                     continue;
                 }
                 $checksums[$relPath] = $this->copyOne($full, $payloadDir . '/' . $relPath);
                 $beat();
             }
         }
+
+        $skipped += $verdicts['secret'];
+        $outside += $verdicts['outside'];
 
         return $checksums;
     }
@@ -1185,28 +1302,64 @@ final class BackupArchiver
     }
 
     /**
-     * The path itself, or — for a symlink — its target, matches the secrets floor / forbidden paths.
+     * Why a collected file must not be archived (EN-L1 / EN-L2): `secret` when its project path, its real path (any
+     * symlink in its path resolved) or its inode (hard link) matches the floor / forbidden paths; `outside` when its
+     * real path leaves the project. null = archive it.
      */
-    private function isSecret(string $relative, string $absolute): bool
+    /**
+     * @param array<string, true>|null $floor floor inodes, built on the first hard-linked file of this run
+     */
+    private function classify(string $relative, string $absolute, ?array &$floor): ?string
     {
         if ($this->secretPolicy->isForbidden($relative)) {
-            return true;
-        }
-
-        if (!is_link($absolute)) {
-            return false;
+            return 'secret';
         }
 
         $real    = realpath($absolute);
         $project = realpath($this->projectDir);
-        if ($real === false) {
-            return true;
+        if ($real === false || $project === false) {
+            return 'secret';
         }
-        if ($project !== false && str_starts_with($real, $project . '/')) {
-            return $this->secretPolicy->isForbidden(substr($real, strlen($project) + 1));
+        if (!str_starts_with($real, $project . '/')) {
+            return 'outside';
+        }
+        if ($this->secretPolicy->isForbidden(substr($real, strlen($project) + 1))) {
+            return 'secret';
         }
 
-        return $this->secretPolicy->isForbidden(basename($real));
+        $stat = @stat($real);
+        if ($stat !== false && $stat['nlink'] > 1) {
+            $floor ??= $this->floorInodes($project);
+        }
+        if ($stat !== false && $stat['nlink'] > 1 && isset($floor[$stat['dev'] . ':' . $stat['ino']])) {
+            return 'secret';
+        }
+
+        return null;
+    }
+
+    /**
+     * dev:inode of every floor file of the project (built once per backup, only when a hard-linked file shows up).
+     *
+     * @return array<string, true>
+     */
+    private function floorInodes(string $project): array
+    {
+        $inodes = [];
+        $finder = (new Finder())->files()->in($project)->ignoreDotFiles(false)->ignoreVCS(true)
+            ->exclude(['vendor', 'node_modules', 'var/cache', 'var/log']);
+        foreach ($finder as $file) {
+            $relative = str_replace('\\', '/', substr($file->getPathname(), strlen($project) + 1));
+            if (!$this->secretPolicy->isForbidden($relative)) {
+                continue;
+            }
+            $stat = @stat($file->getPathname());
+            if ($stat !== false) {
+                $inodes[$stat['dev'] . ':' . $stat['ino']] = true;
+            }
+        }
+
+        return $inodes;
     }
 
     /**
@@ -1228,6 +1381,10 @@ final class BackupArchiver
             $relative = trim(str_replace('\\', '/', $relative), '/');
             if ($relative === '' || $relative === '.') {
                 return [''];
+            }
+            // EN-L1: backup.include_paths from config is checked like per-call includePaths.
+            if (in_array('..', explode('/', $relative), true)) {
+                throw new InvalidBackupOptionsException('backup.include_paths entries must not contain "..".');
             }
             $normalized[] = $relative;
         }
@@ -1445,12 +1602,19 @@ final class BackupArchiver
         }
         $this->filesystem->chmod($target, 0o600);
 
+        $limit   = $this->decompressedLimit((int) @filesize($source));
+        $written = 0;
+
         try {
             $inflate = inflate_init(ZLIB_ENCODING_GZIP) ?: throw new RuntimeException('gunzip failed: zlib is not available.');
             while (!feof($in)) {
                 $plain = @inflate_add($inflate, (string) fread($in, self::STREAM_CHUNK_BYTES), ZLIB_SYNC_FLUSH);
                 if ($plain === false) {
                     throw new RuntimeException('gunzip failed: corrupt sql.gz archive.');
+                }
+                $written += strlen($plain);
+                if ($written > $limit) {
+                    throw new UnsafeArchiveException('The decompressed size exceeds backup.extract_limits.');
                 }
                 fwrite($out, $plain);
                 if ($tick !== null) {
@@ -1480,12 +1644,17 @@ final class BackupArchiver
         $encrypted = false;
 
         try {
+            if ($zip->numFiles > $this->extractLimits['max_entries']) {
+                throw new UnsafeArchiveException('The archive has more entries than backup.extract_limits allows.');
+            }
+            $total = 0;
             for ($i = 0; $i < $zip->numFiles; ++$i) {
                 $stat = $zip->statIndex($i);
                 if ($stat === false) {
                     throw new RuntimeException('zip extract failed: unreadable entry.');
                 }
                 self::assertSafeEntryName($stat['name']);
+                $total += (int) $stat['size'];
                 $method = $stat['encryption_method'] ?? ZipArchive::EM_NONE;
                 if ($method !== ZipArchive::EM_NONE && $method !== ZipArchive::EM_AES_256) {
                     throw new CorruptArchiveException('Only AES-256 encrypted zip entries are accepted (legacy ZipCrypto and AES-128/192 are refused).');
@@ -1500,6 +1669,7 @@ final class BackupArchiver
                 }
             }
 
+            $this->assertWithinLimits($total, (int) @filesize($archive));
             if ($encrypted) {
                 if ($password === null) {
                     throw new WrongPasswordException('This archive is encrypted: a password is needed.');
@@ -1524,11 +1694,74 @@ final class BackupArchiver
      */
     private function extractTarGz(string $archive, string $destination, ?callable $heartbeat = null): void
     {
+        $this->assertSafeTar($archive, $heartbeat);
+
         $process = new Process([$this->tarBinary, '-xzf', $archive, '-C', $destination]);
         ProcessDeadline::run($process, $this->processTimeoutSeconds, $heartbeat);
         if (!$process->isSuccessful()) {
             throw new RuntimeException('tar extract failed: ' . $process->getErrorOutput());
         }
+    }
+
+    /**
+     * EN-L3 / EN-I8: lists the tar first and refuses link, hard-link and device entries, unsafe names, and archives
+     * over the size / entry / ratio limits.
+     *
+     * @param (callable(): void)|null $heartbeat
+     */
+    private function assertSafeTar(string $archive, ?callable $heartbeat): void
+    {
+        $listing = new Process([$this->tarBinary, '-tvzf', $archive]);
+        ProcessDeadline::run($listing, $this->processTimeoutSeconds, $heartbeat);
+        if (!$listing->isSuccessful()) {
+            throw new UnsafeArchiveException('The tar.gz archive cannot be listed.');
+        }
+
+        $entries = 0;
+        $total   = 0;
+        foreach (explode("\n", trim($listing->getOutput())) as $line) {
+            if ($line === '') {
+                continue;
+            }
+            if (!in_array($line[0], ['-', 'd'], true) || str_contains($line, ' link to ') || str_contains($line, ' -> ')) {
+                throw new UnsafeArchiveException('Links and special files are not allowed in a backup archive.');
+            }
+            if (++$entries > $this->extractLimits['max_entries']) {
+                throw new UnsafeArchiveException('The archive has more entries than backup.extract_limits allows.');
+            }
+            if (preg_match('/^\S+\s+\S+\s+(\d+)\s/', $line, $m) === 1) {
+                $total += (int) $m[1];
+            }
+        }
+        $this->assertWithinLimits($total, (int) @filesize($archive));
+
+        $names = new Process([$this->tarBinary, '-tzf', $archive]);
+        ProcessDeadline::run($names, $this->processTimeoutSeconds, $heartbeat);
+        foreach (explode("\n", trim($names->getOutput())) as $name) {
+            $name = rtrim((string) preg_replace('#^(\./)+#', '', $name), '/');
+            if ($name === '' || $name === '.') {
+                continue;
+            }
+            try {
+                self::assertSafeEntryName($name);
+            } catch (RuntimeException $e) {
+                throw new UnsafeArchiveException($e->getMessage(), 0, $e);
+            }
+        }
+    }
+
+    private function assertWithinLimits(int $total, int $compressed): void
+    {
+        if ($total > $this->decompressedLimit($compressed)) {
+            throw new UnsafeArchiveException('The decompressed size exceeds backup.extract_limits.');
+        }
+    }
+
+    private function decompressedLimit(int $compressed): int
+    {
+        $byRatio = max(self::RATIO_FLOOR_BYTES, $compressed * $this->extractLimits['max_ratio']);
+
+        return min($this->extractLimits['max_bytes'], $byRatio);
     }
 
     private function writeSidecar(BackupArtifact $artifact): void

@@ -101,6 +101,26 @@ final class AgeEncryptionTest extends TestCase
         ];
         (new Filesystem())->mkdir([$this->root . '/old', $this->root . '/noplugin', $this->root . '/garbled']);
 
+        // The real age / plugin may be installed on PATH (CI): hide PATH so only the stand-ins count.
+        $path = getenv('PATH');
+        // @phpstan-ignore-next-line (test process only, restored below)
+        putenv('PATH=/nonexistent');
+        try {
+            $this->assertUnavailable($cases);
+        } finally {
+            // @phpstan-ignore-next-line
+            putenv('PATH=' . $path);
+        }
+
+        $this->expectException(FormatUnavailableException::class);
+        new AgeBinaryEncryptor('age', 9);
+    }
+
+    /**
+     * @param array<string, callable(): AgeBinaryEncryptor> $cases
+     */
+    private function assertUnavailable(array $cases): void
+    {
         foreach ($cases as $name => $factory) {
             try {
                 $factory()->assertAvailable();
@@ -109,9 +129,6 @@ final class AgeEncryptionTest extends TestCase
                 self::assertNotSame('', $e->getMessage(), $name);
             }
         }
-
-        $this->expectException(FormatUnavailableException::class);
-        new AgeBinaryEncryptor('age', 9);
     }
 
     public function testFailuresAndTimeoutsLeaveNoOutput(): void

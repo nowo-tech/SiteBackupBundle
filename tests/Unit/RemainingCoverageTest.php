@@ -199,7 +199,8 @@ final class RemainingCoverageTest extends TestCase
         file_put_contents($badTar, 'not-a-tar');
         $artifact = TestFixtures::artifact('bad', $badTar, (string) hash_file('sha256', $badTar));
         $this->expectException(RuntimeException::class);
-        $this->expectExceptionMessage('tar extract failed');
+        // 1.28+: the tar is listed (link / size checks) before it is extracted.
+        $this->expectExceptionMessage('The tar.gz archive cannot be listed.');
         $this->createArchiver()->extractTo($artifact, sys_get_temp_dir() . '/extract-' . uniqid('', true));
     }
 

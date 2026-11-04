@@ -243,7 +243,7 @@ final class DrillFlysystemTest extends TestCase
     {
         $root = $this->root;
 
-        return EngineFixtures::script($this->bin, 'fake-mysql', <<<SH
+        return EngineFixtures::client($this->bin, 'fake-mysql', <<<SH
             db=""; sql=""
             for a in "\$@"; do case "\$a" in --execute=*) sql="\${a#--execute=}";; esac; db="\$a"; done
             case "\$sql" in

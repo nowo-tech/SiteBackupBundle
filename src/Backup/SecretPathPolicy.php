@@ -6,7 +6,9 @@ namespace Nowo\SiteBackupBundle\Backup;
 
 use Nowo\SiteBackupBundle\Exception\SecretsInArchiveException;
 
+use function array_pop;
 use function basename;
+use function end;
 use function explode;
 use function fnmatch;
 use function implode;
@@ -28,7 +30,9 @@ use function trim;
  * - `config/secrets/**` (Symfony vault, incl. decrypt keys), `var/secrets/**` (Halite / doctrine-encrypt keys),
  *   `config/jwt/**`;
  * - every `*.key`, `*.pem`, `*.p12`, `*.pfx`, `*.jks`, `id_rsa*`, `id_ed25519*` anywhere under the project;
- * - `auth.json`, `.npmrc`, `.git-credentials`, `.netrc`, `.pgpass`, `.my.cnf` at any depth.
+ * - `auth.json`, `.npmrc`, `.git-credentials`, `.netrc`, `.pgpass`, `.my.cnf`, `.htpasswd`, `credentials.json`,
+ *   `id_ecdsa*`, `id_dsa*`, `*.ppk`, `*.kdbx`, `.aws/credentials`, `.docker/config.json` at any depth;
+ * - any path that leaves the project once `.` / `..` are resolved.
  *
  * `backup.forbidden_paths` adds fnmatch patterns (project-relative) on top. Matching is case-insensitive on the
  * normalised path (backslashes → `/`, no leading `./` or `/`).
@@ -41,13 +45,16 @@ final class SecretPathPolicy
     public const FLOOR_DIRECTORIES = ['config/secrets', 'var/secrets', 'config/jwt'];
 
     /** @var list<string> */
-    public const FLOOR_EXTENSIONS = ['.key', '.pem', '.p12', '.pfx', '.jks'];
+    public const FLOOR_EXTENSIONS = ['.key', '.pem', '.p12', '.pfx', '.jks', '.ppk', '.kdbx'];
 
     /** @var list<string> */
-    public const FLOOR_BASENAME_PREFIXES = ['.env', 'id_rsa', 'id_ed25519'];
+    public const FLOOR_BASENAME_PREFIXES = ['.env', 'id_rsa', 'id_ed25519', 'id_ecdsa', 'id_dsa'];
 
     /** @var list<string> */
-    public const FLOOR_BASENAMES = ['auth.json', '.npmrc', '.git-credentials', '.netrc', '.pgpass', '.my.cnf'];
+    public const FLOOR_BASENAMES = ['auth.json', '.npmrc', '.git-credentials', '.netrc', '.pgpass', '.my.cnf', '.htpasswd', 'credentials.json'];
+
+    /** @var list<string> path suffixes (any depth) */
+    public const FLOOR_PATH_SUFFIXES = ['.aws/credentials', '.docker/config.json'];
 
     /** @var list<string> committed templates, allowed at the project root only (owner decision Q-O1) */
     public const TEMPLATE_CARVE_OUTS = ['.env.dist', '.env.example'];
@@ -119,6 +126,16 @@ final class SecretPathPolicy
             return false;
         }
 
+        if ($path === '..' || str_starts_with($path, '../')) {
+            return true;
+        }
+
+        foreach (self::FLOOR_PATH_SUFFIXES as $suffix) {
+            if ($path === $suffix || str_ends_with($path, '/' . $suffix)) {
+                return true;
+            }
+        }
+
         foreach (self::FLOOR_DIRECTORIES as $dir) {
             if ($path === $dir || str_starts_with($path, $dir . '/')) {
                 return true;
@@ -152,9 +169,15 @@ final class SecretPathPolicy
             $path = substr($path, 2);
         }
 
+        // `.` and `..` are resolved (EN-L1): `public/../config/secrets/x` is `config/secrets/x`; a path that climbs
+        // above the project keeps its leading `..` (and is forbidden by the floor).
         $segments = [];
         foreach (explode('/', ltrim($path, '/')) as $segment) {
             if ($segment === '' || $segment === '.') {
+                continue;
+            }
+            if ($segment === '..' && $segments !== [] && end($segments) !== '..') {
+                array_pop($segments);
                 continue;
             }
             $segments[] = $segment;

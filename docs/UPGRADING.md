@@ -158,6 +158,13 @@ Everything new is opt-in, except the **secrets floor** (owner decision: no secre
 - `backup.preflight_disk_check` (on by default) refuses a backup when free space is below about three times the last
   archive. Set it to `false` to keep the 1.27 behaviour.
 - A failed dump now throws `DumpFailedException` (still a `RuntimeException`).
+- Symlinks pointing outside the project are no longer archived (a warning counts them), and hard links to secret
+  files are skipped. `backup.include_paths` entries with `..` or an absolute path fail the container build.
+- Restore applies only the regular files listed in the archive's MANIFEST and refuses archives with link entries.
+- `backup.extract_limits` (100 GiB, 200 000 entries, ratio 200 above 64 MiB by default) applies to verify / restore.
+- The `mysql` client importer needs a client that can disable client commands: Oracle 8.0.40+ / 8.4.3+ / 9.1+ or
+  MariaDB 10.5.25+ / 10.6.18+ / 10.11.8+ / 11.4.2+ (Debian's current `mariadb-client` qualifies).
+- `backup.work_dir` must not be a symlink and must belong to the PHP user.
 
 **Recommended for large databases:**
 

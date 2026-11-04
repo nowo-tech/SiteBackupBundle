@@ -34,6 +34,14 @@ final class EngineFixtures
     }
 
     /**
+     * A `mysql` client stand-in that answers `--version` like Oracle mysql 8.4.13 (EN-M1 probe), then runs $body.
+     */
+    public static function client(string $dir, string $name, string $body, string $version = 'mysql  Ver 8.4.13 for Linux on x86_64 (MySQL Community Server - GPL)'): string
+    {
+        return self::script($dir, $name, 'if [ "$1" = "--version" ]; then echo "' . $version . '"; exit 0; fi' . "\n" . $body);
+    }
+
+    /**
      * A mysqldump stand-in: `--version` prints $version; otherwise writes "-- args: …" and a fake statement to the
      * --result-file (or stdout), and records MYSQL_PWD separately so tests can assert it never reached argv.
      */
