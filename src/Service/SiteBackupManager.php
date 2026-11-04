@@ -5,16 +5,27 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\Service;
 
 use Nowo\SiteBackupBundle\Backup\BackupArchiver;
+use Nowo\SiteBackupBundle\Enum\ArchiveFormat;
 use Nowo\SiteBackupBundle\Event\BackupCreatedEvent;
 use Nowo\SiteBackupBundle\Event\BackupDeletedEvent;
+use Nowo\SiteBackupBundle\Event\BackupFailedEvent;
+use Nowo\SiteBackupBundle\Event\BackupStartedEvent;
 use Nowo\SiteBackupBundle\Event\RestoreCompletedEvent;
 use Nowo\SiteBackupBundle\Event\RestoreFailedEvent;
 use Nowo\SiteBackupBundle\Event\RestoreStartedEvent;
+use Nowo\SiteBackupBundle\Exception\BackupAlreadyRunningException;
+use Nowo\SiteBackupBundle\Lock\BackupOperationLock;
+use Nowo\SiteBackupBundle\Lock\BackupOperationLockHandle;
 use Nowo\SiteBackupBundle\Log\SecretRedactor;
 use Nowo\SiteBackupBundle\Model\BackupArtifact;
 use Nowo\SiteBackupBundle\Model\BackupHistoryEntry;
+use Nowo\SiteBackupBundle\Model\BackupOptions;
+use Nowo\SiteBackupBundle\Model\BackupProgress;
 use Nowo\SiteBackupBundle\Model\RestoreProgress;
 use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
+use Nowo\SiteBackupBundle\Retention\RetentionItem;
+use Nowo\SiteBackupBundle\Retention\RetentionPlanner;
+use Nowo\SiteBackupBundle\Retention\RetentionPolicy;
 use Nowo\SiteBackupBundle\Storage\BackupHistoryStorageInterface;
 use Psr\Clock\ClockInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
@@ -24,6 +35,9 @@ use RuntimeException;
 use Symfony\Component\Clock\NativeClock;
 use Throwable;
 
+use function bin2hex;
+use function mb_substr;
+use function random_bytes;
 use function sprintf;
 
 /**
@@ -42,33 +56,117 @@ final class SiteBackupManager
         private readonly ?EventDispatcherInterface $eventDispatcher = null,
         private readonly ClockInterface $clock = new NativeClock(),
         private readonly LoggerInterface $logger = new NullLogger(),
+        private readonly ?BackupOperationLock $operationLock = null,
+        private readonly ?RetentionPolicy $localRetention = null,
+        private readonly ArchiveFormat $defaultFormat = ArchiveFormat::TarGz,
+        private readonly int $defaultCompressionLevel = 6,
     ) {
     }
 
-    public function createBackup(?string $label = null, ?string $createdBy = null): BackupArtifact
+    /**
+     * Options of a backup created without explicit options (panel, CLI, the 1.27 signature): configured paths and
+     * dump, `backup.default_format`, `backup.compression_level`.
+     */
+    public function defaultOptions(?string $label = null, ?string $createdBy = null): BackupOptions
     {
-        $this->logger->info('SiteBackup: backup started.', $this->context('create'));
+        return new BackupOptions(
+            includeFiles: $this->defaultFormat !== ArchiveFormat::SqlGz,
+            format: $this->defaultFormat,
+            compressionLevel: $this->defaultCompressionLevel,
+            label: $label,
+            createdBy: $createdBy,
+        );
+    }
+
+    /**
+     * Creates a backup in `storage_dir`.
+     *
+     * 1.28+: pass {@see BackupOptions}; the 1.27 call `createBackup($label, $createdBy)` keeps working. No HTTP,
+     * session or security access: safe from a controller, a console command or a Messenger handler.
+     *
+     * @throws BackupAlreadyRunningException when another backup / restore holds the operation lock
+     */
+    public function createBackup(BackupOptions|string|null $options = null, ?string $createdBy = null): BackupArtifact
+    {
+        if (!$options instanceof BackupOptions) {
+            $options = $this->defaultOptions($options, $createdBy);
+        }
+        $actor       = $options->createdBy;
+        $operationId = bin2hex(random_bytes(8));
+
+        $lock = $this->operationLock?->acquire();
 
         try {
-            $artifact = $this->archiver->create($label, $createdBy);
-        } catch (Throwable $e) {
-            $this->logger->error('SiteBackup: backup failed.', $this->context('create', null, $e));
+            if ($lock instanceof BackupOperationLockHandle) {
+                $inner   = $options->heartbeat;
+                // @igor-ignore - Per-call options; the closure lives only for this backup and is never stored on the service.
+                $options = $options->withHeartbeat(static function (BackupProgress $progress) use ($lock, $inner): void {
+                    $lock->refresh();
+                    if ($inner !== null) {
+                        $inner($progress);
+                    }
+                });
+            }
 
-            throw $e;
+            $this->logger->info('SiteBackup: backup started.', $this->context('create') + ['operation_id' => $operationId, 'format' => $options->format->value]);
+            $this->eventDispatcher?->dispatch(new BackupStartedEvent($operationId, $options->toLoggableArray(), $actor));
+
+            try {
+                $artifact = $this->archiver->create($options);
+            } catch (Throwable $e) {
+                $this->logger->error('SiteBackup: backup failed.', $this->context('create', null, $e) + ['operation_id' => $operationId]);
+                $this->eventDispatcher?->dispatch(new BackupFailedEvent(
+                    $operationId,
+                    $e::class,
+                    mb_substr(SecretRedactor::redact($e->getMessage()), 0, 500),
+                    $options->toLoggableArray(),
+                    $actor,
+                ));
+
+                throw $e;
+            }
+            $this->logger->info('SiteBackup: backup created.', $this->context('create', $artifact->getId()) + ['size_bytes' => $artifact->getSizeBytes(), 'operation_id' => $operationId]);
+            // @igor-ignore - Service coordinates I/O or request-scoped work; not unsafe worker singleton state.
+            $this->historyStorage->append(new BackupHistoryEntry(
+                action: 'create',
+                occurredAt: $artifact->getCreatedAt(),
+                actor: $actor,
+                backupId: $artifact->getId(),
+                message: $options->label,
+                context: ['size_bytes' => $artifact->getSizeBytes(), 'sha256' => $artifact->getArchiveSha256()],
+            ));
+            $this->eventDispatcher?->dispatch(new BackupCreatedEvent($artifact, $actor, $operationId));
+
+            $this->applyLocalRetention($artifact, $actor);
+
+            return $artifact;
+        } finally {
+            $lock?->release();
         }
-        $this->logger->info('SiteBackup: backup created.', $this->context('create', $artifact->getId()) + ['size_bytes' => $artifact->getSizeBytes()]);
-        // @igor-ignore - Service coordinates I/O or request-scoped work; not unsafe worker singleton state.
-        $this->historyStorage->append(new BackupHistoryEntry(
-            action: 'create',
-            occurredAt: $artifact->getCreatedAt(),
-            actor: $createdBy,
-            backupId: $artifact->getId(),
-            message: $label,
-            context: ['size_bytes' => $artifact->getSizeBytes(), 'sha256' => $artifact->getArchiveSha256()],
-        ));
-        $this->eventDispatcher?->dispatch(new BackupCreatedEvent($artifact, $createdBy));
+    }
 
-        return $artifact;
+    /**
+     * `backup.retention` for `storage_dir` (1.28+): after a successful local backup, delete what the policy drops.
+     * A failed delete is logged and left for the next run.
+     */
+    private function applyLocalRetention(BackupArtifact $created, ?string $actor): void
+    {
+        if (!$this->localRetention instanceof RetentionPolicy || $this->localRetention->isEmpty()) {
+            return;
+        }
+
+        $items = [];
+        foreach ($this->archiver->listArtifacts() as $artifact) {
+            $items[] = RetentionItem::fromArtifact($artifact);
+        }
+
+        foreach (RetentionPlanner::plan($items, $this->localRetention, $created->getId(), $this->clock->now()) as $id) {
+            try {
+                $this->doDelete($id, $actor ?? 'retention');
+            } catch (Throwable $e) {
+                $this->logger->warning('SiteBackup: retention delete failed.', $this->context('retention', $id, $e));
+            }
+        }
     }
 
     /**
@@ -84,7 +182,21 @@ final class SiteBackupManager
         return $this->archiver->find($id);
     }
 
+    /**
+     * @throws BackupAlreadyRunningException when another backup / restore holds the operation lock
+     */
     public function deleteBackup(string $id, ?string $actor = null): void
+    {
+        $lock = $this->operationLock?->acquire();
+
+        try {
+            $this->doDelete($id, $actor);
+        } finally {
+            $lock?->release();
+        }
+    }
+
+    private function doDelete(string $id, ?string $actor): void
     {
         $artifact = $this->archiver->find($id);
         if (!$artifact instanceof BackupArtifact) {
@@ -129,7 +241,21 @@ final class SiteBackupManager
         return $this->restoreOrchestrator->isRestoreActive();
     }
 
+    /**
+     * @throws BackupAlreadyRunningException when a backup holds the operation lock (1.28+)
+     */
     public function restore(string $backupId, ?string $actor = null): RestoreProgress
+    {
+        $lock = $this->operationLock?->acquire();
+
+        try {
+            return $this->doRestore($backupId, $actor);
+        } finally {
+            $lock?->release();
+        }
+    }
+
+    private function doRestore(string $backupId, ?string $actor): RestoreProgress
     {
         $artifact = $this->archiver->find($backupId);
         if (!$artifact instanceof BackupArtifact) {

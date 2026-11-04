@@ -99,10 +99,6 @@ final class RemainingCoverageTest extends TestCase
         );
         self::assertSame([], $excludedFileArchiver->create('excluded', 'phpunit')->getChecksums());
 
-        $runDatabaseDump = new ReflectionMethod(BackupArchiver::class, 'runDatabaseDump');
-        $runDatabaseDump->setAccessible(true);
-        $runDatabaseDump->invoke($archiver, sys_get_temp_dir() . '/unused-dump.sql');
-
         $verify = $archiver->verifyIntegrity($artifact);
         self::assertTrue($verify['ok'], implode('; ', $verify['errors']));
 

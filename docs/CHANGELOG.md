@@ -66,6 +66,60 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Scheduler-friendly local backup engine (1.28.0, contract "SiteBackupBundle 1.28 – 1.30" v1.0 with symfony-beacon,
+spec `specs/008-local-backup-engine`). No cryptography and no network yet (archive passwords, remote targets and
+`importArchive()` follow in 1.29.0).
+
+### Added
+
+- `SiteBackupManager::createBackup(BackupOptions)`: per-call options (`includeDatabase`, `includeFiles`,
+  `includePaths`, `tableRules`, `format`, `compressionLevel`, `label`, `createdBy`, `heartbeat`,
+  `allowUnsafeTableRules`, `extraMeta`). The 1.27 call `createBackup($label, $createdBy)` keeps working.
+  `defaultOptions()` returns what the panel and the CLI use. No HTTP / session access: safe from a Messenger handler.
+- Archive formats `tar.gz` (any level 0–9; tar is now streamed through PHP's gzip), `zip` (ext-zip) and `sql.gz`
+  (database only, checksum of the SQL in the sidecar). `verifyIntegrity()`, `extractTo()` and restore handle all
+  three. Zip extraction refuses `..`, absolute names, symlinks and encrypted entries.
+- Built-in dumper (`backup.database.dumper: builtin`): `mysqldump` runs directly into the staging file
+  (`--result-file`, no shell, no buffered plaintext copy), with `--set-gtid-purged=OFF` on the Oracle client.
+- Table rules (`TableRule::Skip`, `TableRule::StructureOnly`): data pass with `--ignore-table`, then a `--no-data` pass
+  for structure-only tables. Rules are checked against the live schema (`information_schema` through the `mysql`
+  client): unknown tables, views, `backup.database.required_tables` and the migrations table are refused; `skip` is
+  refused for a table referenced by a foreign key or read by a view (`allowUnsafeTableRules` downgrades those two to
+  warnings); structure-only on a referenced table warns. `nowo:site-backup:db-dump` gains `--ignore-table`,
+  `--structure-only` and `--allow-unsafe-table-rules`.
+- Secrets floor (`SecretPathPolicy`): `.env*` (except the committed `.env.dist` / `.env.example` at the root),
+  `config/secrets/**`, `var/secrets/**`, `config/jwt/**`, every `*.key` / `*.pem` / `*.p12` / `*.pfx` / `*.jks`,
+  `id_rsa*`, `id_ed25519*`, `auth.json`, `.npmrc`, `.git-credentials`, `.netrc`, `.pgpass`, `.my.cnf` never enter an
+  archive (also through symlinks) and are never written by a restore. `backup.forbidden_paths` adds patterns. The
+  final file list is checked again before packing (`SecretsInArchiveException`).
+- `backup.work_dir` (default `var/site-backup/work`): owner-only (`0700`) staging root; each run removes its directory
+  in a `finally`, the next backup removes leftovers of killed runs, `nowo:site-backup:cleanup` does it on demand.
+  Archives are built there and moved into `storage_dir` only when complete.
+- Events `BackupStartedEvent` and `BackupFailedEvent` (exception class + redacted message, no exception object);
+  `BackupCreatedEvent` gains `getOperationId()`, `getFormat()`, `getWarnings()`; `SiteBackupEvents` lists every event.
+- Operation lock (`BackupOperationLock`): one backup / delete / restore at a time, through `lock.factory` when
+  available (refreshed on every heartbeat) or an `flock()` in `storage_dir`; a held lock throws
+  `BackupAlreadyRunningException`.
+- `RetentionPlanner` (pure; keep last N, max age, daily / weekly / monthly buckets) and `backup.retention` for
+  `storage_dir`.
+- `DumpImporter`, `nowo:site-backup:db-import <file> --force` and `sql_file` steps with `importer: client`: the dump
+  is streamed through the `mysql` client instead of being loaded into PHP memory.
+- `nowo:site-backup:create` options `--format`, `--level`, `--no-database`, `--no-files`, `--path`, `--skip-table`,
+  `--structure-only`, `--allow-unsafe-table-rules`, `--json`; exit code 75 while another operation runs.
+- `backup.preflight_disk_check` (default on): refuses to start when `work_dir` or `storage_dir` has less than about
+  three times the last archive free.
+- MANIFEST v2 / sidecar keys: `format`, `content`, `compression_level`, `encrypted`, `table_rules`, `warnings`,
+  `dump`, `bundle_version`, `manifest_version`, `plaintext_sha256` (`sql.gz`). `BackupArtifact` gains `getFormat()`,
+  `getContent()`, `getTableRules()`, `getWarnings()`, `getPlaintextSha256()`, `isEncrypted()`.
+
+### Changed
+
+- The default `backup.include_paths` no longer lists `.env`; an explicit secret path in `include_paths` is skipped and
+  deprecated.
+- A failed dump throws `DumpFailedException` (a `RuntimeException`) with a redacted message cut to 500 characters.
+- Sidecars (`*.meta.json`) are written `0600`.
+- PHPUnit runs with `memory_limit=512M`.
+
 ## [1.27.0] - 2026-11-02
 
 Security release: the setup wizard is default-deny (token required, no side effects on GET), mysqldump gets an option terminator and DSN validation, backup staging is owner-only. See [UPGRADING](https://github.com/nowo-tech/SiteBackupBundle/blob/v1.27.0/docs/UPGRADING.md#to-1270).

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\Setup;
 
 use InvalidArgumentException;
+use Nowo\SiteBackupBundle\Database\DumpImporter;
 use Nowo\SiteBackupBundle\Setup\Step\AdminUserStep;
 use Nowo\SiteBackupBundle\Setup\Step\BootstrapModeStep;
 use Nowo\SiteBackupBundle\Setup\Step\CacheClearStep;
@@ -43,6 +44,7 @@ final class SetupStepFactory
         private readonly mixed $dbalConnection = null,
         private readonly array $customSteps = [],
         private readonly ?SetupTabCheckerLocator $checkerLocator = null,
+        private readonly ?DumpImporter $dumpImporter = null,
     ) {
     }
 
@@ -123,6 +125,8 @@ final class SetupStepFactory
                 is_array($config['paths'] ?? null) ? array_values(array_filter($config['paths'], 'is_string')) : [],
                 (bool) ($config['if_exists'] ?? false),
                 $this->dbalConnection,
+                ($config['importer'] ?? null) === SqlFileStep::IMPORTER_CLIENT ? SqlFileStep::IMPORTER_CLIENT : SqlFileStep::IMPORTER_PDO,
+                $this->dumpImporter,
             ),
             'console' => new ConsoleStep(
                 $id,

@@ -344,6 +344,12 @@ final class RestoreOrchestrator implements ResetInterface
                 continue;
             }
 
+            // 1.28+: secrets never come back from an archive (older archives may still hold .env or vault keys).
+            if ($this->archiver->getSecretPathPolicy()->isForbidden($relative)) {
+                $this->appendLog('Skipped secret path: ' . $relative);
+                continue;
+            }
+
             $dest = $project . '/' . $relative;
             $this->filesystem->mkdir(dirname($dest));
             // Copy to temp beside destination then rename for near-atomic file replace

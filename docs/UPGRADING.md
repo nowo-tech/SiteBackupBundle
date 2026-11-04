@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+  - [To 1.28.0](#to-1280)
 - [To 1.27.0](#to-1270)
 - [To 1.26.0](#to-1260)
 - [To 1.25.1](#to-1251)
@@ -114,6 +115,54 @@
   - [Breaking changes](#breaking-changes-1)
 
 ## Unreleased
+
+### To 1.28.0
+
+From **1.27.0**:
+
+```bash
+composer update nowo-tech/site-backup-bundle
+```
+
+Everything new is opt-in, except the **secrets floor** (owner decision: no secret ever goes into an archive).
+
+**Behaviour changes to check:**
+
+- `.env*`, `config/secrets/**`, `var/secrets/**`, `config/jwt/**` and every `*.key` / `*.pem` (and the other floor
+  paths listed in `CONFIGURATION.md`) are never archived and never written by a restore, whatever `include_paths` says.
+  Only the committed `.env.dist` / `.env.example` at the project root are kept. A restore of an older archive that
+  contains `.env` or vault keys skips them (logged as "Skipped secret path"). Keep `.env.local`, the vault decrypt
+  keys and encryption keys in your deploy / key escrow, not in backups.
+- The default `include_paths` no longer lists `.env`. If you list it (or another floor path) explicitly, remove it:
+  the container build triggers a deprecation and the file is skipped.
+- Staging moved from the system temp dir to `backup.work_dir` (`%kernel.project_dir%/var/site-backup/work`, `0700`).
+  Point it at a large disk if `var/` is small; avoid a tmpfs.
+- Backups, deletes and restores take an operation lock. With several app containers on one database, install
+  `symfony/lock` with a shared store (Redis, DBAL) so `lock.factory` is used; otherwise the lock is an `flock()` in
+  `storage_dir` (one host).
+- `backup.preflight_disk_check` (on by default) refuses a backup when free space is below about three times the last
+  archive. Set it to `false` to keep the 1.27 behaviour.
+- A failed dump now throws `DumpFailedException` (still a `RuntimeException`).
+
+**Recommended for large databases:**
+
+```yaml
+nowo_site_backup:
+    backup:
+        database:
+            dumper: builtin                      # mysqldump straight into the staging file; needed for table rules
+            skip_ssl_verify_server_cert: true    # only if your db-dump command used it
+            required_tables: [user]              # never skipped / dumped without rows
+    setup:
+        profiles:
+            post_restore:
+                steps:
+                    # …
+                    - { type: sql_file, paths: ['var/site-backup/last-restore-dump.sql'], if_exists: true, importer: client }
+```
+
+`importer: client` streams the restore dump through the `mysql` client; the 1.27 `pdo` importer reads the whole file
+into memory.
 
 ## To 1.27.0
 

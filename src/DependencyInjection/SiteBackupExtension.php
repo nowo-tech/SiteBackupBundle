@@ -6,12 +6,19 @@ namespace Nowo\SiteBackupBundle\DependencyInjection;
 
 use LogicException;
 use Nowo\SiteBackupBundle\Backup\BackupArchiver;
+use Nowo\SiteBackupBundle\Backup\SecretPathPolicy;
 use Nowo\SiteBackupBundle\Command\DatabaseDumpCommand;
+use Nowo\SiteBackupBundle\Command\DatabaseImportCommand;
 use Nowo\SiteBackupBundle\Command\SetupTokenCommand;
 use Nowo\SiteBackupBundle\Controller\SetupUnlocalizedLocaleRedirectController;
 use Nowo\SiteBackupBundle\Controller\SetupWizardController;
 use Nowo\SiteBackupBundle\Controller\SiteBackupPanelController;
+use Nowo\SiteBackupBundle\Database\BuiltinMysqlDumper;
+use Nowo\SiteBackupBundle\Database\DumpImporter;
+use Nowo\SiteBackupBundle\Database\MysqlClientSchemaInspector;
+use Nowo\SiteBackupBundle\Database\SchemaInspectorInterface;
 use Nowo\SiteBackupBundle\DependencyInjection\Compiler\LoginThrottleStoragePass;
+use Nowo\SiteBackupBundle\Enum\ArchiveFormat;
 use Nowo\SiteBackupBundle\EventSubscriber\ColdStartSchemaGateSubscriber;
 use Nowo\SiteBackupBundle\EventSubscriber\LongRequestTimeLimitSubscriber;
 use Nowo\SiteBackupBundle\EventSubscriber\ProductionSecretsGuardSubscriber;
@@ -21,7 +28,9 @@ use Nowo\SiteBackupBundle\EventSubscriber\SetupRequestSubscriber;
 use Nowo\SiteBackupBundle\EventSubscriber\UnlocalizedDefaultLocaleSubscriber;
 use Nowo\SiteBackupBundle\Exclusion\SiteBackupExclusionMatcher;
 use Nowo\SiteBackupBundle\Form\AbstractSiteBackupFormType;
+use Nowo\SiteBackupBundle\Lock\BackupOperationLock;
 use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
+use Nowo\SiteBackupBundle\Retention\RetentionPolicy;
 use Nowo\SiteBackupBundle\Routing\PanelRouteLoader;
 use Nowo\SiteBackupBundle\Routing\SetupLocales;
 use Nowo\SiteBackupBundle\Routing\SetupPathPrefixResolver;
@@ -304,12 +313,13 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
         }
 
         $this->configureStorage($container, $config);
+        $this->configureBackupEngine($container, $config);
         $this->configureArchiver($container, $config);
         $this->configureRestore($container, $config);
         $this->configureExclusions($container, $config);
         $this->configureAccessGate($container, $config['security']);
         $this->registerAccessChecker($container, $config['security']);
-        $this->configureManager($container);
+        $this->configureManager($container, $config);
         $this->configureSubscriber($container, $config);
         $this->configureView($container, $config);
         $this->configureTwigGlobals($container, $config);
@@ -410,9 +420,80 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             return;
         }
 
+        $database = $config['backup']['database'];
         $container->getDefinition(DatabaseDumpCommand::class)
             ->setArgument('$databaseUrl', '%env(default::DATABASE_URL)%')
-            ->setArgument('$timeoutSeconds', (int) $config['process_timeout']);
+            ->setArgument('$timeoutSeconds', (int) $config['process_timeout'])
+            ->setArgument('$requiredTables', array_values($database['required_tables']))
+            ->setArgument('$migrationsTable', (string) $database['migrations_table'])
+            ->setArgument('$clientBinary', (string) $database['client_binary']);
+
+        if ($container->hasDefinition(DatabaseImportCommand::class)) {
+            $container->getDefinition(DatabaseImportCommand::class)
+                ->setArgument('$importer', new Reference(DumpImporter::class));
+        }
+    }
+
+    /**
+     * 1.28+: secrets floor, built-in dumper, schema inspector, client importer and the operation lock.
+     *
+     * @param array<string, mixed> $config
+     */
+    private function configureBackupEngine(ContainerBuilder $container, array $config): void
+    {
+        $backup   = $config['backup'];
+        $database = $backup['database'];
+        $timeout  = (int) $config['process_timeout'];
+        $skipSsl  = (bool) $database['skip_ssl_verify_server_cert'];
+        $url      = (string) $database['url'];
+
+        foreach ($backup['include_paths'] as $path) {
+            if (is_string($path) && SecretPathPolicy::matchesFloor($path)) {
+                trigger_deprecation(
+                    'nowo-tech/site-backup-bundle',
+                    '1.28',
+                    'nowo_site_backup.backup.include_paths lists "%s", which matches the secrets floor: it is never archived. Remove it from the list.',
+                    $path,
+                );
+            }
+        }
+
+        $container->register(SecretPathPolicy::class, SecretPathPolicy::class)
+            ->setArgument('$forbiddenPaths', array_values($backup['forbidden_paths']));
+
+        $container->register(MysqlClientSchemaInspector::class, MysqlClientSchemaInspector::class)
+            ->setArgument('$databaseUrl', $url)
+            ->setArgument('$clientBinary', (string) $database['client_binary'])
+            ->setArgument('$skipSslVerifyServerCert', $skipSsl)
+            ->setArgument('$timeoutSeconds', $timeout);
+        if (!$container->hasAlias(SchemaInspectorInterface::class) && !$container->hasDefinition(SchemaInspectorInterface::class)) {
+            $container->setAlias(SchemaInspectorInterface::class, MysqlClientSchemaInspector::class)->setPublic(false);
+        }
+
+        $container->register(DumpImporter::class, DumpImporter::class)
+            ->setArgument('$databaseUrl', $url)
+            ->setArgument('$clientBinary', (string) $database['client_binary'])
+            ->setArgument('$skipSslVerifyServerCert', $skipSsl)
+            ->setArgument('$timeoutSeconds', $timeout);
+
+        if ($database['dumper'] === 'builtin') {
+            BuiltinMysqlDumper::assertExtraOptions(array_values($database['extra_options']));
+            $container->register(BuiltinMysqlDumper::class, BuiltinMysqlDumper::class)
+                ->setArgument('$databaseUrl', $url)
+                ->setArgument('$binary', (string) $database['binary'])
+                ->setArgument('$skipSslVerifyServerCert', $skipSsl)
+                ->setArgument('$extraOptions', array_values($database['extra_options']))
+                ->setArgument('$timeoutSeconds', $timeout)
+                ->setArgument('$schemaInspector', new Reference(SchemaInspectorInterface::class))
+                ->setArgument('$requiredTables', array_values($database['required_tables']))
+                ->setArgument('$migrationsTable', (string) $database['migrations_table']);
+        }
+
+        $container->register(BackupOperationLock::class, BackupOperationLock::class)
+            ->setArgument('$lockDirectory', $backup['storage_dir'])
+            ->setArgument('$lockFactory', new Reference('lock.factory', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
+            ->setArgument('$key', (string) $backup['lock']['key'])
+            ->setArgument('$ttlSeconds', (float) (4 * $timeout + 300));
     }
 
     /**
@@ -503,7 +584,11 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$excludePatterns', array_values($backup['exclude_patterns'] ?? []))
             ->setArgument('$databaseDumpCommand', is_string($dump) && $dump !== '' ? $dump : null)
             ->setArgument('$processTimeoutSeconds', (int) $config['process_timeout'])
-            ->setArgument('$runtimeStatePaths', $this->runtimeStatePaths($config));
+            ->setArgument('$runtimeStatePaths', $this->runtimeStatePaths($config))
+            ->setArgument('$builtinDumper', $backup['database']['dumper'] === 'builtin' ? new Reference(BuiltinMysqlDumper::class) : null)
+            ->setArgument('$secretPolicy', new Reference(SecretPathPolicy::class))
+            ->setArgument('$workDir', (string) $backup['work_dir'])
+            ->setArgument('$preflightDiskCheck', (bool) $backup['preflight_disk_check']);
     }
 
     /**
@@ -705,13 +790,29 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
         return isset($bundles['SecurityBundle']);
     }
 
-    private function configureManager(ContainerBuilder $container): void
+    /**
+     * @param array<string, mixed> $config
+     */
+    private function configureManager(ContainerBuilder $container, array $config): void
     {
+        $backup    = $config['backup'];
+        $retention = $backup['retention'];
+        $policy    = null;
+        if ($retention['keep_last'] !== null || $retention['max_age_days'] !== null) {
+            $policy = (new Definition(RetentionPolicy::class))
+                ->setArgument('$keepLast', $retention['keep_last'])
+                ->setArgument('$maxAgeDays', $retention['max_age_days']);
+        }
+
         $container->getDefinition(SiteBackupManager::class)
             ->setArgument('$archiver', new Reference(BackupArchiver::class))
             ->setArgument('$restoreOrchestrator', new Reference(RestoreOrchestrator::class))
             ->setArgument('$historyStorage', new Reference(BackupHistoryStorageInterface::class))
-            ->setArgument('$eventDispatcher', new Reference('event_dispatcher', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE));
+            ->setArgument('$eventDispatcher', new Reference('event_dispatcher', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
+            ->setArgument('$operationLock', new Reference(BackupOperationLock::class))
+            ->setArgument('$localRetention', $policy)
+            ->setArgument('$defaultFormat', ArchiveFormat::from((string) $backup['default_format']))
+            ->setArgument('$defaultCompressionLevel', (int) $backup['compression_level']);
     }
 
     /**
@@ -999,7 +1100,8 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$adminProvisioner', new Reference(AdminUserProvisionerInterface::class))
             ->setArgument('$dbalConnection', $dbalRef)
             ->setArgument('$customSteps', [])
-            ->setArgument('$checkerLocator', new Reference(SetupTabCheckerLocator::class));
+            ->setArgument('$checkerLocator', new Reference(SetupTabCheckerLocator::class))
+            ->setArgument('$dumpImporter', new Reference(DumpImporter::class));
 
         /** @var array<string, array{steps?: list<array<string, mixed>>, tabs?: list<array<string, mixed>>, advance_mode?: string|null}> $profiles */
         $profiles      = $setup['profiles'];

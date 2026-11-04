@@ -1,0 +1,233 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Nowo\SiteBackupBundle\Database;
+
+use InvalidArgumentException;
+use Nowo\SiteBackupBundle\Enum\TableRule;
+use Nowo\SiteBackupBundle\Exception\DumpFailedException;
+use Nowo\SiteBackupBundle\Exception\InvalidBackupOptionsException;
+use Nowo\SiteBackupBundle\Exception\UnsafeTableRuleException;
+use Nowo\SiteBackupBundle\Log\SecretRedactor;
+use Nowo\SiteBackupBundle\Process\ProcessDeadline;
+use Symfony\Component\Filesystem\Filesystem;
+use Symfony\Component\Process\Exception\ProcessTimedOutException;
+use Symfony\Component\Process\Process;
+
+use function count;
+use function explode;
+use function fclose;
+use function fopen;
+use function in_array;
+use function mb_substr;
+use function min;
+use function preg_match;
+use function sprintf;
+use function str_contains;
+use function str_starts_with;
+use function stream_copy_to_stream;
+use function strtolower;
+use function trim;
+
+/**
+ * `backup.database.dumper: builtin` (1.28+): runs `mysqldump` directly into the staging file.
+ *
+ * - No shell and no PHP in the pipe: `--result-file` writes the dump (the 1.27 nested console re-streamed it and
+ *   buffered a plaintext copy in `php://temp`).
+ * - Password in `MYSQL_PWD`, never argv; the database name follows `--` ({@see MysqlDumpCommandFactory}).
+ * - Table rules: a data pass with `--ignore-table=<db>.<t>` for every ruled table, then (when a table is
+ *   structure-only) a `--no-data` pass of those tables appended to the same file. Rules are checked against the live
+ *   schema first ({@see TableSafetyChecker}).
+ * - `--set-gtid-purged=OFF` with the Oracle MySQL client, so the dump never carries `SET @@GLOBAL.GTID_PURGED`
+ *   (which fails on import into a server with history). The MariaDB client does not know the flag.
+ */
+final class BuiltinMysqlDumper
+{
+    public const FLAVOUR_MYSQL   = 'mysql';
+    public const FLAVOUR_MARIADB = 'mariadb';
+
+    /** Options that would write elsewhere, read credentials or files, or change the output shape. */
+    private const FORBIDDEN_OPTIONS = [
+        '--result-file', '--password', '--tab', '--log-error', '--defaults-file', '--defaults-extra-file',
+        '--defaults-group-suffix', '--plugin-dir', '--init-command', '--xml', '--no-data', '--ignore-table',
+    ];
+
+    /**
+     * @param list<string> $extraOptions `backup.database.extra_options` (each must start with `--`)
+     * @param list<string> $requiredTables never skipped nor dumped without rows
+     */
+    public function __construct(
+        private readonly ?string $databaseUrl,
+        private readonly string $binary = 'mysqldump',
+        private readonly bool $skipSslVerifyServerCert = false,
+        private readonly array $extraOptions = [],
+        private readonly int $timeoutSeconds = 600,
+        private readonly ?SchemaInspectorInterface $schemaInspector = null,
+        private readonly array $requiredTables = [],
+        private readonly string $migrationsTable = TableSafetyChecker::DEFAULT_MIGRATIONS_TABLE,
+        private readonly Filesystem $filesystem = new Filesystem(),
+    ) {
+    }
+
+    /**
+     * @param array<string, TableRule> $tableRules
+     * @param (callable(): void)|null $tick called while the dump runs
+     *
+     * @throws DumpFailedException|InvalidBackupOptionsException|UnsafeTableRuleException
+     */
+    public function dump(string $target, array $tableRules = [], bool $allowUnsafeTableRules = false, ?callable $tick = null): DumpReport
+    {
+        self::assertExtraOptions($this->extraOptions);
+
+        try {
+            $spec     = MysqlDumpCommandFactory::fromDatabaseUrl((string) $this->databaseUrl, $this->skipSslVerifyServerCert, $this->binary, $this->extraOptions);
+            $database = MysqlDumpCommandFactory::databaseName((string) $this->databaseUrl);
+        } catch (InvalidArgumentException $e) {
+            throw new DumpFailedException('Database dump: ' . $e->getMessage(), 0, $e);
+        }
+
+        $warnings = [];
+        if ($tableRules !== []) {
+            if (!$this->schemaInspector instanceof SchemaInspectorInterface) {
+                throw new InvalidBackupOptionsException('Table rules need a schema inspector (backup.database.dumper: builtin).');
+            }
+            $warnings = TableSafetyChecker::check($tableRules, $this->schemaInspector->inspect(), $this->requiredTables, $allowUnsafeTableRules, $this->migrationsTable);
+        }
+
+        [$flavour, $version] = $this->probeClient();
+        $gtidOff             = $flavour === self::FLAVOUR_MYSQL;
+        $commands            = self::planCommands($spec['command'], $database, $tableRules, $gtidOff);
+
+        // Owner-only before mysqldump opens it: the dump is a plaintext copy of the database.
+        $this->filesystem->touch($target);
+        $this->filesystem->chmod($target, 0o600);
+
+        $structureFile = $target . '.structure';
+        try {
+            foreach ($commands as $index => $command) {
+                $file = $index === 0 ? $target : $structureFile;
+                if ($index > 0) {
+                    $this->filesystem->touch($file);
+                    $this->filesystem->chmod($file, 0o600);
+                }
+                $this->run(MysqlDumpCommandFactory::withOptions($command, ['--result-file=' . $file]), $spec['env'], $tick);
+                if ($index > 0) {
+                    $this->append($file, $target);
+                }
+            }
+        } finally {
+            $this->filesystem->remove($structureFile);
+        }
+
+        return new DumpReport($flavour, $version, count($commands), $gtidOff, $warnings);
+    }
+
+    /**
+     * Argv of each pass (pure). Pass 1 dumps everything but the ruled tables; pass 2 (only with structure-only
+     * tables) dumps those tables' definitions without rows.
+     *
+     * @param list<string> $baseCommand from {@see MysqlDumpCommandFactory::fromDatabaseUrl()} (ends with `--`, db)
+     * @param array<string, TableRule> $tableRules
+     *
+     * @return list<list<string>>
+     */
+    public static function planCommands(array $baseCommand, string $database, array $tableRules, bool $gtidPurgedOff): array
+    {
+        $common = $gtidPurgedOff ? ['--set-gtid-purged=OFF'] : [];
+
+        $ignore    = [];
+        $structure = [];
+        foreach ($tableRules as $table => $rule) {
+            $ignore[] = '--ignore-table=' . $database . '.' . $table;
+            if ($rule === TableRule::StructureOnly) {
+                $structure[] = $table;
+            }
+        }
+
+        $commands = [MysqlDumpCommandFactory::withOptions($baseCommand, [...$common, ...$ignore])];
+        if ($structure !== []) {
+            $commands[] = [...MysqlDumpCommandFactory::withOptions($baseCommand, [...$common, '--no-data']), ...$structure];
+        }
+
+        return $commands;
+    }
+
+    /**
+     * @param list<string> $options
+     *
+     * @throws InvalidBackupOptionsException
+     */
+    public static function assertExtraOptions(array $options): void
+    {
+        foreach ($options as $option) {
+            if ($option === '') {
+                continue;
+            }
+            if (!str_starts_with($option, '--') || preg_match('/[\x00-\x1F\x7F]/', $option) === 1) {
+                throw new InvalidBackupOptionsException('backup.database.extra_options entries must be long options ("--name[=value]").');
+            }
+            $name = strtolower(explode('=', $option, 2)[0]);
+            if (in_array($name, self::FORBIDDEN_OPTIONS, true)) {
+                throw new InvalidBackupOptionsException(sprintf('backup.database.extra_options must not contain %s.', $name));
+            }
+        }
+    }
+
+    /**
+     * @return array{0: string, 1: string} flavour, first line of `--version` (≤ 200 chars)
+     */
+    public function probeClient(): array
+    {
+        $process = new Process([$this->binary, '--version']);
+
+        try {
+            ProcessDeadline::run($process, min(30, $this->timeoutSeconds));
+        } catch (ProcessTimedOutException) {
+            throw new DumpFailedException('mysqldump --version timed out.');
+        }
+        if (!$process->isSuccessful()) {
+            throw new DumpFailedException(sprintf('Database dump client "%s" is not usable (exit %d).', $this->binary, (int) $process->getExitCode()));
+        }
+
+        $version = mb_substr(trim(explode("\n", trim($process->getOutput()))[0]), 0, 200);
+
+        return [str_contains(strtolower($version), 'mariadb') ? self::FLAVOUR_MARIADB : self::FLAVOUR_MYSQL, $version];
+    }
+
+    /**
+     * @param list<string> $command
+     * @param array<string, string> $env
+     * @param (callable(): void)|null $tick
+     */
+    private function run(array $command, array $env, ?callable $tick): void
+    {
+        $process = new Process($command, null, $env);
+
+        try {
+            ProcessDeadline::run($process, $this->timeoutSeconds, $tick);
+        } catch (ProcessTimedOutException) {
+            // Not chained: Symfony's message embeds the command line.
+            throw new DumpFailedException(sprintf('Database dump timed out after %d seconds (process_timeout).', $this->timeoutSeconds));
+        }
+        if (!$process->isSuccessful()) {
+            throw new DumpFailedException('Database dump failed: ' . mb_substr(SecretRedactor::redact(trim($process->getErrorOutput())), 0, 500));
+        }
+    }
+
+    private function append(string $from, string $to): void
+    {
+        $in  = fopen($from, 'r');
+        $out = fopen($to, 'a');
+        if ($in === false || $out === false) {
+            throw new DumpFailedException('Unable to append the structure-only pass to the dump.');
+        }
+
+        try {
+            stream_copy_to_stream($in, $out);
+        } finally {
+            fclose($in);
+            fclose($out);
+        }
+    }
+}

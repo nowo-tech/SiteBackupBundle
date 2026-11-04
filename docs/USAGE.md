@@ -13,6 +13,11 @@
 - [Web UI on the UiKit page contract (REQ-UI-003, 1.21+)](#web-ui-on-the-uikit-page-contract-req-ui-003-121)
   - [Overriding a page](#overriding-a-page)
   - [Translations](#translations)
+- [Backup options, formats and table rules (1.28+)](#backup-options-formats-and-table-rules-128)
+  - [Host cron recipe](#host-cron-recipe)
+  - [Messenger recipe](#messenger-recipe)
+  - [Retention](#retention)
+  - [Large databases](#large-databases)
 - [Built-in database dumper](#built-in-database-dumper)
 - [Database import note](#database-import-note)
 
@@ -192,6 +197,86 @@ Every user-facing string of the panel, the setup screens and the restore page go
 domain (`en`, `es`, `fr`, `it`, `pt`, `de`, `nl`); form labels / help / placeholders are keys of the same domain in the
 form types. Override wording with `translations/NowoSiteBackupBundle.<locale>.yaml` (e.g. `panel.login.heading`,
 `setup.token.lead`) instead of forking templates. Controller messages fall back to English without a translator.
+
+## Backup options, formats and table rules (1.28+)
+
+`SiteBackupManager::createBackup()` takes a `BackupOptions` (use named arguments). The 1.27 call
+`createBackup($label, $createdBy)` keeps working and uses `defaultOptions()` (`backup.default_format`,
+`backup.compression_level`, configured paths and dump).
+
+```php
+use Nowo\SiteBackupBundle\Enum\ArchiveFormat;
+use Nowo\SiteBackupBundle\Enum\TableRule;
+use Nowo\SiteBackupBundle\Model\BackupOptions;
+use Nowo\SiteBackupBundle\Model\BackupProgress;
+
+$artifact = $manager->createBackup(new BackupOptions(
+    includeFiles: false,                                    // database only
+    format: ArchiveFormat::Zip,                             // tar.gz | zip | sql.gz
+    compressionLevel: 6,
+    tableRules: [
+        'event_log'          => TableRule::StructureOnly,  // CREATE TABLE without rows
+        'messenger_messages' => TableRule::StructureOnly,
+        'cache_items'        => TableRule::Skip,           // not in the dump at all
+    ],
+    label: 'Nightly',
+    createdBy: 'scheduler',
+    heartbeat: static fn (BackupProgress $p) => $lock->refresh(),   // every ~2 s and on each phase
+));
+```
+
+- **No HTTP / session access** inside: call it from a controller, a console command or a Messenger handler. Options
+  cannot be serialised; put ids in messages and build the options in the handler.
+- **Formats.** `tar.gz` and `zip` hold the files, `database/dump.sql` and `MANIFEST.json` (SHA-256 per file). `sql.gz`
+  holds the SQL only; the SHA-256 of the SQL is in the sidecar (`plaintext_sha256`). `zip` needs ext-zip.
+  `nowo:site-backup:verify`, the panel and `nowo:site-backup:restore` handle all three.
+- **Table rules** need `backup.database.dumper: builtin`. They are checked against the live schema before anything is
+  dumped:
+  - an unknown table, a view, a table in `backup.database.required_tables` and the migrations table are refused;
+  - `Skip` is refused for a table that a foreign key of another table references, or that a view reads
+    (`allowUnsafeTableRules: true` turns these two into warnings);
+  - `StructureOnly` on a referenced table only warns (`$artifact->getWarnings()`): the referencing rows point at
+    missing ids after a restore.
+
+  **Prefer structure only.** After a restore into an empty database, a skipped table is missing (and migrations will
+  not recreate it, because they are recorded as done). After a restore over an existing database, a skipped table
+  keeps its current rows, mixing two points in time.
+- **Secrets never enter an archive** (`.env*`, `config/secrets/**`, `var/secrets/**`, `config/jwt/**`, `*.key`,
+  `*.pem`, …; see [CONFIGURATION.md](CONFIGURATION.md#secrets-floor-128)). Skipped paths are counted in the warnings.
+  Keep keys and passwords in your deploy / key escrow.
+- **Events:** `BackupStartedEvent` → `BackupCreatedEvent` or `BackupFailedEvent` (same `getOperationId()`). See
+  `SiteBackupEvents`.
+- **Concurrency:** one backup / delete / restore at a time (`BackupAlreadyRunningException`, exit code 75 for
+  `nowo:site-backup:create`).
+
+### Host cron recipe
+
+```bash
+php bin/console nowo:site-backup:create --no-files --format=sql.gz --structure-only=event_log --json
+```
+
+Options: `--format`, `--level`, `--no-database`, `--no-files`, `--path` (repeatable), `--skip-table`,
+`--structure-only`, `--allow-unsafe-table-rules`, `--json`, `--label`, `--actor`.
+
+### Messenger recipe
+
+The message carries a plan id; the handler loads its settings, builds `BackupOptions` and calls `createBackup()`.
+Turn Messenger's own retry off for that message when the host has its own retry policy; catch
+`BackupAlreadyRunningException` and re-dispatch with a delay.
+
+### Retention
+
+`backup.retention.keep_last` / `max_age_days` prune `storage_dir` after each successful backup. For remote copies,
+call `RetentionPlanner::plan($items, new RetentionPolicy(keepLast: 7), $justCreatedId, $now)`: a pure function that
+never returns the backup just created or the newest successful one, and returns nothing when the run failed. It also
+supports daily / weekly / monthly buckets (`keepDaily`, `keepWeekly`, `keepMonthly`).
+
+### Large databases
+
+- `backup.database.dumper: builtin` writes the dump straight to the staging file (no PHP in the pipe).
+- `backup.work_dir` must have room for the staging copy and the archive (about 2× the archive); avoid a tmpfs.
+- Restore: use `importer: client` on the `sql_file` step, or `nowo:site-backup:db-import <file> --force`; both stream
+  the dump through the `mysql` client.
 
 ## Built-in database dumper
 

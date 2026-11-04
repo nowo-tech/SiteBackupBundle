@@ -12,7 +12,6 @@ use RuntimeException;
 use Symfony\Component\Clock\MockClock;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Process\Exception\ProcessTimedOutException;
-use Symfony\Component\Process\Process;
 
 use function file_put_contents;
 use function glob;
@@ -107,11 +106,13 @@ final class BackupArchiverTimeoutTest extends TestCase
     {
         $this->fs->mkdir($this->storageDir);
         $target = $this->storageDir . '/blocked.tar.gz';
-        // tar blocks opening a FIFO nobody reads: a stand-in for a tar that never finishes.
-        (new Process(['mkfifo', $target]))->mustRun();
+        // A tar that never finishes.
+        $fakeTar = $this->storageDir . '/slow-tar.sh';
+        file_put_contents($fakeTar, "#!/bin/sh\nsleep 60\n");
+        chmod($fakeTar, 0o755);
 
         try {
-            $this->invokeCreateTarGz($this->archiver(1), $this->projectDir, $target);
+            $this->invokeCreateTarGz($this->archiver(1, $fakeTar), $this->projectDir, $target);
             self::fail('Expected ProcessTimedOutException');
         } catch (ProcessTimedOutException) {
         }
@@ -119,7 +120,7 @@ final class BackupArchiverTimeoutTest extends TestCase
         self::assertFileDoesNotExist($target);
     }
 
-    private function archiver(int $timeout): BackupArchiver
+    private function archiver(int $timeout, string $tarBinary = 'tar'): BackupArchiver
     {
         return new BackupArchiver(
             projectDir: $this->projectDir,
@@ -128,6 +129,7 @@ final class BackupArchiverTimeoutTest extends TestCase
             excludePatterns: [],
             databaseDumpCommand: null,
             processTimeoutSeconds: $timeout,
+            tarBinary: $tarBinary,
         );
     }
 

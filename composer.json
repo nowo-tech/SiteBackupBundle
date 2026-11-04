@@ -66,6 +66,7 @@
         "rector/rector": "^2.0",
         "symfony/cache": "^7.4 || ^8.0",
         "symfony/framework-bundle": "^7.4 || ^8.0",
+        "symfony/lock": "^7.4 || ^8.0",
         "symfony/twig-bundle": "^7.4 || ^8.0",
         "twig/twig": "^3.12",
         "vincentlanglet/twig-cs-fixer": "^3.0"
@@ -76,7 +77,9 @@
         "symfony/security-bundle": "Required for the private panel when security.allow_unauthenticated is false (default); also for custom SiteBackupAccessGateInterface / access_checker",
         "symfony/flex": "For automatic recipe installation",
         "doctrine/dbal": "Optional; setup progress doctrine/chain/cache_doctrine storage, schema detectors, and apps that rely on a DBAL connection",
-        "symfony/cache": "Optional; setup progress_storage cache / cache_doctrine (PSR-6 pool, typically Redis via cache.app)"
+        "symfony/cache": "Optional; setup progress_storage cache / cache_doctrine (PSR-6 pool, typically Redis via cache.app)",
+        "symfony/lock": "Recommended (1.28+): the backup / restore operation lock uses lock.factory (a shared store with several app containers); without it an flock() in storage_dir is used",
+        "ext-zip": "Required for the zip archive format (1.28+)"
     },
     "autoload": {
         "psr-4": {

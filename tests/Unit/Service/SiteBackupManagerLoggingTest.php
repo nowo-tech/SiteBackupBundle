@@ -6,6 +6,7 @@ namespace Nowo\SiteBackupBundle\Tests\Unit\Service;
 
 use DateTimeImmutable;
 use Nowo\SiteBackupBundle\Backup\BackupArchiver;
+use Nowo\SiteBackupBundle\Exception\DumpFailedException;
 use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
 use Nowo\SiteBackupBundle\Service\SiteBackupManager;
 use Nowo\SiteBackupBundle\Tests\Unit\RecordingLogger;
@@ -61,7 +62,10 @@ final class SiteBackupManagerLoggingTest extends TestCase
             'info SiteBackup: restore completed.',
             'warning SiteBackup: backup deleted.',
         ], $logger->lines());
-        self::assertSame(['bundle' => 'site_backup', 'action' => 'create', 'backup_id' => $artifact->getId(), 'size_bytes' => $artifact->getSizeBytes()], $logger->records[1]['context']);
+        $created = $logger->records[1]['context'];
+        self::assertIsString($created['operation_id'] ?? null);
+        unset($created['operation_id']);
+        self::assertSame(['bundle' => 'site_backup', 'action' => 'create', 'backup_id' => $artifact->getId(), 'size_bytes' => $artifact->getSizeBytes()], $created);
         self::assertSame(['bundle' => 'site_backup', 'action' => 'delete', 'backup_id' => $artifact->getId()], $logger->records[4]['context']);
 
         $all = (string) json_encode($logger->records);
@@ -94,7 +98,7 @@ final class SiteBackupManagerLoggingTest extends TestCase
 
         self::assertSame(['info SiteBackup: backup started.', 'error SiteBackup: backup failed.'], $logger->lines());
         $context = $logger->records[1]['context'];
-        self::assertSame(RuntimeException::class, $context['exception']);
+        self::assertSame(DumpFailedException::class, $context['exception']);
         self::assertIsString($context['error']);
         self::assertStringContainsString('mysql://app:***@db/shop', $context['error']);
         self::assertStringNotContainsString('REDACTED-TEST', (string) json_encode($logger->records));
