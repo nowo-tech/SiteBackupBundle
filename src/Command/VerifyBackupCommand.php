@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Command;
 
+use InvalidArgumentException;
 use Nowo\SiteBackupBundle\Service\SiteBackupManager;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -26,12 +27,21 @@ final class VerifyBackupCommand extends Command
     protected function configure(): void
     {
         $this->addArgument('id', InputArgument::REQUIRED, 'Backup id');
+        PasswordInput::configure($this);
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
     {
-        $io     = new SymfonyStyle($input, $output);
-        $result = $this->manager->verifyBackup((string) $input->getArgument('id'));
+        $io = new SymfonyStyle($input, $output);
+        try {
+            $password = PasswordInput::read($input);
+        } catch (InvalidArgumentException $e) {
+            $io->error($e->getMessage());
+
+            return Command::INVALID;
+        }
+        $result = $this->manager->verifyBackup((string) $input->getArgument('id'), $password);
+        $password?->wipe();
         if ($result['ok']) {
             $io->success(sprintf('Integrity OK (%d files).', count($result['checksums'])));
 

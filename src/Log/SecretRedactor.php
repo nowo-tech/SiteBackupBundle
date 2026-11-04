@@ -10,7 +10,8 @@ use function preg_replace;
  * Masks credentials that may appear in subprocess / driver error messages before they are logged (REQ-OBS-001).
  *
  * - URL user info: `mysql://app:secret@db/app` → `mysql://app:***@db/app`;
- * - `password=…`, `pwd=…`, `MYSQL_PWD=…`, `-p…` / `--password=…` CLI options.
+ * - `password=…`, `pwd=…`, `MYSQL_PWD=…`, `-p…` / `--password=…` CLI options;
+ * - signed URL / token query parameters (`X-Amz-Signature=…`, `X-Amz-Credential=…`, `token=…`, …) (1.29+).
  *
  * Stateless: static helpers only.
  */
@@ -22,6 +23,9 @@ final class SecretRedactor
     {
         $message = (string) preg_replace('#(://[^:/@\s]*):[^@\s]*@#', '$1:' . self::MASK . '@', $message);
         $message = (string) preg_replace('#\b((?:MYSQL_PWD|password|passwd|pwd)\s*[=:]\s*)("[^"]*"|\'[^\']*\'|[^\s&;,]+)#i', '$1' . self::MASK, $message);
+
+        // Signed URL / bearer parameters (S3 pre-signed URLs, tokens) that a remote client may quote (1.29+).
+        $message = (string) preg_replace('#\b((?:X-Amz-(?:Signature|Credential|Security-Token)|Signature|sig|token|access_token|api_key)=)[^\s&"\']+#i', '$1' . self::MASK, $message);
 
         return (string) preg_replace('#(\s--password=|\s-p)(?!\s)\S+#', '$1' . self::MASK, $message);
     }

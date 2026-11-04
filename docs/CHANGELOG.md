@@ -112,6 +112,28 @@ spec `specs/008-local-backup-engine`). No cryptography and no network yet (archi
   `dump`, `bundle_version`, `manifest_version`, `plaintext_sha256` (`sql.gz`). `BackupArtifact` gains `getFormat()`,
   `getContent()`, `getTableRules()`, `getWarnings()`, `getPlaintextSha256()`, `isEncrypted()`.
 
+### Added (1.29.0, stacked on 1.28.0: archive passwords, import, remote targets)
+
+- `ArchivePassword` (≥ 16 characters, masked, never serialisable, `wipe()`), `BackupOptions::$password` /
+  `$keyId` (opaque id recorded in the meta and the remote metadata). `zip` + password → WinZip AE-2 AES-256 on every
+  entry (`ZipArchive::EM_AES_256`, refused when libzip lacks AES; never ZipCrypto); a warning when the password looks
+  weak for zip's PBKDF2-SHA1 × 1000. A password on `tar.gz` / `sql.gz` throws `FormatUnavailableException` (the age
+  encryptor is pending an owner decision).
+- `verifyIntegrity()` / `extractTo()` / `SiteBackupManager::verifyBackup()` take the password; a missing or wrong one
+  throws / reports `WrongPasswordException`.
+- `SiteBackupManager::importArchive($path, $password)` and `nowo:site-backup:import`: detects zip / tar.gz / sql.gz by
+  content, decrypts, refuses unsafe names, links and ZipCrypto (`CorruptArchiveException`), verifies the MANIFEST,
+  drops secret paths and stores a plaintext `tar.gz` (`0600`) with `imported_from` in the meta; `BackupImportedEvent`.
+- Remote targets: `BackupRemoteTargetInterface` (host-implemented: upload / head / list / delete / openRead, streams
+  only), `RemoteObject`, `InMemoryRemoteTarget` (tests), and `RemoteBackupPublisher`: upload → verify (`size`,
+  `size + nowo-sha256 metadata`, or full re-hash) → `<key>.backup.json` sidecar (no secrets, no local paths); a failed
+  or mismatched upload is deleted and gets no sidecar. `prune()` applies a `RetentionPolicy` to sidecared archives
+  under the prefix only; `orphans()` lists sidecar-less archives. Events `RemoteBackupUploadedEvent`,
+  `RemoteBackupPrunedEvent`.
+- `--password-env` / `--password-stdin` on `nowo:site-backup:create`, `verify` and `import` (no `--password=<value>`),
+  `--key-id` on `create`.
+- `SecretRedactor` also masks signed-URL and token query parameters (`X-Amz-Signature`, `X-Amz-Credential`, `token`, …).
+
 ### Changed
 
 - The default `backup.include_paths` no longer lists `.env`; an explicit secret path in `include_paths` is skipped and

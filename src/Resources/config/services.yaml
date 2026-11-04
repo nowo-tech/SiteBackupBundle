@@ -14,6 +14,8 @@ services:
             - '../../Exception/'
             - '../../Retention/'
             - '../../Lock/'
+            - '../../Remote/'
+            - '../../Command/PasswordInput.php'
             - '../../Backup/SecretPathPolicy.php'
             - '../../Attribute/'
             - '../../Resources/'

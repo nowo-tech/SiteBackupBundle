@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Command;
 
+use InvalidArgumentException;
 use JsonException;
 use Nowo\SiteBackupBundle\Enum\ArchiveFormat;
 use Nowo\SiteBackupBundle\Enum\TableRule;
@@ -56,7 +57,9 @@ final class CreateBackupCommand extends Command
             ->addOption('skip-table', null, InputOption::VALUE_REQUIRED | InputOption::VALUE_IS_ARRAY, 'Table left out of the dump (repeatable; needs backup.database.dumper: builtin)')
             ->addOption('structure-only', null, InputOption::VALUE_REQUIRED | InputOption::VALUE_IS_ARRAY, 'Table dumped without rows (repeatable; needs the builtin dumper)')
             ->addOption('allow-unsafe-table-rules', null, InputOption::VALUE_NONE, 'Downgrade the foreign-key / view refusals of --skip-table to warnings')
-            ->addOption('json', null, InputOption::VALUE_NONE, 'Print the result as JSON (id, file, size, sha256, format, warnings)');
+            ->addOption('json', null, InputOption::VALUE_NONE, 'Print the result as JSON (id, file, size, sha256, format, warnings)')
+            ->addOption('key-id', null, InputOption::VALUE_REQUIRED, 'Opaque id of the archive password in your key ring (recorded in the meta, 1.29+)');
+        PasswordInput::configure($this);
     }
 
     protected function execute(InputInterface $input, OutputInterface $output): int
@@ -69,7 +72,7 @@ final class CreateBackupCommand extends Command
             $io->warning($e->getMessage());
 
             return self::EXIT_LOCKED;
-        } catch (InvalidBackupOptionsException $e) {
+        } catch (InvalidBackupOptionsException|InvalidArgumentException $e) {
             $io->error($e->getMessage());
 
             return Command::INVALID;
@@ -82,13 +85,14 @@ final class CreateBackupCommand extends Command
         if ((bool) $input->getOption('json')) {
             try {
                 $output->writeln(json_encode([
-                    'id'       => $artifact->getId(),
-                    'file'     => $artifact->getAbsolutePath(),
-                    'size'     => $artifact->getSizeBytes(),
-                    'sha256'   => $artifact->getArchiveSha256(),
-                    'format'   => $artifact->getFormat()->value,
-                    'content'  => $artifact->getContent(),
-                    'warnings' => $artifact->getWarnings(),
+                    'id'        => $artifact->getId(),
+                    'file'      => $artifact->getAbsolutePath(),
+                    'size'      => $artifact->getSizeBytes(),
+                    'sha256'    => $artifact->getArchiveSha256(),
+                    'format'    => $artifact->getFormat()->value,
+                    'content'   => $artifact->getContent(),
+                    'encrypted' => $artifact->isEncrypted(),
+                    'warnings'  => $artifact->getWarnings(),
                 ], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
             } catch (JsonException $e) {
                 $io->error($e->getMessage());
@@ -158,6 +162,8 @@ final class CreateBackupCommand extends Command
             label: $default->label,
             createdBy: $default->createdBy,
             allowUnsafeTableRules: (bool) $input->getOption('allow-unsafe-table-rules'),
+            password: PasswordInput::read($input),
+            keyId: is_string($input->getOption('key-id')) && $input->getOption('key-id') !== '' ? $input->getOption('key-id') : null,
         );
     }
 }

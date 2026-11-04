@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+  - [To 1.29.0](#to-1290)
   - [To 1.28.0](#to-1280)
 - [To 1.27.0](#to-1270)
 - [To 1.26.0](#to-1260)
@@ -115,6 +116,15 @@
   - [Breaking changes](#breaking-changes-1)
 
 ## Unreleased
+
+### To 1.29.0
+
+Additive. Archive passwords apply to the `zip` format only (`BackupOptions(format: ArchiveFormat::Zip, password:
+ArchivePassword::fromString(…), keyId: '…')`). The bundle never stores a password: keep them in your key ring, apart
+from the backups. An encrypted archive is restored by importing it first (`importArchive()` /
+`nowo:site-backup:import --password-env=…`), which stores a plaintext copy (`0600`): delete it after the restore.
+For remote copies implement `BackupRemoteTargetInterface` and use `RemoteBackupPublisher` (see
+[REMOTE-TARGETS.md](REMOTE-TARGETS.md)).
 
 ### To 1.28.0
 

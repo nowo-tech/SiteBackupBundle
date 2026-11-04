@@ -29,6 +29,7 @@ use Nowo\SiteBackupBundle\EventSubscriber\UnlocalizedDefaultLocaleSubscriber;
 use Nowo\SiteBackupBundle\Exclusion\SiteBackupExclusionMatcher;
 use Nowo\SiteBackupBundle\Form\AbstractSiteBackupFormType;
 use Nowo\SiteBackupBundle\Lock\BackupOperationLock;
+use Nowo\SiteBackupBundle\Remote\RemoteBackupPublisher;
 use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
 use Nowo\SiteBackupBundle\Retention\RetentionPolicy;
 use Nowo\SiteBackupBundle\Routing\PanelRouteLoader;
@@ -488,6 +489,9 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
                 ->setArgument('$requiredTables', array_values($database['required_tables']))
                 ->setArgument('$migrationsTable', (string) $database['migrations_table']);
         }
+
+        $container->register(RemoteBackupPublisher::class, RemoteBackupPublisher::class)
+            ->setArgument('$eventDispatcher', new Reference('event_dispatcher', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE));
 
         $container->register(BackupOperationLock::class, BackupOperationLock::class)
             ->setArgument('$lockDirectory', $backup['storage_dir'])

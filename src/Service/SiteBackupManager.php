@@ -9,14 +9,18 @@ use Nowo\SiteBackupBundle\Enum\ArchiveFormat;
 use Nowo\SiteBackupBundle\Event\BackupCreatedEvent;
 use Nowo\SiteBackupBundle\Event\BackupDeletedEvent;
 use Nowo\SiteBackupBundle\Event\BackupFailedEvent;
+use Nowo\SiteBackupBundle\Event\BackupImportedEvent;
 use Nowo\SiteBackupBundle\Event\BackupStartedEvent;
 use Nowo\SiteBackupBundle\Event\RestoreCompletedEvent;
 use Nowo\SiteBackupBundle\Event\RestoreFailedEvent;
 use Nowo\SiteBackupBundle\Event\RestoreStartedEvent;
 use Nowo\SiteBackupBundle\Exception\BackupAlreadyRunningException;
+use Nowo\SiteBackupBundle\Exception\CorruptArchiveException;
+use Nowo\SiteBackupBundle\Exception\WrongPasswordException;
 use Nowo\SiteBackupBundle\Lock\BackupOperationLock;
 use Nowo\SiteBackupBundle\Lock\BackupOperationLockHandle;
 use Nowo\SiteBackupBundle\Log\SecretRedactor;
+use Nowo\SiteBackupBundle\Model\ArchivePassword;
 use Nowo\SiteBackupBundle\Model\BackupArtifact;
 use Nowo\SiteBackupBundle\Model\BackupHistoryEntry;
 use Nowo\SiteBackupBundle\Model\BackupOptions;
@@ -32,6 +36,7 @@ use Psr\EventDispatcher\EventDispatcherInterface;
 use Psr\Log\LoggerInterface;
 use Psr\Log\NullLogger;
 use RuntimeException;
+use SensitiveParameter;
 use Symfony\Component\Clock\NativeClock;
 use Throwable;
 
@@ -219,16 +224,53 @@ final class SiteBackupManager
     }
 
     /**
+     * @param ArchivePassword|null $password 1.29+: needed for an encrypted (zip AES) archive
+     *
      * @return array{ok: bool, errors: list<string>, checksums: array<string, string>}
      */
-    public function verifyBackup(string $id): array
+    public function verifyBackup(string $id, #[SensitiveParameter] ?ArchivePassword $password = null): array
     {
         $artifact = $this->archiver->find($id);
         if (!$artifact instanceof BackupArtifact) {
             return ['ok' => false, 'errors' => [sprintf('Backup "%s" not found.', $id)], 'checksums' => []];
         }
 
-        return $this->archiver->verifyIntegrity($artifact);
+        return $this->archiver->verifyIntegrity($artifact, null, $password);
+    }
+
+    /**
+     * Imports an archive made elsewhere (1.29+): decrypts, verifies, drops secret paths and stores it as a plaintext
+     * tar.gz in `storage_dir` (0600). Restore it with {@see self::restore()}, then delete it.
+     *
+     * @throws BackupAlreadyRunningException|CorruptArchiveException|WrongPasswordException
+     */
+    public function importArchive(string $path, #[SensitiveParameter] ?ArchivePassword $password = null, ?string $actor = null): BackupArtifact
+    {
+        $lock = $this->operationLock?->acquire();
+
+        try {
+            try {
+                $artifact = $this->archiver->import($path, $password, $actor);
+            } catch (Throwable $e) {
+                $this->logger->error('SiteBackup: import failed.', $this->context('import', null, $e));
+
+                throw $e;
+            }
+            $this->logger->info('SiteBackup: archive imported.', $this->context('import', $artifact->getId()) + ['size_bytes' => $artifact->getSizeBytes()]);
+            // @igor-ignore - Service coordinates I/O or request-scoped work; not unsafe worker singleton state.
+            $this->historyStorage->append(new BackupHistoryEntry(
+                action: 'import',
+                occurredAt: $this->clock->now(),
+                actor: $actor,
+                backupId: $artifact->getId(),
+                context: ['size_bytes' => $artifact->getSizeBytes(), 'sha256' => $artifact->getArchiveSha256()],
+            ));
+            $this->eventDispatcher?->dispatch(new BackupImportedEvent($artifact, $actor));
+
+            return $artifact;
+        } finally {
+            $lock?->release();
+        }
     }
 
     public function getRestoreProgress(): RestoreProgress

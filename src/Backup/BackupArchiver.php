@@ -11,11 +11,14 @@ use JsonException;
 use Nowo\SiteBackupBundle\Database\BuiltinMysqlDumper;
 use Nowo\SiteBackupBundle\Database\DumpReport;
 use Nowo\SiteBackupBundle\Enum\ArchiveFormat;
+use Nowo\SiteBackupBundle\Exception\CorruptArchiveException;
 use Nowo\SiteBackupBundle\Exception\DumpFailedException;
 use Nowo\SiteBackupBundle\Exception\FormatUnavailableException;
 use Nowo\SiteBackupBundle\Exception\InsufficientDiskException;
 use Nowo\SiteBackupBundle\Exception\InvalidBackupOptionsException;
+use Nowo\SiteBackupBundle\Exception\WrongPasswordException;
 use Nowo\SiteBackupBundle\Log\SecretRedactor;
+use Nowo\SiteBackupBundle\Model\ArchivePassword;
 use Nowo\SiteBackupBundle\Model\BackupArtifact;
 use Nowo\SiteBackupBundle\Model\BackupOptions;
 use Nowo\SiteBackupBundle\Model\BackupProgress;
@@ -23,6 +26,7 @@ use Nowo\SiteBackupBundle\Process\ProcessDeadline;
 use OutOfBoundsException;
 use Psr\Clock\ClockInterface;
 use RuntimeException;
+use SensitiveParameter;
 use Symfony\Component\Clock\NativeClock;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Finder\Finder;
@@ -31,6 +35,7 @@ use Symfony\Component\Process\Process;
 use Throwable;
 use ZipArchive;
 
+use function array_filter;
 use function array_keys;
 use function array_merge;
 use function array_reverse;
@@ -39,6 +44,7 @@ use function array_values;
 use function basename;
 use function bin2hex;
 use function class_exists;
+use function count;
 use function deflate_add;
 use function deflate_init;
 use function dirname;
@@ -65,16 +71,19 @@ use function hrtime;
 use function in_array;
 use function inflate_add;
 use function inflate_init;
+use function is_array;
 use function is_dir;
 use function is_file;
 use function is_link;
 use function is_readable;
+use function is_string;
 use function json_decode;
 use function json_encode;
 use function ltrim;
 use function max;
 use function mb_substr;
 use function preg_match;
+use function preg_replace;
 use function random_bytes;
 use function realpath;
 use function rename;
@@ -113,6 +122,8 @@ use const ZLIB_SYNC_FLUSH;
 final class BackupArchiver
 {
     public const MANIFEST_VERSION = 2;
+
+    public const ENCRYPTION_ZIP_AES = 'zip-aes256-ae2';
 
     private const HASH_CHUNK_BYTES = 8 * 1024 * 1024;
 
@@ -226,7 +237,9 @@ final class BackupArchiver
                 'php_version'       => PHP_VERSION,
                 'format'            => $format->value,
                 'compression_level' => $options->compressionLevel,
-                'encrypted'         => false,
+                'encrypted'         => $options->password !== null,
+                'encryption'        => $options->password !== null ? self::ENCRYPTION_ZIP_AES : null,
+                'key_id'            => $options->keyId,
                 'table_rules'       => $options->tableRuleValues(),
                 'bundle_version'    => self::bundleVersion(),
                 'manifest_version'  => self::MANIFEST_VERSION,
@@ -259,6 +272,9 @@ final class BackupArchiver
             if ($skipped > 0) {
                 $warnings[] = sprintf('%d secret path(s) skipped (secrets floor / backup.forbidden_paths).', $skipped);
             }
+            if ($options->password !== null && $options->password->estimatedBits() < ArchivePassword::WEAK_ZIP_BITS) {
+                $warnings[] = 'The archive password looks weak for zip AES (PBKDF2-SHA1 x 1000): prefer a generated password of 20+ characters.';
+            }
             $meta['warnings'] = $warnings;
 
             // Defence in depth: nothing that matches the floor may reach the packer, whatever include_paths says.
@@ -272,7 +288,7 @@ final class BackupArchiver
             } else {
                 $this->writeManifest($payloadDir, $id, $checksums, $meta);
                 if ($format === ArchiveFormat::Zip) {
-                    $this->createZip($payloadDir, $packed, $options->compressionLevel, $tick);
+                    $this->createZip($payloadDir, $packed, $options->compressionLevel, $tick, $options->password);
                 } else {
                     $this->createTarGz($payloadDir, $packed, $options->compressionLevel, $tick);
                 }
@@ -310,6 +326,254 @@ final class BackupArchiver
         } finally {
             $this->filesystem->remove($workDir);
         }
+    }
+
+    /**
+     * Imports an archive made elsewhere (a downloaded remote backup, another instance) into `storage_dir` (1.29+).
+     *
+     * The format is detected from the content (zip, tar.gz, sql.gz), encrypted zip entries are decrypted with
+     * $password, entry names / symlinks / ZipCrypto are refused, MANIFEST checksums are verified, secret paths are
+     * dropped, and the result is stored as a plain `tar.gz` in the bundle layout, so `restore()` and the panel can use it.
+     * The stored copy is plaintext (`0600`, owner-only, owner decision Q-O6): delete it after the restore.
+     *
+     * @throws CorruptArchiveException|FormatUnavailableException|WrongPasswordException
+     */
+    public function import(string $path, #[SensitiveParameter] ?ArchivePassword $password = null, ?string $createdBy = null): BackupArtifact
+    {
+        if (!is_file($path) || !is_readable($path)) {
+            throw new CorruptArchiveException('The archive to import is missing or not readable.');
+        }
+
+        $source = self::detectFormat($path);
+        $this->filesystem->mkdir($this->storageDir);
+        $workRoot   = $this->workRoot();
+        $id         = $this->clock->now()->format('Ymd-His') . '-' . bin2hex(random_bytes(4));
+        $workDir    = PrivateTempDirectory::create(self::WORK_DIR_PREFIX . 'import-' . $id . '-', $workRoot);
+        $payloadDir = $workDir . '/payload';
+        $packed     = $workDir . '/archive.tar.gz';
+        $target     = rtrim($this->storageDir, '/\\') . '/' . $id . '.tar.gz';
+        $published  = false;
+        $this->filesystem->mkdir($payloadDir, 0o700);
+
+        try {
+            $sourceSha = $this->hashFile($path, null);
+            match ($source) {
+                ArchiveFormat::Zip   => $this->extractZip($path, $payloadDir, $password),
+                ArchiveFormat::TarGz => $this->extractTarGzSafely($path, $payloadDir),
+                ArchiveFormat::SqlGz => $this->gunzipFile($path, $payloadDir . '/database/dump.sql', null),
+            };
+
+            $dropped                = $this->dropSecretPaths($payloadDir);
+            [$checksums, $original] = $this->importedChecksums($payloadDir, $source, $dropped);
+
+            $warnings = [];
+            if ($dropped !== []) {
+                $warnings[] = sprintf('%d secret path(s) dropped from the imported archive.', count($dropped));
+            }
+            $hasDump = isset($checksums['database/dump.sql']);
+            $files   = array_filter(array_keys($checksums), static fn (string $p): bool => $p !== 'database/dump.sql');
+            $meta    = [
+                'project_dir'       => $this->projectDir,
+                'includes'          => is_array($original['includes'] ?? null) ? $original['includes'] : [],
+                'excludes'          => is_array($original['excludes'] ?? null) ? $original['excludes'] : [],
+                'created_at'        => $this->clock->now()->format(DATE_ATOM),
+                'label'             => is_string($original['label'] ?? null) ? $original['label'] : null,
+                'created_by'        => $createdBy,
+                'php_version'       => PHP_VERSION,
+                'format'            => ArchiveFormat::TarGz->value,
+                'compression_level' => 6,
+                'encrypted'         => false,
+                'encryption'        => null,
+                'key_id'            => null,
+                'table_rules'       => is_array($original['table_rules'] ?? null) ? $original['table_rules'] : [],
+                'bundle_version'    => self::bundleVersion(),
+                'manifest_version'  => self::MANIFEST_VERSION,
+                'content'           => match (true) {
+                    $hasDump && $files !== [] => 'database_files',
+                    $hasDump                  => 'database',
+                    default                   => 'files',
+                },
+                'imported_from' => [
+                    'format'      => $source->value,
+                    'sha256'      => $sourceSha,
+                    'encrypted'   => ($original['encrypted'] ?? false) === true,
+                    'key_id'      => is_string($original['key_id'] ?? null) ? $original['key_id'] : null,
+                    'original_id' => is_string($original['id'] ?? null) ? $original['id'] : null,
+                    'created_at'  => is_string($original['created_at'] ?? null) ? $original['created_at'] : null,
+                ],
+                'warnings' => $warnings,
+            ];
+            if ($hasDump) {
+                $meta['database_dump'] = 'database/dump.sql';
+            }
+
+            $this->secretPolicy->assertNoSecrets(array_keys($checksums));
+            $this->writeManifest($payloadDir, $id, $checksums, $meta);
+            $this->createTarGz($payloadDir, $packed);
+            $this->filesystem->chmod($packed, 0o600);
+            if (!@rename($packed, $target)) {
+                throw new RuntimeException('Unable to move the imported archive into storage_dir.');
+            }
+            $published = true;
+
+            $artifact = new BackupArtifact(
+                id: $id,
+                filename: $id . '.tar.gz',
+                absolutePath: $target,
+                createdAt: $this->clock->now(),
+                sizeBytes: (int) filesize($target),
+                archiveSha256: $this->hashFile($target, null),
+                checksums: $checksums,
+                meta: $meta,
+                label: $meta['label'],
+                createdBy: $createdBy,
+            );
+            $this->writeSidecar($artifact);
+
+            return $artifact;
+        } catch (Throwable $e) {
+            if ($published) {
+                $this->filesystem->remove([$target, $this->sidecarPath($id)]);
+            }
+
+            throw $e;
+        } finally {
+            $this->filesystem->remove($workDir);
+        }
+    }
+
+    /**
+     * Archive format from the first bytes (zip, tar.gz or sql.gz); the file name is not trusted.
+     *
+     * @throws CorruptArchiveException|FormatUnavailableException
+     */
+    public static function detectFormat(string $path): ArchiveFormat
+    {
+        $handle = @fopen($path, 'r');
+        if ($handle === false) {
+            throw new CorruptArchiveException('The archive to import is not readable.');
+        }
+
+        try {
+            $head = (string) fread($handle, 64 * 1024);
+        } finally {
+            fclose($handle);
+        }
+
+        if (str_starts_with($head, "PK\x03\x04")) {
+            return ArchiveFormat::Zip;
+        }
+        if (str_starts_with($head, 'age-encryption.org/v1')) {
+            throw new FormatUnavailableException('age archives need the age encryptor, which is not available yet.');
+        }
+        if (str_starts_with($head, "\x1f\x8b")) {
+            $inflate = inflate_init(ZLIB_ENCODING_GZIP) ?: throw new RuntimeException('gunzip failed: zlib is not available.');
+            $plain   = @inflate_add($inflate, $head, ZLIB_SYNC_FLUSH);
+            if ($plain === false) {
+                throw new CorruptArchiveException('The archive is not valid gzip data.');
+            }
+
+            return substr($plain, 257, 5) === 'ustar' ? ArchiveFormat::TarGz : ArchiveFormat::SqlGz;
+        }
+
+        throw new CorruptArchiveException('Unknown archive format (expected zip, tar.gz or sql.gz).');
+    }
+
+    /**
+     * Lists the tar first: refuses unsafe names, symlinks and hard links, then extracts.
+     */
+    private function extractTarGzSafely(string $archive, string $destination): void
+    {
+        $listing = new Process([$this->tarBinary, '-tvzf', $archive]);
+        ProcessDeadline::run($listing, $this->processTimeoutSeconds);
+        if (!$listing->isSuccessful()) {
+            throw new CorruptArchiveException('The tar.gz archive cannot be listed.');
+        }
+        foreach (explode("\n", trim($listing->getOutput())) as $line) {
+            if ($line !== '' && ($line[0] === 'l' || $line[0] === 'h')) {
+                throw new CorruptArchiveException('Links are not allowed in an imported archive.');
+            }
+        }
+
+        $names = new Process([$this->tarBinary, '-tzf', $archive]);
+        ProcessDeadline::run($names, $this->processTimeoutSeconds);
+        foreach (explode("\n", trim($names->getOutput())) as $name) {
+            $name = (string) preg_replace('#^(\./)+#', '', $name);
+            if ($name === '' || $name === '.') {
+                continue;
+            }
+            try {
+                self::assertSafeEntryName(rtrim($name, '/'));
+            } catch (RuntimeException $e) {
+                throw new CorruptArchiveException($e->getMessage(), 0, $e);
+            }
+        }
+
+        $this->extractTarGz($archive, $destination);
+    }
+
+    /**
+     * Removes secret paths from an extracted payload.
+     *
+     * @return list<string> removed project-relative paths
+     */
+    private function dropSecretPaths(string $payloadDir): array
+    {
+        $dropped = [];
+        foreach ((new Finder())->files()->in($payloadDir)->ignoreDotFiles(false) as $file) {
+            $relative = str_replace('\\', '/', substr($file->getPathname(), strlen($payloadDir) + 1));
+            if ($relative !== 'MANIFEST.json' && $this->secretPolicy->isForbidden($relative)) {
+                $this->filesystem->remove($file->getPathname());
+                $dropped[] = $relative;
+            }
+        }
+
+        return $dropped;
+    }
+
+    /**
+     * Verifies an imported payload: every MANIFEST entry (except dropped secrets) must exist and match.
+     *
+     * @param list<string> $dropped
+     *
+     * @return array{0: array<string, string>, 1: array<string, mixed>} checksums, original meta (+ id)
+     */
+    private function importedChecksums(string $payloadDir, ArchiveFormat $source, array $dropped): array
+    {
+        if ($source === ArchiveFormat::SqlGz) {
+            return [['database/dump.sql' => $this->hashFile($payloadDir . '/database/dump.sql', null)], []];
+        }
+
+        $manifestFile = $payloadDir . '/MANIFEST.json';
+        if (!is_file($manifestFile)) {
+            throw new CorruptArchiveException('MANIFEST.json missing inside the archive.');
+        }
+        try {
+            $manifest = json_decode((string) file_get_contents($manifestFile), true, 512, JSON_THROW_ON_ERROR);
+        } catch (JsonException) {
+            throw new CorruptArchiveException('Invalid MANIFEST.json inside the archive.');
+        }
+        if (!is_array($manifest) || !is_array($manifest['checksums'] ?? null)) {
+            throw new CorruptArchiveException('MANIFEST.json has no checksums.');
+        }
+        $this->filesystem->remove($manifestFile);
+
+        $checksums = [];
+        foreach ($manifest['checksums'] as $relative => $expected) {
+            if (!is_string($relative) || !is_string($expected) || in_array($relative, $dropped, true) || $this->secretPolicy->isForbidden($relative)) {
+                continue;
+            }
+            $file = $payloadDir . '/' . $relative;
+            if (!is_file($file) || $this->hashFile($file, null) !== $expected) {
+                throw new CorruptArchiveException(sprintf('Checksum mismatch or missing file in the imported archive: %s', $relative));
+            }
+            $checksums[$relative] = $expected;
+        }
+
+        $original       = is_array($manifest['meta'] ?? null) ? $manifest['meta'] : [];
+        $original['id'] = $manifest['id'] ?? null;
+
+        return [$checksums, $original];
     }
 
     /**
@@ -403,7 +667,7 @@ final class BackupArchiver
      *
      * @return array{ok: bool, errors: list<string>, checksums: array<string, string>}
      */
-    public function verifyIntegrity(BackupArtifact $artifact, ?callable $heartbeat = null): array
+    public function verifyIntegrity(BackupArtifact $artifact, ?callable $heartbeat = null, #[SensitiveParameter] ?ArchivePassword $password = null): array
     {
         $errors = [];
         if (!is_file($artifact->getAbsolutePath())) {
@@ -418,7 +682,7 @@ final class BackupArchiver
         $extractDir = PrivateTempDirectory::create(self::WORK_DIR_PREFIX . 'verify-' . $artifact->getId() . '-', $this->workRoot());
 
         try {
-            $this->extractTo($artifact, $extractDir, $heartbeat);
+            $this->extractTo($artifact, $extractDir, $heartbeat, $password);
 
             if ($artifact->getFormat() === ArchiveFormat::SqlGz) {
                 $got      = $this->hashFile($extractDir . '/database/dump.sql', $heartbeat);
@@ -476,12 +740,12 @@ final class BackupArchiver
      *
      * @param (callable(): void)|null $heartbeat called while tar is running (see verifyIntegrity())
      */
-    public function extractTo(BackupArtifact $artifact, string $destinationDir, ?callable $heartbeat = null): void
+    public function extractTo(BackupArtifact $artifact, string $destinationDir, ?callable $heartbeat = null, #[SensitiveParameter] ?ArchivePassword $password = null): void
     {
         $this->filesystem->mkdir($destinationDir);
 
         match ($artifact->getFormat()) {
-            ArchiveFormat::Zip   => $this->extractZip($artifact->getAbsolutePath(), $destinationDir),
+            ArchiveFormat::Zip   => $this->extractZip($artifact->getAbsolutePath(), $destinationDir, $password),
             ArchiveFormat::SqlGz => $this->gunzipFile($artifact->getAbsolutePath(), $destinationDir . '/database/dump.sql', $heartbeat),
             ArchiveFormat::TarGz => $this->extractTarGz($artifact->getAbsolutePath(), $destinationDir, $heartbeat),
         };
@@ -517,6 +781,23 @@ final class BackupArchiver
 
         if ($options->format === ArchiveFormat::Zip && !class_exists(ZipArchive::class)) {
             throw new FormatUnavailableException('The zip format needs ext-zip.');
+        }
+
+        if ($options->password !== null) {
+            if ($options->format !== ArchiveFormat::Zip) {
+                throw new FormatUnavailableException('Password-protected tar.gz / sql.gz archives need the age encryptor, which is not available yet: use the zip format.');
+            }
+            self::assertZipAesAvailable();
+        }
+    }
+
+    /**
+     * @throws FormatUnavailableException when ext-zip / libzip cannot write WinZip AES-256 (no ZipCrypto fallback)
+     */
+    public static function assertZipAesAvailable(): void
+    {
+        if (!class_exists(ZipArchive::class) || !ZipArchive::isEncryptionMethodSupported(ZipArchive::EM_AES_256, true)) {
+            throw new FormatUnavailableException('This PHP build cannot write AES-256 zip archives (libzip without a crypto backend). ZipCrypto is never used.');
         }
     }
 
@@ -861,7 +1142,7 @@ final class BackupArchiver
     /**
      * @param (callable(): void)|null $tick
      */
-    private function createZip(string $payloadDir, string $target, int $level, ?callable $tick): void
+    private function createZip(string $payloadDir, string $target, int $level, ?callable $tick, #[SensitiveParameter] ?ArchivePassword $password = null): void
     {
         $zip = new ZipArchive();
         if ($zip->open($target, ZipArchive::CREATE | ZipArchive::EXCL) !== true) {
@@ -876,6 +1157,13 @@ final class BackupArchiver
                 $zip->setCompressionName($name, ZipArchive::CM_STORE);
             } else {
                 $zip->setCompressionName($name, ZipArchive::CM_DEFLATE, $level);
+            }
+            // WinZip AE-2 AES-256 per entry; never ZipCrypto.
+            if ($password !== null && !$zip->setEncryptionName($name, ZipArchive::EM_AES_256, $password->reveal())) {
+                $zip->close();
+                $this->filesystem->remove($target);
+
+                throw new FormatUnavailableException('zip create failed: AES-256 encryption is not available.');
             }
         }
 
@@ -953,7 +1241,7 @@ final class BackupArchiver
     /**
      * Refuses unsafe names, symlinks and encrypted entries (zip-slip guard), then extracts.
      */
-    private function extractZip(string $archive, string $destination): void
+    private function extractZip(string $archive, string $destination, #[SensitiveParameter] ?ArchivePassword $password = null): void
     {
         if (!class_exists(ZipArchive::class)) {
             throw new FormatUnavailableException('The zip format needs ext-zip.');
@@ -964,6 +1252,8 @@ final class BackupArchiver
             throw new RuntimeException('zip extract failed: unable to open the archive.');
         }
 
+        $encrypted = false;
+
         try {
             for ($i = 0; $i < $zip->numFiles; ++$i) {
                 $stat = $zip->statIndex($i);
@@ -971,8 +1261,12 @@ final class BackupArchiver
                     throw new RuntimeException('zip extract failed: unreadable entry.');
                 }
                 self::assertSafeEntryName($stat['name']);
-                if (($stat['encryption_method'] ?? ZipArchive::EM_NONE) !== ZipArchive::EM_NONE) {
-                    throw new FormatUnavailableException('Encrypted zip archives need SiteBackupBundle 1.29 or later.');
+                $method = $stat['encryption_method'] ?? ZipArchive::EM_NONE;
+                if ($method !== ZipArchive::EM_NONE && $method !== ZipArchive::EM_AES_256) {
+                    throw new CorruptArchiveException('Only AES-256 encrypted zip entries are accepted (legacy ZipCrypto and AES-128/192 are refused).');
+                }
+                if ($method === ZipArchive::EM_AES_256) {
+                    $encrypted = true;
                 }
                 $opsys = 0;
                 $attr  = 0;
@@ -981,7 +1275,18 @@ final class BackupArchiver
                 }
             }
 
+            if ($encrypted) {
+                if ($password === null) {
+                    throw new WrongPasswordException('This archive is encrypted: a password is needed.');
+                }
+                $zip->setPassword($password->reveal());
+            }
+
             if (!$zip->extractTo($destination)) {
+                if ($encrypted) {
+                    throw new WrongPasswordException('Unable to decrypt the archive: wrong password or corrupt data.');
+                }
+
                 throw new RuntimeException('zip extract failed.');
             }
         } finally {
