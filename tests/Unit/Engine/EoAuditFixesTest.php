@@ -339,7 +339,7 @@ final class EoAuditFixesTest extends TestCase
         // A flipped byte inside an AES entry: integrity failure (1), not "wrong password" (2).
         $zip        = $archiver->create((new BackupOptions(format: ArchiveFormat::Zip))->withPassword(ArchivePassword::fromString(self::PHRASE)));
         $bytes      = (string) file_get_contents($zip->getAbsolutePath());
-        $at         = (int) (strlen($bytes) / 3);
+        $at         = self::middleOfFirstEntryData($bytes);
         $bytes[$at] = $bytes[$at] === 'A' ? 'B' : 'A';
         file_put_contents($this->root . '/in/tampered.zip', $bytes);
         self::assertNotSame(VerifyFileResult::OK, $archiver->verifyFile($this->root . '/in/tampered.zip', ArchivePassword::fromString(self::PHRASE))->status);
@@ -380,5 +380,27 @@ final class EoAuditFixesTest extends TestCase
         fwrite($stream, $data);
         rewind($stream);
         $target->upload($stream, $key, strlen($data), []);
+    }
+
+    /**
+     * Offset of a byte inside the first encrypted payload (not a header field the reader may ignore).
+     */
+    private static function middleOfFirstEntryData(string $bytes): int
+    {
+        $offset = 0;
+        while (substr($bytes, $offset, 4) === "PK\x03\x04") {
+            /** @var array{c: int} $size */
+            $size = unpack('Vc', substr($bytes, $offset + 18, 4));
+            /** @var array{n: int, e: int} $lengths */
+            $lengths = unpack('vn/ve', substr($bytes, $offset + 26, 4));
+            $data    = $offset + 30 + $lengths['n'] + $lengths['e'];
+            // AES payload: salt (16) + verifier (2) + data + HMAC (10); aim at the data.
+            if ($size['c'] > 28) {
+                return $data + 18 + intdiv($size['c'] - 28, 2);
+            }
+            $offset = $data + $size['c'];
+        }
+
+        self::fail('No encrypted entry with a known size found.');
     }
 }
