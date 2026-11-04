@@ -18,6 +18,7 @@
   - [Messenger recipe](#messenger-recipe)
   - [Retention](#retention)
   - [Large databases](#large-databases)
+  - [Restore drill (1.29+)](#restore-drill-129)
 - [Built-in database dumper](#built-in-database-dumper)
 - [Database import note](#database-import-note)
 
@@ -277,6 +278,32 @@ supports daily / weekly / monthly buckets (`keepDaily`, `keepWeekly`, `keepMonth
 - `backup.work_dir` must have room for the staging copy and the archive (about 2× the archive); avoid a tmpfs.
 - Restore: use `importer: client` on the `sql_file` step, or `nowo:site-backup:db-import <file> --force`; both stream
   the dump through the `mysql` client.
+
+### Restore drill (1.29+)
+
+`nowo:site-backup:drill <id> [--schema=nowo_backup_drill]` loads the backup's dump into a throwaway schema, compares row
+counts and `CHECKSUM TABLE` values with the `table_stats` recorded at backup time (`recordTableStats: true`), and always
+drops the schema. Exit 0 when the drill passes, 1 when tables differ, 2 on errors.
+
+- **Use a restricted account: `backup.drill.database_url`.** Grant it only on the drill schema(s), for example:
+
+  ```sql
+  CREATE USER 'drill'@'%' IDENTIFIED BY '…';
+  CREATE DATABASE nowo_backup_drill_home;  -- the database named in the URL
+  GRANT ALL ON `nowo\_backup\_drill%`.* TO 'drill'@'%';  -- covers it and the drill schemas
+  ```
+
+  The dump is checked first (statements that switch or create databases, and statements aimed at `other_db.table`,
+  are refused) and the client runs with `--one-database`, but that scan is best effort: names qualified inside a
+  statement body (views, triggers, routines, sub-queries) are not parsed. Only the restricted account guarantees that
+  a hostile dump cannot write to live data.
+- **It is required for archives from elsewhere (EO-R1).** Drilling an imported archive (`importArchive()`, meta
+  `imported_from`) without `backup.drill.database_url` is refused. Archives this site created itself can still be
+  drilled with the live account.
+- **The database named in the URL must already exist**: the client connects to it before it creates the drill
+  schema, and a missing one fails with `ERROR 1049`. Point the URL at an existing database the account may use
+  (`mysql://drill:…@db/nowo_backup_drill_home` above); the drill schema itself must not exist (it is created, never
+  reused).
 
 ## Built-in database dumper
 

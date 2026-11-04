@@ -15,6 +15,9 @@ use Symfony\Component\Process\Process;
 
 use function array_map;
 use function escapeshellarg;
+use function fclose;
+use function fgets;
+use function fopen;
 use function hrtime;
 use function implode;
 use function is_file;
@@ -22,8 +25,12 @@ use function is_readable;
 use function min;
 use function preg_match;
 use function sprintf;
+use function str_ends_with;
+use function str_replace;
+use function str_starts_with;
 use function stripos;
 use function strlen;
+use function strtolower;
 use function trim;
 use function version_compare;
 
@@ -49,6 +56,14 @@ final class DumpImporter
         private readonly ?BackupOperationLock $operationLock = null,
     ) {
     }
+
+    /**
+     * EO-R1 (best effort): a statement whose target is `db`.`table` with a database other than the drill schema.
+     * Group 1 / 2 = the backtick-quoted or bare qualifier.
+     */
+    private const QUALIFIED_TARGET = '#^\s*(?:/\*!\d*\s*)?(?:(?:INSERT|REPLACE)(?:\s+(?:LOW_PRIORITY|DELAYED|HIGH_PRIORITY|IGNORE))*(?:\s+INTO)?|UPDATE(?:\s+(?:LOW_PRIORITY|IGNORE))*|DELETE(?:\s+(?:LOW_PRIORITY|QUICK|IGNORE))*\s+FROM|TRUNCATE(?:\s+TABLE)?|LOCK\s+TABLES?|RENAME\s+TABLE|(?:CREATE|DROP|ALTER)(?:\s+(?:OR\s+REPLACE|TEMPORARY|ONLINE|IGNORE))*\s+(?:TABLE|VIEW|TRIGGER|PROCEDURE|FUNCTION|EVENT|INDEX\s+\S+\s+ON)(?:\s+IF\s+(?:NOT\s+)?EXISTS)?|LOAD\s+DATA\b.*?\bINTO\s+TABLE)\s+(?:`((?:[^`]|``)+)`|([A-Za-z0-9_$]+))\s*\.#i';
+
+    private const DATABASE_SWITCH = '#^\s*(?:/\*!\d*\s*)?(?:USE\b|\\\\u\b|\\\\r\b|CONNECT\b|(?:CREATE|DROP|ALTER)\s+(?:DATABASE|SCHEMA)\b|-- Current Database:)#i';
 
     /** Minimum MariaDB client per major.minor for `--sandbox`; later lines all have it. */
     private const MARIADB_SANDBOX = ['10.5' => '10.5.25', '10.6' => '10.6.18', '10.11' => '10.11.8', '11.0' => '11.0.6', '11.1' => '11.1.5', '11.2' => '11.2.4', '11.3' => '11.3.2', '11.4' => '11.4.2'];
@@ -121,13 +136,31 @@ final class DumpImporter
      */
     public function import(string $file, ?callable $tick = null): void
     {
+        $this->importInto($file, null, $tick);
+    }
+
+    /**
+     * Imports into another schema of the same server (1.29+, restore drills). The dump must not select its own
+     * database (mysqldump with one database name does not).
+     *
+     * @param (callable(): void)|null $tick
+     *
+     * @throws BackupAlreadyRunningException|DumpFailedException
+     */
+    public function importInto(string $file, ?string $schema, ?callable $tick = null): void
+    {
         if (!is_file($file) || !is_readable($file)) {
             throw new DumpFailedException('SQL import: the dump file is missing or not readable.');
         }
 
+        if ($schema !== null) {
+            // EO-M3: a dump that switches database would write outside the target schema (the live one).
+            self::assertSingleDatabaseDump($file, $schema);
+        }
+
         $lock = $this->operationLock?->acquire();
         try {
-            $this->run($file, $tick, $lock);
+            $this->run($file, $schema, $tick, $lock);
         } finally {
             $lock?->release();
         }
@@ -136,14 +169,19 @@ final class DumpImporter
     /**
      * @param (callable(): void)|null $tick
      */
-    private function run(string $file, ?callable $tick, ?BackupOperationLockHandle $lock): void
+    private function run(string $file, ?string $schema, ?callable $tick, ?BackupOperationLockHandle $lock): void
     {
         try {
             MysqlDumpCommandFactory::databaseName((string) $this->databaseUrl);
         } catch (InvalidArgumentException $e) {
             throw new DumpFailedException('SQL import: ' . $e->getMessage(), 0, $e);
         }
-        $spec = MysqlDumpCommandFactory::clientFromDatabaseUrl((string) $this->databaseUrl, $this->skipSslVerifyServerCert, $this->clientBinary, ['--batch', $this->safetyOption()]);
+        $options = ['--batch', $this->safetyOption()];
+        if ($schema !== null) {
+            // EO-M3: the client itself skips statements for any other database (Oracle and MariaDB clients).
+            $options[] = '--one-database';
+        }
+        $spec = MysqlDumpCommandFactory::clientFromDatabaseUrl((string) $this->databaseUrl, $this->skipSslVerifyServerCert, $this->clientBinary, $options, $schema);
 
         $commandLine = 'exec ' . implode(' ', array_map(escapeshellarg(...), $spec['command'])) . ' < ' . escapeshellarg($file);
         $process     = Process::fromShellCommandline($commandLine, null, $spec['env']);
@@ -164,6 +202,104 @@ final class DumpImporter
         }
         if (!$process->isSuccessful()) {
             throw new DumpFailedException('SQL import failed: ' . self::safeError($process->getErrorOutput()));
+        }
+    }
+
+    /**
+     * EO-M3: refuses dumps that select or create databases (`USE`, `\u`, `CREATE/DROP/ALTER DATABASE|SCHEMA`,
+     * `CONNECT`, `/*!… USE …`, `mysqldump --databases` / `--all-databases` output). Streaming scan of line starts.
+     * EO-R1: with `$schema`, also refuses statements whose target is qualified with another database
+     * (`INSERT INTO app.t …`), which `--one-database` does not stop. Best effort: names qualified inside a statement
+     * body (views, triggers, routines, sub-queries) are not parsed, hence the restricted drill account.
+     *
+     * @throws DumpFailedException
+     */
+    public static function assertSingleDatabaseDump(string $file, ?string $schema = null): void
+    {
+        $handle = @fopen($file, 'r');
+        if ($handle === false) {
+            throw new DumpFailedException('SQL import: the dump file is missing or not readable.');
+        }
+
+        try {
+            $atLineStart = true;
+            $lineNumber  = 0;
+            while (($piece = fgets($handle, 65536)) !== false) {
+                if ($atLineStart) {
+                    ++$lineNumber;
+                    if (preg_match(self::DATABASE_SWITCH, $piece) === 1) {
+                        throw new DumpFailedException(sprintf('The dump selects or creates a database (line %d): refused for an import into another schema.', $lineNumber));
+                    }
+                    if ($schema !== null && preg_match(self::QUALIFIED_TARGET, $piece, $m) === 1
+                        && strtolower($m[1] !== '' ? str_replace('``', '`', $m[1]) : ($m[2] ?? '')) !== strtolower($schema)) {
+                        throw new DumpFailedException(sprintf('The dump writes to a table of another database (line %d): refused for an import into another schema.', $lineNumber));
+                    }
+                }
+                $atLineStart = str_ends_with($piece, "\n");
+            }
+        } finally {
+            fclose($handle);
+        }
+    }
+
+    /**
+     * Creates an empty schema (fails when it exists: a drill never reuses, and so never drops, an existing schema).
+     *
+     * @throws DumpFailedException
+     */
+    public function createSchema(string $schema): void
+    {
+        $this->execute(sprintf('CREATE DATABASE `%s`', self::schemaName($schema)));
+    }
+
+    /**
+     * @throws DumpFailedException
+     */
+    public function dropSchema(string $schema): void
+    {
+        $this->execute(sprintf('DROP DATABASE IF EXISTS `%s`', self::schemaName($schema)));
+    }
+
+    public function databaseName(): string
+    {
+        try {
+            return MysqlDumpCommandFactory::databaseName((string) $this->databaseUrl);
+        } catch (InvalidArgumentException $e) {
+            throw new DumpFailedException('SQL import: ' . $e->getMessage(), 0, $e);
+        }
+    }
+
+    private static function schemaName(string $schema): string
+    {
+        if (preg_match('/^[A-Za-z0-9_]{1,64}$/', $schema) !== 1) {
+            throw new DumpFailedException('Schema names must match [A-Za-z0-9_]{1,64}.');
+        }
+
+        return $schema;
+    }
+
+    private function execute(string $sql): void
+    {
+        try {
+            $spec = MysqlDumpCommandFactory::clientFromDatabaseUrl((string) $this->databaseUrl, $this->skipSslVerifyServerCert, $this->clientBinary, ['--batch', '--execute=' . $sql]);
+        } catch (InvalidArgumentException $e) {
+            throw new DumpFailedException('SQL import: ' . $e->getMessage(), 0, $e);
+        }
+
+        $process = new Process($spec['command'], null, $spec['env']);
+        try {
+            ProcessDeadline::run($process, $this->timeoutSeconds);
+        } catch (ProcessTimedOutException) {
+            throw new DumpFailedException('SQL statement timed out.');
+        }
+        if (!$process->isSuccessful()) {
+            $error = self::safeError($process->getErrorOutput());
+            if (str_starts_with($error, 'ERROR 1049 ')) {
+                // EO-R1: the client connects to the database named in the URL before running the statement.
+                $error .= ': the database named in the connection URL must already exist';
+            }
+
+            throw new DumpFailedException('SQL statement failed: ' . $error);
         }
     }
 

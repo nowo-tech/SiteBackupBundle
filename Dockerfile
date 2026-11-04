@@ -5,7 +5,8 @@ RUN apk add --no-cache \
     git \
     unzip \
     bash \
-    libzip-dev
+    libzip-dev \
+    libarchive-tools
 
 RUN docker-php-ext-install -j$(nproc) zip
 

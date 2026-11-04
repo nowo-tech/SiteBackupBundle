@@ -14,6 +14,9 @@ final class SiteBackupEvents
     public const BACKUP_CREATED          = BackupCreatedEvent::class;
     public const BACKUP_FAILED           = BackupFailedEvent::class;
     public const BACKUP_DELETED          = BackupDeletedEvent::class;
+    public const BACKUP_IMPORTED         = BackupImportedEvent::class;
+    public const REMOTE_UPLOADED         = RemoteBackupUploadedEvent::class;
+    public const REMOTE_PRUNED           = RemoteBackupPrunedEvent::class;
     public const RESTORE_STARTED         = RestoreStartedEvent::class;
     public const RESTORE_COMPLETED       = RestoreCompletedEvent::class;
     public const RESTORE_FAILED          = RestoreFailedEvent::class;

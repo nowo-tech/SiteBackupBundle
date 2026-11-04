@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\Enum;
 
 use function str_ends_with;
+use function substr;
 
 /**
  * Archive container of a backup (1.28+).
@@ -32,6 +33,10 @@ enum ArchiveFormat: string
      */
     public static function fromFilename(string $filename): self
     {
+        if (str_ends_with($filename, '.age')) {
+            $filename = substr($filename, 0, -4);
+        }
+
         foreach ([self::SqlGz, self::Zip, self::TarGz] as $format) {
             if (str_ends_with($filename, '.' . $format->value)) {
                 return $format;

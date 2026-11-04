@@ -10,10 +10,12 @@ use Nowo\SiteBackupBundle\DependencyInjection\Compiler\CsrfProtectionPass;
 use Nowo\SiteBackupBundle\DependencyInjection\Compiler\LoginThrottleStoragePass;
 use Nowo\SiteBackupBundle\DependencyInjection\Compiler\TwigPathsPass;
 use Nowo\SiteBackupBundle\DependencyInjection\SiteBackupExtension;
+use Nowo\SiteBackupBundle\Model\ArchivePassword;
 use Symfony\Component\DependencyInjection\ChildDefinition;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Extension\ExtensionInterface;
 use Symfony\Component\HttpKernel\Bundle\Bundle;
+use Symfony\Component\VarDumper\Cloner\AbstractCloner;
 
 final class NowoSiteBackupBundle extends Bundle
 {
@@ -39,6 +41,24 @@ final class NowoSiteBackupBundle extends Bundle
                 $definition->addTag('nowo.site_backup.setup_tab_checker');
             },
         );
+    }
+
+    /**
+     * EO-L1: VarDumper (dump(), the profiler) prints archive passwords as "***".
+     */
+    public function boot(): void
+    {
+        parent::boot();
+        self::registerVarDumperCasters();
+    }
+
+    public static function registerVarDumperCasters(): void
+    {
+        if (class_exists(AbstractCloner::class)) {
+            // @igor-ignore - Process-wide, idempotent caster registration (same value on every boot).
+            // @phpstan-ignore-next-line (idempotent, same value for every request)
+            AbstractCloner::$defaultCasters[ArchivePassword::class] = [ArchivePassword::class, 'castForVarDumper'];
+        }
     }
 
     public function getContainerExtension(): ?ExtensionInterface

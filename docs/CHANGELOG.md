@@ -67,6 +67,79 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Archive passwords, archive import, remote targets, optional Ed25519 signatures and the restore drill (1.29.0,
+contract "SiteBackupBundle 1.28 – 1.30" v1.0 with symfony-beacon).
+
+### Added
+
+- `ArchivePassword` (≥ 16 characters, masked, never serialisable, `wipe()`), `BackupOptions::$password` /
+  `$keyId` (opaque id recorded in the meta and the remote metadata). `zip` + password → WinZip AE-2 AES-256 on every
+  entry (`ZipArchive::EM_AES_256`, refused when libzip lacks AES; never ZipCrypto); a warning when the password looks
+  weak for zip's PBKDF2-SHA1 × 1000. A password on `tar.gz` / `sql.gz` uses age (see below).
+- `verifyIntegrity()` / `extractTo()` / `SiteBackupManager::verifyBackup()` take the password; a missing or wrong one
+  throws / reports `WrongPasswordException`.
+- `SiteBackupManager::importArchive($path, $password)` and `nowo:site-backup:import`: detects zip / tar.gz / sql.gz by
+  content, decrypts, refuses unsafe names, links and ZipCrypto (`CorruptArchiveException`), verifies the MANIFEST,
+  drops secret paths and stores a plaintext `tar.gz` (`0600`) with `imported_from` in the meta; `BackupImportedEvent`.
+- Remote targets: `BackupRemoteTargetInterface` (host-implemented: upload / head / list / delete / openRead, streams
+  only), `RemoteObject`, `InMemoryRemoteTarget` (tests), and `RemoteBackupPublisher`: upload → verify (`size`,
+  `size + nowo-sha256 metadata`, or full re-hash) → `<key>.backup.json` sidecar (no secrets, no local paths); a failed
+  or mismatched upload is deleted and gets no sidecar. `prune()` applies a `RetentionPolicy` to sidecared archives
+  under the prefix only; `orphans()` lists sidecar-less archives. Events `RemoteBackupUploadedEvent`,
+  `RemoteBackupPrunedEvent`.
+- `--password-env` / `--password-stdin` on `nowo:site-backup:create`, `verify` and `import` (no `--password=<value>`),
+  `--key-id` on `create`.
+- `SecretRedactor` also masks signed-URL and token query parameters (`X-Amz-Signature`, `X-Amz-Credential`, `token`, …).
+- age for `tar.gz` / `sql.gz` passwords (owner decision Q-O4, option A): `AgeBinaryEncryptor` drives the `age` binary
+  ≥ 1.3 with `age-plugin-batchpass`, the passphrase on fd 3 only (never argv / environment); `.tar.gz.age` /
+  `.sql.gz.age`; first-use check of the binary, its version and the plugin; `backup.encryption.age.*`. Verify,
+  extract and import handle `.age` files; CI installs age 1.3.1 and runs CLI interop tests both ways.
+- Optional Ed25519 signatures (`backup.signing.*`, off by default): `signature` / `signing_key_id` in the local and
+  remote sidecars, checked by `verifyIntegrity()` and `verify --file`; `nowo:site-backup:signing-keygen`.
+- `nowo:site-backup:verify --file=<archive> [--sha256] [--sidecar] [--password-*]`: checks any archive without
+  storing it; exit codes 0 ok, 1 integrity, 2 password, 3 unsupported / corrupt, 4 signature.
+- Restore drill: `BackupOptions::$recordTableStats` (row counts + `CHECKSUM TABLE` in `table_stats`),
+  `TableStatsCollector`, `DumpImporter::importInto()` / `createSchema()` / `dropSchema()`, `RestoreDrill` (throwaway
+  schema, always dropped; `DrillReport`) and `nowo:site-backup:drill`.
+- `FlysystemRemoteTarget` (optional, league/flysystem 3) and `backup.remote.flysystem_storage`.
+- Archive passwords refuse CR / LF.
+
+### Security (REQ-SEC-004 crypto audit EO)
+
+- **EO-M1:** with a password, `importArchive()` / `verify --file` refuse plaintext archives (exit 5, `allowPlaintext`
+  to accept) and zips mixing AES and plaintext entries (always); `encrypted` comes from the container, never the
+  MANIFEST.
+- **EO-M2:** `backup.signing.required` (default true once a key is configured): unsigned or wrongly signed sidecars
+  fail verify (exit 4), import (`ImportOptions::$sidecar`, `--sidecar`, `--require-signature`) and are ignored by
+  prune. What the signature covers is documented.
+- **EO-M3:** imports into another schema (restore drill) refuse dumps that switch / create databases, run the client
+  with `--one-database`, and `backup.drill.database_url` lets the drill use an account limited to its schema.
+- **EO-L1:** `ArchivePassword` keeps its value in a weak map (nothing for `var_export`, `(array)` or VarDumper; a
+  VarDumper caster prints `***`).
+- **EO-L3 / EO-L4:** prune ignores future-dated sidecars and sidecars whose id, size or sha256 do not match the
+  object; `publish()` refuses an existing key (a failed upload can no longer delete the previous good object).
+- **EO-L5:** age and its plugin are pinned: resolved once, the plugin must sit next to the binary, and age runs with
+  `PATH` = that directory only.
+- **EO-L6:** imported archives are deleted after a successful restore (`deleteAfterRestore`, default true).
+- **Info:** tampered / truncated files are reported as integrity failures, not wrong passwords; `max_work_factor`
+  defaults to 20 (max 22); sidecars are read in a loop;
+  stale docs fixed; the `/proc` test ignores fork-before-exec samples.
+
+### Security (REQ-SEC-004 EO re-audit residuals)
+
+- **EO-R1:** drilling an imported archive requires `backup.drill.database_url` (a restricted account): with the live
+  account, statements on `live_db.table` would still reach production. The drill pre-scan also refuses statements
+  whose target is qualified with another database (`INSERT INTO app.t`, `LOCK TABLES`, `ALTER TABLE`, …; best effort).
+  A missing URL database now says so (`ERROR 1049`). USAGE documents the drill account and grants.
+- **EO-R2:** REMOTE-TARGETS documents that, without signing, planted sidecars can steer prune into deleting genuine
+  backups, and recommends `backup.signing` for every shared remote target.
+- **EO-R4:** `encryption.age.binary` is resolved once to an absolute path when the service is built, a bare-name
+  lookup is logged (notice, `site_backup` channel), and relative paths or world-writable binaries / directories are
+  refused. An absolute path is recommended.
+- **EO-L2 / EO-I9 tests:** the tar size limit is tested with bsdtar too (CI coverage job); the `/proc` scan keeps only
+  stable samples.
+- Dev lock: `symfony/*` 7.4.23 (Symfony advisories of 2026-11-04; runtime constraints unchanged).
+
 ## [1.28.0] - 2026-11-04
 
 Scheduler-friendly local backup engine (1.28.0, contract "SiteBackupBundle 1.28 – 1.30" v1.0 with symfony-beacon,

@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+  - [To 1.29.0](#to-1290)
 - [To 1.28.0](#to-1280)
 - [To 1.27.0](#to-1270)
 - [To 1.26.0](#to-1260)
@@ -115,6 +116,32 @@
   - [Breaking changes](#breaking-changes-1)
 
 ## Unreleased
+
+### To 1.29.0
+
+Additive. Archive passwords: `zip` → AES-256 (ext-zip), `tar.gz` / `sql.gz` → age (`BackupOptions(password:
+ArchivePassword::fromString(…), keyId: '…')`). The bundle never stores a password: keep them in your key ring, apart
+from the backups. An encrypted archive is restored by importing it first (`importArchive()` /
+`nowo:site-backup:import --password-env=…`), which stores a plaintext copy (`0600`) that is deleted after the restore
+(`--keep-after-restore` to keep it). For remote copies implement `BackupRemoteTargetInterface` and use
+`RemoteBackupPublisher` (see [REMOTE-TARGETS.md](REMOTE-TARGETS.md)).
+
+Passwords on `tar.gz` / `sql.gz` need **age ≥ 1.3 with `age-plugin-batchpass` in the same directory** in the PHP image
+(see [ENCRYPTION.md](ENCRYPTION.md#age-targz--sqlgz--image-requirement)); set `backup.encryption.age.binary` to its
+absolute path. Without it those backups fail with a clear `FormatUnavailableException` (zip AES needs nothing more).
+Optional: `backup.signing.*` (Ed25519; **once a key is configured, signatures are required** in verify / import /
+prune unless `backup.signing.required: false`), `backup.remote.flysystem_storage`, `recordTableStats` +
+`nowo:site-backup:drill` (with `backup.drill.database_url` pointing at an account limited to the drill schemas, whose
+URL database already exists; **required to drill imported archives**, see [USAGE.md](USAGE.md#restore-drill-129)).
+Set `backup.encryption.age.binary` to an absolute path: a bare name is resolved on PHP's PATH once and logged, and a
+relative or world-writable location is refused. Enable signing for remote targets that other writers can reach
+(unsigned sidecars can steer prune).
+
+Behaviour to know: with a password, import and `verify --file` refuse archives that are not encrypted (exit 5;
+`--allow-plaintext` to accept); `publish()` refuses a key that already exists; `prune()` ignores sidecars dated in the
+future, sidecars whose id / size / sha256 do not match the object, and unsigned sidecars when signatures are required;
+the drill refuses dumps that switch database (`USE`, `CREATE DATABASE`, `--databases` output); `max_work_factor`
+defaults to 20.
 
 ## To 1.28.0
 

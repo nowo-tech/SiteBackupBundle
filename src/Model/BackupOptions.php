@@ -10,6 +10,7 @@ use Nowo\SiteBackupBundle\Enum\ArchiveFormat;
 use Nowo\SiteBackupBundle\Enum\TableRule;
 use Nowo\SiteBackupBundle\Exception\InvalidBackupOptionsException;
 use Nowo\SiteBackupBundle\Service\SiteBackupManager;
+use SensitiveParameter;
 
 use function is_bool;
 use function is_float;
@@ -44,6 +45,10 @@ final readonly class BackupOptions
      * @param bool $allowUnsafeTableRules downgrade the foreign-key / view refusals of a `skip` rule to warnings
      * @param array<string, scalar> $extraMeta copied into the archive meta; keys [a-z0-9_]{1,40}, values ≤ 255 chars,
      *                                         keys that look like secrets are refused
+     * @param ArchivePassword|null $password 1.29+: zip → AES-256 (WinZip AE-2) per entry; never stored nor logged
+     * @param string|null $keyId 1.29+: opaque id of the password in the host's key ring, recorded in the meta
+     * @param bool $recordTableStats 1.29+: record row counts and CHECKSUM TABLE values right after the dump
+     *                               (`table_stats` in the meta) for restore drills
      */
     public function __construct(
         public bool $includeDatabase = true,
@@ -57,6 +62,10 @@ final readonly class BackupOptions
         public ?Closure $heartbeat = null,
         public bool $allowUnsafeTableRules = false,
         public array $extraMeta = [],
+        #[SensitiveParameter]
+        public ?ArchivePassword $password = null,
+        public ?string $keyId = null,
+        public bool $recordTableStats = false,
     ) {
         $this->validate();
     }
@@ -90,6 +99,11 @@ final readonly class BackupOptions
     public function withTableRules(array $tableRules): self
     {
         return $this->copy(['tableRules' => $tableRules]);
+    }
+
+    public function withPassword(#[SensitiveParameter] ?ArchivePassword $password, ?string $keyId = null): self
+    {
+        return $this->copy(['password' => $password, 'keyId' => $keyId]);
     }
 
     public function withHeartbeat(?Closure $heartbeat): self
@@ -137,6 +151,8 @@ final readonly class BackupOptions
             'compression_level' => $this->compressionLevel,
             'has_label'         => $this->label !== null,
             'allow_unsafe'      => $this->allowUnsafeTableRules,
+            'encrypted'         => $this->password !== null,
+            'key_id'            => $this->keyId,
         ];
     }
 
@@ -173,6 +189,9 @@ final readonly class BackupOptions
             'heartbeat'             => $this->heartbeat,
             'allowUnsafeTableRules' => $this->allowUnsafeTableRules,
             'extraMeta'             => $this->extraMeta,
+            'password'              => $this->password,
+            'keyId'                 => $this->keyId,
+            'recordTableStats'      => $this->recordTableStats,
         ];
 
         /* @phpstan-ignore argument.type (keys are the constructor's parameter names) */
@@ -213,6 +232,10 @@ final readonly class BackupOptions
                     throw new InvalidBackupOptionsException('includePaths must be project-relative paths without "..".');
                 }
             }
+        }
+
+        if ($this->keyId !== null && ($this->password === null || preg_match('/^[A-Za-z0-9_.-]{1,64}$/', $this->keyId) !== 1)) {
+            throw new InvalidBackupOptionsException('keyId needs a password and must match [A-Za-z0-9_.-]{1,64}.');
         }
 
         self::assertText('label', $this->label, 255);

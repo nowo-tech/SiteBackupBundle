@@ -6,18 +6,25 @@ namespace Nowo\SiteBackupBundle\Tests\Unit\Engine;
 
 use Nowo\SiteBackupBundle\Backup\BackupArchiver;
 use Nowo\SiteBackupBundle\Backup\SecretPathPolicy;
+use Nowo\SiteBackupBundle\Crypto\AgeBinaryEncryptor;
+use Nowo\SiteBackupBundle\Crypto\ArchiveEncryptorInterface;
 use Nowo\SiteBackupBundle\Database\BuiltinMysqlDumper;
 use Nowo\SiteBackupBundle\Database\DumpImporter;
 use Nowo\SiteBackupBundle\Database\MysqlClientSchemaInspector;
 use Nowo\SiteBackupBundle\Database\SchemaInspectorInterface;
+use Nowo\SiteBackupBundle\Database\TableStatsCollector;
 use Nowo\SiteBackupBundle\DependencyInjection\Configuration;
 use Nowo\SiteBackupBundle\DependencyInjection\SiteBackupExtension;
+use Nowo\SiteBackupBundle\Drill\RestoreDrill;
 use Nowo\SiteBackupBundle\Enum\ArchiveFormat;
 use Nowo\SiteBackupBundle\Exception\InvalidBackupOptionsException;
 use Nowo\SiteBackupBundle\Lock\BackupOperationLock;
+use Nowo\SiteBackupBundle\Remote\BackupRemoteTargetInterface;
+use Nowo\SiteBackupBundle\Remote\FlysystemRemoteTarget;
 use Nowo\SiteBackupBundle\Retention\RetentionPolicy;
 use Nowo\SiteBackupBundle\Service\SiteBackupManager;
 use Nowo\SiteBackupBundle\Setup\SetupStepFactory;
+use Nowo\SiteBackupBundle\Signing\BackupSigner;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Config\Definition\Processor;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
@@ -103,6 +110,42 @@ final class EngineWiringTest extends TestCase
         self::assertSame(7, $policy->getArgument('$keepLast'));
         self::assertSame(ArchiveFormat::Zip, $manager->getArgument('$defaultFormat'));
         self::assertSame(9, $manager->getArgument('$defaultCompressionLevel'));
+    }
+
+    public function testEncryptionSigningDrillAndFlysystemWiring(): void
+    {
+        $container = $this->load(['backup' => [
+            'encryption' => ['age' => ['binary' => '/opt/age/age', 'work_factor' => 16]],
+            'signing'    => ['secret_key' => '%env(default::SITE_BACKUP_SIGNING_KEY)%', 'key_id' => 'prod', 'public_keys' => ['old' => 'AAAA']],
+            'remote'     => ['flysystem_storage' => 'backups.storage'],
+        ]]);
+
+        $age = $container->getDefinition(AgeBinaryEncryptor::class);
+        self::assertSame('/opt/age/age', $age->getArgument('$binary'));
+        self::assertSame(16, $age->getArgument('$workFactor'));
+        self::assertSame(20, $age->getArgument('$maxWorkFactor'));
+        self::assertSame(AgeBinaryEncryptor::class, (string) $container->getAlias(ArchiveEncryptorInterface::class));
+        self::assertSame('prod', $container->getDefinition(BackupSigner::class)->getArgument('$keyId'));
+        self::assertSame(['old' => 'AAAA'], $container->getDefinition(BackupSigner::class)->getArgument('$publicKeys'));
+        self::assertTrue($container->hasDefinition(RestoreDrill::class));
+        self::assertTrue($container->hasDefinition(TableStatsCollector::class));
+        self::assertSame('backups.storage', (string) $container->getDefinition(FlysystemRemoteTarget::class)->getArgument('$filesystem'));
+        self::assertSame(FlysystemRemoteTarget::class, (string) $container->getAlias(BackupRemoteTargetInterface::class));
+        self::assertSame(ArchiveEncryptorInterface::class, (string) $container->getDefinition(BackupArchiver::class)->getArgument('$encryptor'));
+
+        self::assertFalse($this->load([])->hasDefinition(FlysystemRemoteTarget::class));
+    }
+
+    public function testDrillDatabaseUrlWiresDedicatedClients(): void
+    {
+        $container = $this->load(['backup' => ['drill' => ['database_url' => 'mysql://drill:CANARY-drill-pass-0000@db/beacon_drill']]]);
+
+        self::assertSame('mysql://drill:CANARY-drill-pass-0000@db/beacon_drill', $container->getDefinition('nowo_site_backup.drill.importer')->getArgument('$databaseUrl'));
+        self::assertTrue($container->hasDefinition('nowo_site_backup.drill.stats'));
+        $drill = $container->getDefinition(RestoreDrill::class);
+        self::assertSame('nowo_site_backup.drill.importer', (string) $drill->getArgument('$importer'));
+        self::assertSame('nowo_site_backup.drill.stats', (string) $drill->getArgument('$collector'));
+        self::assertSame(DumpImporter::class, (string) $drill->getArgument('$liveImporter'));
     }
 
     public function testUnsafeExtraOptionsFailAtBuild(): void

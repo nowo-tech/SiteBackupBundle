@@ -13,11 +13,15 @@ use Nowo\SiteBackupBundle\Command\SetupTokenCommand;
 use Nowo\SiteBackupBundle\Controller\SetupUnlocalizedLocaleRedirectController;
 use Nowo\SiteBackupBundle\Controller\SetupWizardController;
 use Nowo\SiteBackupBundle\Controller\SiteBackupPanelController;
+use Nowo\SiteBackupBundle\Crypto\AgeBinaryEncryptor;
+use Nowo\SiteBackupBundle\Crypto\ArchiveEncryptorInterface;
 use Nowo\SiteBackupBundle\Database\BuiltinMysqlDumper;
 use Nowo\SiteBackupBundle\Database\DumpImporter;
 use Nowo\SiteBackupBundle\Database\MysqlClientSchemaInspector;
 use Nowo\SiteBackupBundle\Database\SchemaInspectorInterface;
+use Nowo\SiteBackupBundle\Database\TableStatsCollector;
 use Nowo\SiteBackupBundle\DependencyInjection\Compiler\LoginThrottleStoragePass;
+use Nowo\SiteBackupBundle\Drill\RestoreDrill;
 use Nowo\SiteBackupBundle\Enum\ArchiveFormat;
 use Nowo\SiteBackupBundle\EventSubscriber\ColdStartSchemaGateSubscriber;
 use Nowo\SiteBackupBundle\EventSubscriber\LongRequestTimeLimitSubscriber;
@@ -29,6 +33,9 @@ use Nowo\SiteBackupBundle\EventSubscriber\UnlocalizedDefaultLocaleSubscriber;
 use Nowo\SiteBackupBundle\Exclusion\SiteBackupExclusionMatcher;
 use Nowo\SiteBackupBundle\Form\AbstractSiteBackupFormType;
 use Nowo\SiteBackupBundle\Lock\BackupOperationLock;
+use Nowo\SiteBackupBundle\Remote\BackupRemoteTargetInterface;
+use Nowo\SiteBackupBundle\Remote\FlysystemRemoteTarget;
+use Nowo\SiteBackupBundle\Remote\RemoteBackupPublisher;
 use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
 use Nowo\SiteBackupBundle\Retention\RetentionPolicy;
 use Nowo\SiteBackupBundle\Routing\PanelRouteLoader;
@@ -70,6 +77,7 @@ use Nowo\SiteBackupBundle\Setup\Storage\DoctrineDbalSetupStepJournal;
 use Nowo\SiteBackupBundle\Setup\Storage\FilesystemSetupProgressStorage;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupMarkerManager;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupProgressStorageInterface;
+use Nowo\SiteBackupBundle\Signing\BackupSigner;
 use Nowo\SiteBackupBundle\Storage\BackupHistoryStorageInterface;
 use Nowo\SiteBackupBundle\Storage\FilesystemBackupHistoryStorage;
 use Nowo\SiteBackupBundle\Storage\FilesystemRestoreProgressStorage;
@@ -490,6 +498,67 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
                 ->setArgument('$migrationsTable', (string) $database['migrations_table']);
         }
 
+        $age = $backup['encryption']['age'];
+        $container->register(AgeBinaryEncryptor::class, AgeBinaryEncryptor::class)
+            ->setArgument('$binary', (string) $age['binary'])
+            ->setArgument('$workFactor', (int) $age['work_factor'])
+            ->setArgument('$maxWorkFactor', (int) $age['max_work_factor'])
+            ->setArgument('$plugin', $age['plugin'])
+            ->setArgument('$timeoutSeconds', $timeout)
+            ->setArgument('$logger', new Reference('logger', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
+            ->addTag('monolog.logger', ['channel' => 'site_backup']);
+        $container->setAlias(ArchiveEncryptorInterface::class, AgeBinaryEncryptor::class)->setPublic(false);
+
+        $signing = $backup['signing'];
+        $container->register(BackupSigner::class, BackupSigner::class)
+            ->setArgument('$secretKey', $signing['secret_key'])
+            ->setArgument('$keyId', (string) $signing['key_id'])
+            ->setArgument('$publicKeys', $signing['public_keys'])
+            ->setArgument('$required', $signing['required']);
+
+        $container->register(TableStatsCollector::class, TableStatsCollector::class)
+            ->setArgument('$databaseUrl', $url)
+            ->setArgument('$clientBinary', (string) $database['client_binary'])
+            ->setArgument('$skipSslVerifyServerCert', $skipSsl)
+            ->setArgument('$timeoutSeconds', $timeout);
+
+        $drillUrl      = $backup['drill']['database_url'];
+        $drillImporter = new Reference(DumpImporter::class);
+        $drillStats    = new Reference(TableStatsCollector::class);
+        if (is_string($drillUrl) && $drillUrl !== '') {
+            $container->register('nowo_site_backup.drill.importer', DumpImporter::class)
+                ->setArgument('$databaseUrl', $drillUrl)
+                ->setArgument('$clientBinary', (string) $database['client_binary'])
+                ->setArgument('$skipSslVerifyServerCert', $skipSsl)
+                ->setArgument('$timeoutSeconds', $timeout);
+            $container->register('nowo_site_backup.drill.stats', TableStatsCollector::class)
+                ->setArgument('$databaseUrl', $drillUrl)
+                ->setArgument('$clientBinary', (string) $database['client_binary'])
+                ->setArgument('$skipSslVerifyServerCert', $skipSsl)
+                ->setArgument('$timeoutSeconds', $timeout);
+            $drillImporter = new Reference('nowo_site_backup.drill.importer');
+            $drillStats    = new Reference('nowo_site_backup.drill.stats');
+        }
+
+        $container->register(RestoreDrill::class, RestoreDrill::class)
+            ->setArgument('$archiver', new Reference(BackupArchiver::class))
+            ->setArgument('$importer', $drillImporter)
+            ->setArgument('$collector', $drillStats)
+            ->setArgument('$workDir', (string) $backup['work_dir'])
+            ->setArgument('$liveImporter', new Reference(DumpImporter::class))
+            ->setArgument('$restrictedAccount', is_string($drillUrl) && $drillUrl !== '');
+
+        $storage = $backup['remote']['flysystem_storage'];
+        if (is_string($storage) && $storage !== '') {
+            $container->register(FlysystemRemoteTarget::class, FlysystemRemoteTarget::class)
+                ->setArgument('$filesystem', new Reference($storage));
+            $container->setAlias(BackupRemoteTargetInterface::class, FlysystemRemoteTarget::class)->setPublic(false);
+        }
+
+        $container->register(RemoteBackupPublisher::class, RemoteBackupPublisher::class)
+            ->setArgument('$eventDispatcher', new Reference('event_dispatcher', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
+            ->setArgument('$signer', new Reference(BackupSigner::class));
+
         $container->register(BackupOperationLock::class, BackupOperationLock::class)
             ->setArgument('$lockDirectory', $backup['storage_dir'])
             ->setArgument('$lockFactory', new Reference('lock.factory', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
@@ -590,6 +659,10 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$secretPolicy', new Reference(SecretPathPolicy::class))
             ->setArgument('$workDir', (string) $backup['work_dir'])
             ->setArgument('$preflightDiskCheck', (bool) $backup['preflight_disk_check'])
+            ->setArgument('$encryptor', new Reference(ArchiveEncryptorInterface::class))
+            ->setArgument('$signer', new Reference(BackupSigner::class))
+            ->setArgument('$statsCollector', new Reference(TableStatsCollector::class))
+
             ->setArgument('$extractLimits', $backup['extract_limits']);
     }
 
