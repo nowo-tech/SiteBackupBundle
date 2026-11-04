@@ -4,7 +4,7 @@
 
 - [Unreleased](#unreleased)
   - [To 1.29.0](#to-1290)
-  - [To 1.28.0](#to-1280)
+- [To 1.28.0](#to-1280)
 - [To 1.27.0](#to-1270)
 - [To 1.26.0](#to-1260)
 - [To 1.25.1](#to-1251)
@@ -139,7 +139,7 @@ future, sidecars whose id / size / sha256 do not match the object, and unsigned 
 the drill refuses dumps that switch database (`USE`, `CREATE DATABASE`, `--databases` output); `max_work_factor`
 defaults to 20.
 
-### To 1.28.0
+## To 1.28.0
 
 From **1.27.0**:
 
