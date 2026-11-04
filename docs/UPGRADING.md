@@ -3,7 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
-  - [To 1.29.0](#to-1290)
+- [To 1.29.0](#to-1290)
 - [To 1.28.0](#to-1280)
 - [To 1.27.0](#to-1270)
 - [To 1.26.0](#to-1260)
@@ -117,7 +117,7 @@
 
 ## Unreleased
 
-### To 1.29.0
+## To 1.29.0
 
 Additive. Archive passwords: `zip` → AES-256 (ext-zip), `tar.gz` / `sql.gz` → age (`BackupOptions(password:
 ArchivePassword::fromString(…), keyId: '…')`). The bundle never stores a password: keep them in your key ring, apart
