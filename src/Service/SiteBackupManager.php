@@ -249,13 +249,13 @@ final class SiteBackupManager
         $lock = $this->operationLock?->acquire();
 
         try {
-            return $this->doRestore($backupId, $actor);
+            return $this->doRestore($backupId, $actor, $lock);
         } finally {
             $lock?->release();
         }
     }
 
-    private function doRestore(string $backupId, ?string $actor): RestoreProgress
+    private function doRestore(string $backupId, ?string $actor, ?BackupOperationLockHandle $lock): RestoreProgress
     {
         $artifact = $this->archiver->find($backupId);
         if (!$artifact instanceof BackupArtifact) {
@@ -273,7 +273,8 @@ final class SiteBackupManager
         $this->logger->warning('SiteBackup: restore started.', $this->context('restore', $backupId));
 
         try {
-            $progress = $this->restoreOrchestrator->restore($artifact, $actor);
+            // EN-L4: a long restore keeps the operation lock alive (TTL stores).
+            $progress = $this->restoreOrchestrator->restore($artifact, $actor, $lock instanceof BackupOperationLockHandle ? static fn () => $lock->refresh() : null);
             // @igor-ignore - Service coordinates I/O or request-scoped work; not unsafe worker singleton state.
             $this->historyStorage->append(new BackupHistoryEntry(
                 action: 'restore_complete',

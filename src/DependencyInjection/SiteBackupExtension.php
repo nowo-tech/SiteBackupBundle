@@ -474,7 +474,8 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$databaseUrl', $url)
             ->setArgument('$clientBinary', (string) $database['client_binary'])
             ->setArgument('$skipSslVerifyServerCert', $skipSsl)
-            ->setArgument('$timeoutSeconds', $timeout);
+            ->setArgument('$timeoutSeconds', $timeout)
+            ->setArgument('$operationLock', new Reference(BackupOperationLock::class));
 
         if ($database['dumper'] === 'builtin') {
             BuiltinMysqlDumper::assertExtraOptions(array_values($database['extra_options']));
@@ -588,7 +589,8 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$builtinDumper', $backup['database']['dumper'] === 'builtin' ? new Reference(BuiltinMysqlDumper::class) : null)
             ->setArgument('$secretPolicy', new Reference(SecretPathPolicy::class))
             ->setArgument('$workDir', (string) $backup['work_dir'])
-            ->setArgument('$preflightDiskCheck', (bool) $backup['preflight_disk_check']);
+            ->setArgument('$preflightDiskCheck', (bool) $backup['preflight_disk_check'])
+            ->setArgument('$extractLimits', $backup['extract_limits']);
     }
 
     /**

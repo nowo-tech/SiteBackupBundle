@@ -270,7 +270,9 @@ final class ArchiverFormatsTest extends TestCase
 
         $artifact = $this->archiver(includePaths: ['config'])->create();
 
-        self::assertSame(['config/app.yaml', 'config/shared.txt'], $this->sortedKeys($artifact->getChecksums()));
+        // 1.28 EN-L2: links leaving the project are skipped too, whatever their name.
+        self::assertSame(['config/app.yaml'], $this->sortedKeys($artifact->getChecksums()));
+        self::assertContains('2 link(s) pointing outside the project skipped.', $artifact->getWarnings());
     }
 
     public function testExtraForbiddenPathsAndDefaults(): void

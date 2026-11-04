@@ -100,7 +100,7 @@ final class EngineCommandsTest extends TestCase
 
     public function testImportCommand(): void
     {
-        $client = EngineFixtures::script($this->root, 'fake-mysql', 'cat > "' . $this->root . '/received.sql"');
+        $client = EngineFixtures::client($this->root, 'fake-mysql', 'cat > "' . $this->root . '/received.sql"');
         file_put_contents($this->root . '/in.sql', "SELECT 1;\n");
         $tester = new CommandTester(new DatabaseImportCommand(new DumpImporter('mysql://u:p@h/d', $client)));
 
@@ -154,7 +154,7 @@ final class EngineCommandsTest extends TestCase
 
     public function testSqlFileStepClientImporter(): void
     {
-        $client = EngineFixtures::script($this->root, 'fake-mysql', 'cat > "' . $this->root . '/received.sql"');
+        $client = EngineFixtures::client($this->root, 'fake-mysql', 'cat > "' . $this->root . '/received.sql"');
         (new Filesystem())->mkdir($this->project . '/var/site-backup');
         file_put_contents($this->project . '/' . SqlFileStep::RESTORE_DUMP, "SELECT 1;\n");
         $ctx = new SetupContext($this->project, 'post_restore');
@@ -169,7 +169,7 @@ final class EngineCommandsTest extends TestCase
         $noImporter = new SqlFileStep('sql', 'SQL', [SqlFileStep::RESTORE_DUMP], true, null, SqlFileStep::IMPORTER_CLIENT);
         self::assertFalse($noImporter->run($ctx, new SetupStepInput())->isSuccess());
 
-        $failingClient = EngineFixtures::script($this->root, 'failing-mysql', 'cat >/dev/null; echo "ERROR 1146 (42S02) at line 1: CANARY" >&2; exit 1');
+        $failingClient = EngineFixtures::client($this->root, 'failing-mysql', 'cat >/dev/null; echo "ERROR 1146 (42S02) at line 1: CANARY" >&2; exit 1');
         $failing       = new SqlFileStep('sql', 'SQL', [SqlFileStep::RESTORE_DUMP], true, null, SqlFileStep::IMPORTER_CLIENT, new DumpImporter('mysql://u:p@h/d', $failingClient));
         $result        = $failing->run($ctx, new SetupStepInput());
         self::assertFalse($result->isSuccess());

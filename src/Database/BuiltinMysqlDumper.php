@@ -25,6 +25,7 @@ use function min;
 use function preg_match;
 use function sprintf;
 use function str_contains;
+use function str_replace;
 use function str_starts_with;
 use function stream_copy_to_stream;
 use function strtolower;
@@ -51,6 +52,7 @@ final class BuiltinMysqlDumper
     private const FORBIDDEN_OPTIONS = [
         '--result-file', '--password', '--tab', '--log-error', '--defaults-file', '--defaults-extra-file',
         '--defaults-group-suffix', '--plugin-dir', '--init-command', '--xml', '--no-data', '--ignore-table',
+        '--all-databases', '--databases', '--tables', '--where',
     ];
 
     /**
@@ -167,7 +169,9 @@ final class BuiltinMysqlDumper
             if (!str_starts_with($option, '--') || preg_match('/[\x00-\x1F\x7F]/', $option) === 1) {
                 throw new InvalidBackupOptionsException('backup.database.extra_options entries must be long options ("--name[=value]").');
             }
-            $name = strtolower(explode('=', $option, 2)[0]);
+            // EN-I4: `--loose-` / `--maximum-` prefixes and `_` spellings name the same option.
+            $name = str_replace('_', '-', strtolower(explode('=', $option, 2)[0]));
+            $name = (string) preg_replace('/^--(?:loose-|maximum-)+/', '--', $name);
             if (in_array($name, self::FORBIDDEN_OPTIONS, true)) {
                 throw new InvalidBackupOptionsException(sprintf('backup.database.extra_options must not contain %s.', $name));
             }

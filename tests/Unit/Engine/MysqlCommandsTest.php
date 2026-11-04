@@ -223,22 +223,22 @@ final class MysqlCommandsTest extends TestCase
 
     public function testImporterStreamsTheFileThroughTheClient(): void
     {
-        $client = EngineFixtures::script($this->dir, 'fake-mysql-import', 'cat > "' . $this->dir . '/received.sql"; echo "$*" > "' . $this->dir . '/argv"; echo "$MYSQL_PWD" > "' . $this->dir . '/pwd"');
+        $client = EngineFixtures::client($this->dir, 'fake-mysql-import', 'cat > "' . $this->dir . '/received.sql"; echo "$*" > "' . $this->dir . '/argv"; echo "$MYSQL_PWD" > "' . $this->dir . '/pwd"');
         file_put_contents($this->dir . '/in.sql', "INSERT INTO t VALUES (1);\n");
 
         (new DumpImporter(self::URL, $client))->import($this->dir . '/in.sql');
 
         self::assertSame("INSERT INTO t VALUES (1);\n", file_get_contents($this->dir . '/received.sql'));
-        self::assertSame("--host=db --port=3307 --user=app --batch -- beacon\n", file_get_contents($this->dir . '/argv'));
+        self::assertSame("--host=db --port=3307 --user=app --batch --system-command=OFF -- beacon\n", file_get_contents($this->dir . '/argv'));
         self::assertSame(EngineFixtures::DB_CANARY . "\n", file_get_contents($this->dir . '/pwd'));
     }
 
     public function testImporterFailuresKeepRowDataOut(): void
     {
         file_put_contents($this->dir . '/in.sql', "x\n");
-        $failing = EngineFixtures::script($this->dir, 'failing-import', 'cat >/dev/null; echo "ERROR 1064 (42000) at line 3: syntax near \'CANARY-row-data\'" >&2; exit 1');
-        $noCode  = EngineFixtures::script($this->dir, 'nocode-import', 'cat >/dev/null; echo "CANARY-row-data" >&2; exit 1');
-        $slow    = EngineFixtures::script($this->dir, 'slow-import', 'sleep 30');
+        $failing = EngineFixtures::client($this->dir, 'failing-import', 'cat >/dev/null; echo "ERROR 1064 (42000) at line 3: syntax near \'CANARY-row-data\'" >&2; exit 1');
+        $noCode  = EngineFixtures::client($this->dir, 'nocode-import', 'cat >/dev/null; echo "CANARY-row-data" >&2; exit 1');
+        $slow    = EngineFixtures::client($this->dir, 'slow-import', 'sleep 30');
 
         foreach ([
             [new DumpImporter(self::URL, $failing), $this->dir . '/in.sql', 'SQL import failed: ERROR 1064 (42000) at line 3'],

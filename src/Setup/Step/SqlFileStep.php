@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\Setup\Step;
 
 use Nowo\SiteBackupBundle\Database\DumpImporter;
+use Nowo\SiteBackupBundle\Exception\BackupAlreadyRunningException;
 use Nowo\SiteBackupBundle\Exception\DumpFailedException;
 use Nowo\SiteBackupBundle\Setup\SetupContext;
 use Nowo\SiteBackupBundle\Setup\SetupStepInput;
@@ -133,7 +134,7 @@ final class SqlFileStep extends AbstractSetupStep
         foreach ($files as $file) {
             try {
                 $this->dumpImporter->import($file);
-            } catch (DumpFailedException $e) {
+            } catch (DumpFailedException|BackupAlreadyRunningException $e) {
                 return SetupStepResult::fail(sprintf('SQL import failed for %s (%s).', basename($file), $e->getMessage()), $log);
             }
             $log[] = sprintf('imported: %s', $file);

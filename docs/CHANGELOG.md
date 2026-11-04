@@ -112,6 +112,28 @@ spec `specs/008-local-backup-engine`). No cryptography and no network yet (archi
   `dump`, `bundle_version`, `manifest_version`, `plaintext_sha256` (`sql.gz`). `BackupArtifact` gains `getFormat()`,
   `getContent()`, `getTableRules()`, `getWarnings()`, `getPlaintextSha256()`, `isEncrypted()`.
 
+### Security (REQ-SEC-004 audit EN of the 1.28.0 branch)
+
+- **EN-M1:** the `mysql` client importer (`db-import`, `sql_file` `importer: client`) disables client commands found
+  in the dump (`\!`, `\T`, `source`): `--system-command=OFF` for Oracle clients 8.0.40+ / 8.4.3+ / 9.1+, `--sandbox`
+  for MariaDB clients 10.5.25+ / 10.6.18+ / 10.11.8+ / 11.0.6+ / 11.1.5+ / 11.2.4+ / 11.3.2+ / 11.4.2+ / 11.5+. Any
+  other client is refused (`DumpFailedException`).
+- **EN-L1 / EN-L2:** collection resolves `.` / `..` and symlinks: each file's real path must stay inside the project
+  and must not match the floor; hard links to floor files are skipped (inode match); `backup.include_paths` entries
+  with `..` or an absolute path are refused.
+- **EN-L3:** restore and verify list a tar before extracting it and refuse link, hard-link and special entries and
+  unsafe names; restore applies only regular files listed in the MANIFEST.
+- **EN-L4:** restore refreshes the operation lock with its progress writes.
+- **EN-L5:** `SecretRedactor` also masks `"password": "…"`-style JSON keys, `IDENTIFIED BY '…'`, `*_SECRET=` /
+  `*_KEY=` / `*_TOKEN=` assignments, `token: …`, `Bearer …` and `Basic …`.
+- **EN-I1 / I2 / I3 / I4 / I6 / I7 / I8 / I9:** the pre-pack re-check walks the staged tree; the floor adds
+  `id_ecdsa*`, `id_dsa*`, `.htpasswd`, `credentials.json`, `.aws/credentials`, `.docker/config.json`, `*.ppk`,
+  `*.kdbx`; `work_dir` must not be a symlink and must belong to the running user, a run directory whose process died
+  is removed at the next start, `storage_dir` is created 0700; `extra_options` names are normalised (`--loose-`,
+  `_`) and `--all-databases` / `--databases` / `--tables` / `--where` are refused; restore staging is in `work_dir`;
+  deletes stay inside `storage_dir` and ids are validated; `backup.extract_limits` (size, entries, ratio) applies to
+  every extraction; imports take the operation lock.
+
 ### Changed
 
 - The default `backup.include_paths` no longer lists `.env`; an explicit secret path in `include_paths` is skipped and
