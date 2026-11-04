@@ -12,4 +12,6 @@ use RuntimeException;
  */
 final class CorruptArchiveException extends RuntimeException implements SiteBackupException
 {
+    /** Exception code: a MANIFEST checksum did not match (integrity) rather than an unsupported / unsafe archive. */
+    public const CHECKSUM = 1;
 }

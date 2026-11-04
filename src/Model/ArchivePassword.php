@@ -14,14 +14,14 @@ use function max;
 use function mb_strlen;
 use function preg_match;
 use function sodium_memzero;
-use function str_contains;
 use function strlen;
 
 /**
  * Archive password (1.29+). The bundle never stores, generates or logs it: the host keeps it apart from the backups
  * (owner decision D-20261104-15) and passes it per call.
  *
- * - at least {@see self::MIN_LENGTH} characters (owner decision Q-O5), at most 1024, no NUL;
+ * - at least {@see self::MIN_LENGTH} characters (owner decision Q-O5), at most 1024, no NUL / CR / LF (age's batchpass
+ *   plugin strips trailing newlines);
  * - masked in var_dump / string casts, never serialisable;
  * - {@see self::wipe()} overwrites the kept copy (best effort: PHP may hold other copies).
  */
@@ -48,8 +48,8 @@ final class ArchivePassword
     public static function fromString(#[SensitiveParameter] string $value): self
     {
         $length = mb_strlen($value, 'UTF-8');
-        if ($length < self::MIN_LENGTH || strlen($value) > self::MAX_LENGTH || str_contains($value, "\0")) {
-            throw new InvalidArgumentException('Archive passwords need 16 to 1024 characters (no NUL).');
+        if ($length < self::MIN_LENGTH || strlen($value) > self::MAX_LENGTH || preg_match('/[\x00\r\n]/', $value) === 1) {
+            throw new InvalidArgumentException('Archive passwords need 16 to 1024 characters (no NUL, CR or LF).');
         }
 
         return new self($value);

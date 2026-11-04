@@ -133,6 +133,19 @@ spec `specs/008-local-backup-engine`). No cryptography and no network yet (archi
 - `--password-env` / `--password-stdin` on `nowo:site-backup:create`, `verify` and `import` (no `--password=<value>`),
   `--key-id` on `create`.
 - `SecretRedactor` also masks signed-URL and token query parameters (`X-Amz-Signature`, `X-Amz-Credential`, `token`, …).
+- age for `tar.gz` / `sql.gz` passwords (owner decision Q-O4, option A): `AgeBinaryEncryptor` drives the `age` binary
+  ≥ 1.3 with `age-plugin-batchpass`, the passphrase on fd 3 only (never argv / environment); `.tar.gz.age` /
+  `.sql.gz.age`; first-use check of the binary, its version and the plugin; `backup.encryption.age.*`. Verify,
+  extract and import handle `.age` files; CI installs age 1.3.1 and runs CLI interop tests both ways.
+- Optional Ed25519 signatures (`backup.signing.*`, off by default): `signature` / `signing_key_id` in the local and
+  remote sidecars, checked by `verifyIntegrity()` and `verify --file`; `nowo:site-backup:signing-keygen`.
+- `nowo:site-backup:verify --file=<archive> [--sha256] [--sidecar] [--password-*]`: checks any archive without
+  storing it; exit codes 0 ok, 1 integrity, 2 password, 3 unsupported / corrupt, 4 signature.
+- Restore drill: `BackupOptions::$recordTableStats` (row counts + `CHECKSUM TABLE` in `table_stats`),
+  `TableStatsCollector`, `DumpImporter::importInto()` / `createSchema()` / `dropSchema()`, `RestoreDrill` (throwaway
+  schema, always dropped; `DrillReport`) and `nowo:site-backup:drill`.
+- `FlysystemRemoteTarget` (optional, league/flysystem 3) and `backup.remote.flysystem_storage`.
+- Archive passwords refuse CR / LF.
 
 ### Changed
 

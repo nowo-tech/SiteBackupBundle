@@ -43,12 +43,25 @@ final class DumpImporter
      */
     public function import(string $file, ?callable $tick = null): void
     {
+        $this->importInto($file, null, $tick);
+    }
+
+    /**
+     * Imports into another schema of the same server (1.29+, restore drills). The dump must not select its own
+     * database (mysqldump with one database name does not).
+     *
+     * @param (callable(): void)|null $tick
+     *
+     * @throws DumpFailedException
+     */
+    public function importInto(string $file, ?string $schema, ?callable $tick = null): void
+    {
         if (!is_file($file) || !is_readable($file)) {
             throw new DumpFailedException('SQL import: the dump file is missing or not readable.');
         }
 
         try {
-            $spec = MysqlDumpCommandFactory::clientFromDatabaseUrl((string) $this->databaseUrl, $this->skipSslVerifyServerCert, $this->clientBinary, ['--batch']);
+            $spec = MysqlDumpCommandFactory::clientFromDatabaseUrl((string) $this->databaseUrl, $this->skipSslVerifyServerCert, $this->clientBinary, ['--batch'], $schema);
         } catch (InvalidArgumentException $e) {
             throw new DumpFailedException('SQL import: ' . $e->getMessage(), 0, $e);
         }
@@ -63,6 +76,61 @@ final class DumpImporter
         }
         if (!$process->isSuccessful()) {
             throw new DumpFailedException('SQL import failed: ' . self::safeError($process->getErrorOutput()));
+        }
+    }
+
+    /**
+     * Creates an empty schema (fails when it exists: a drill never reuses, and so never drops, an existing schema).
+     *
+     * @throws DumpFailedException
+     */
+    public function createSchema(string $schema): void
+    {
+        $this->execute(sprintf('CREATE DATABASE `%s`', self::schemaName($schema)));
+    }
+
+    /**
+     * @throws DumpFailedException
+     */
+    public function dropSchema(string $schema): void
+    {
+        $this->execute(sprintf('DROP DATABASE IF EXISTS `%s`', self::schemaName($schema)));
+    }
+
+    public function databaseName(): string
+    {
+        try {
+            return MysqlDumpCommandFactory::databaseName((string) $this->databaseUrl);
+        } catch (InvalidArgumentException $e) {
+            throw new DumpFailedException('SQL import: ' . $e->getMessage(), 0, $e);
+        }
+    }
+
+    private static function schemaName(string $schema): string
+    {
+        if (preg_match('/^[A-Za-z0-9_]{1,64}$/', $schema) !== 1) {
+            throw new DumpFailedException('Schema names must match [A-Za-z0-9_]{1,64}.');
+        }
+
+        return $schema;
+    }
+
+    private function execute(string $sql): void
+    {
+        try {
+            $spec = MysqlDumpCommandFactory::clientFromDatabaseUrl((string) $this->databaseUrl, $this->skipSslVerifyServerCert, $this->clientBinary, ['--batch', '--execute=' . $sql]);
+        } catch (InvalidArgumentException $e) {
+            throw new DumpFailedException('SQL import: ' . $e->getMessage(), 0, $e);
+        }
+
+        $process = new Process($spec['command'], null, $spec['env']);
+        try {
+            ProcessDeadline::run($process, $this->timeoutSeconds);
+        } catch (ProcessTimedOutException) {
+            throw new DumpFailedException('SQL statement timed out.');
+        }
+        if (!$process->isSuccessful()) {
+            throw new DumpFailedException('SQL statement failed: ' . self::safeError($process->getErrorOutput()));
         }
     }
 

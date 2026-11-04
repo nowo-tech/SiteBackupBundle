@@ -19,6 +19,20 @@ Obligations: stream (never read a whole archive into memory; parts ≥ 8 MiB; ab
 stores everything or throws; `list()` stays under the prefix; exceptions carry no credentials or signed URLs (the
 bundle redacts them again and never chains them). `InMemoryRemoteTarget` is a reference implementation for tests.
 
+## Flysystem
+
+With league/flysystem 3 installed, point `nowo_site_backup.backup.remote.flysystem_storage` at a
+`League\Flysystem\FilesystemOperator` service: `FlysystemRemoteTarget` is registered and aliased to
+`BackupRemoteTargetInterface`. Flysystem cannot read object metadata back, so the `.backup.json` sidecar carries the
+checksum (`VerifyMode::SizeAndMetadata` falls back to the size; use `FullRehash` for periodic checks).
+
+## Signatures (optional)
+
+With `backup.signing.secret_key` set (base64 Ed25519 seed from `nowo:site-backup:signing-keygen`, kept in the
+environment), every backup is signed and the sidecars carry `signature` / `signing_key_id`. Verifiers list the public
+keys in `backup.signing.public_keys`; `verifyIntegrity()` and `nowo:site-backup:verify --file … --sidecar …` reject a
+modified sidecar (exit code 4).
+
 ## Publish, verify, prune
 
 ```php

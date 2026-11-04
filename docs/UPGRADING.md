@@ -126,6 +126,11 @@ from the backups. An encrypted archive is restored by importing it first (`impor
 For remote copies implement `BackupRemoteTargetInterface` and use `RemoteBackupPublisher` (see
 [REMOTE-TARGETS.md](REMOTE-TARGETS.md)).
 
+Passwords on `tar.gz` / `sql.gz` need **age ≥ 1.3 with `age-plugin-batchpass`** in the PHP image (see
+[ENCRYPTION.md](ENCRYPTION.md#age-targz--sqlgz--image-requirement)); without it those backups fail with a clear
+`FormatUnavailableException` (zip AES needs nothing more). Optional: `backup.signing.*` (Ed25519),
+`backup.remote.flysystem_storage`, `recordTableStats` + `nowo:site-backup:drill`.
+
 ### To 1.28.0
 
 From **1.27.0**:

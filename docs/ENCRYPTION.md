@@ -14,9 +14,33 @@
 | Format | With a password | Opens with |
 | --- | --- | --- |
 | `zip` | WinZip AE-2, **AES-256**, every entry (`ZipArchive::EM_AES_256`). ZipCrypto is never written and refused on import | 7-Zip / p7zip (`7z x -p`), `7zz`, PeaZip, WinZip, WinRAR, Keka, The Unarchiver, `bsdtar` ≥ 3.6. **Not** Windows Explorer nor macOS Archive Utility |
-| `tar.gz`, `sql.gz` | Not available yet: `FormatUnavailableException` (the age encryptor is pending an owner decision) | — |
+| `tar.gz`, `sql.gz` | **age** passphrase container (`.tar.gz.age`, `.sql.gz.age`; scrypt, ChaCha20-Poly1305), written by the `age` binary ≥ 1.3 with `age-plugin-batchpass` | `age -d` (asks for the passphrase) or `AGE_PASSPHRASE_FD=3 age -d -j batchpass`, then `tar xzf` / `gunzip`; `rage` too |
 
 `BackupArchiver::assertZipAesAvailable()` checks that libzip was built with a crypto backend.
+
+## age (tar.gz / sql.gz) — image requirement
+
+Install **age ≥ 1.3** and its **`age-plugin-batchpass`** (both ship in the official release archive) on `PATH`, or
+set `nowo_site_backup.backup.encryption.age.binary` to an absolute path (the plugin must sit next to it or on `PATH`):
+
+```dockerfile
+# Example (Debian/Alpine, amd64): pin the version and check the sha256 published on the GitHub release.
+ARG AGE_VERSION=1.3.1
+ARG AGE_SHA256=bdc69c09cbdd6cf8b1f333d372a1f58247b3a33146406333e30c0f26e8f51377
+RUN curl -fsSL -o /tmp/age.tgz https://github.com/FiloSottile/age/releases/download/v${AGE_VERSION}/age-v${AGE_VERSION}-linux-amd64.tar.gz \
+ && echo "${AGE_SHA256}  /tmp/age.tgz" | sha256sum -c - \
+ && tar -xzf /tmp/age.tgz -C /tmp && install -m 0755 /tmp/age/age /tmp/age/age-plugin-batchpass /usr/local/bin/ \
+ && rm -rf /tmp/age /tmp/age.tgz
+```
+
+- The bundle checks the binary on first use (`AgeBinaryEncryptor::assertAvailable()`): missing, older than 1.3 or
+  without the plugin → `FormatUnavailableException` with the reason.
+- **The passphrase never touches argv or the environment**: it is written to a dedicated pipe that age sees as fd 3
+  (`AGE_PASSPHRASE_FD=3`); the child environment holds only `PATH`, the fd number and the work factors. A test reads
+  `/proc/<pid>/cmdline` and `/proc/<pid>/environ` of age and its plugin while they run.
+- scrypt work factor 18 when encrypting (`encryption.age.work_factor`, 10–22) and at most 22 accepted when decrypting
+  (`encryption.age.max_work_factor`), so a hostile file cannot cost gigabytes of RAM.
+- Passwords with CR / LF are refused (the plugin strips trailing newlines).
 
 ## Key derivation caveat (zip)
 

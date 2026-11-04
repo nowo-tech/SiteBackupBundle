@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\Service;
 
 use Nowo\SiteBackupBundle\Backup\BackupArchiver;
+use Nowo\SiteBackupBundle\Backup\VerifyFileResult;
 use Nowo\SiteBackupBundle\Enum\ArchiveFormat;
 use Nowo\SiteBackupBundle\Event\BackupCreatedEvent;
 use Nowo\SiteBackupBundle\Event\BackupDeletedEvent;
@@ -236,6 +237,16 @@ final class SiteBackupManager
         }
 
         return $this->archiver->verifyIntegrity($artifact, null, $password);
+    }
+
+    /**
+     * Checks any archive file without storing it (1.29+): see {@see BackupArchiver::verifyFile()}.
+     *
+     * @param array<string, mixed>|null $sidecar
+     */
+    public function verifyFile(string $path, #[SensitiveParameter] ?ArchivePassword $password = null, ?string $expectedSha256 = null, ?array $sidecar = null): VerifyFileResult
+    {
+        return $this->archiver->verifyFile($path, $password, $expectedSha256, $sidecar);
     }
 
     /**

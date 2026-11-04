@@ -57,6 +57,8 @@
     "require-dev": {
         "friendsofphp/php-cs-fixer": "^3.0",
         "igor-php/igor-php": "^0.9.7 || ^0.10.0",
+        "league/flysystem": "^3.0",
+        "league/flysystem-memory": "^3.0",
         "nowo-tech/phpstan-frankenphp": "^1.0",
         "phpstan/extension-installer": "^1.4",
         "phpstan/phpstan": "^2.0",
@@ -79,7 +81,9 @@
         "doctrine/dbal": "Optional; setup progress doctrine/chain/cache_doctrine storage, schema detectors, and apps that rely on a DBAL connection",
         "symfony/cache": "Optional; setup progress_storage cache / cache_doctrine (PSR-6 pool, typically Redis via cache.app)",
         "symfony/lock": "Recommended (1.28+): the backup / restore operation lock uses lock.factory (a shared store with several app containers); without it an flock() in storage_dir is used",
-        "ext-zip": "Required for the zip archive format (1.28+)"
+        "ext-zip": "Required for the zip archive format (1.28+)",
+        "ext-sodium": "Required for the optional Ed25519 backup signatures (1.29+)",
+        "league/flysystem": "Optional (1.29+): FlysystemRemoteTarget stores backups on any Flysystem 3 filesystem"
     },
     "autoload": {
         "psr-4": {

@@ -15,6 +15,7 @@ use function is_string;
 use function ltrim;
 use function parse_str;
 use function parse_url;
+use function preg_match;
 use function rawurldecode;
 use function strtolower;
 
@@ -66,6 +67,7 @@ final class MysqlDumpCommandFactory
      * The password stays in `MYSQL_PWD`; the database name follows `--`.
      *
      * @param list<string> $extraOptions appended before the `--` end-of-options marker (e.g. --batch)
+     * @param string|null $database another schema on the same server (1.29+, restore drills); [A-Za-z0-9_]{1,64}
      *
      * @throws InvalidArgumentException when the URL is not a usable MySQL / MariaDB URL
      *
@@ -76,9 +78,16 @@ final class MysqlDumpCommandFactory
         bool $skipSslVerifyServerCert = false,
         string $binary = 'mysql',
         array $extraOptions = [],
+        ?string $database = null,
     ): array {
         $connection = self::parse($databaseUrl);
-        $spec       = self::assemble([$binary], $connection, $skipSslVerifyServerCert, $extraOptions);
+        if ($database !== null) {
+            if (preg_match('/^[A-Za-z0-9_]{1,64}$/', $database) !== 1) {
+                throw new InvalidArgumentException('Schema names must match [A-Za-z0-9_]{1,64}.');
+            }
+            $connection['database'] = $database;
+        }
+        $spec = self::assemble([$binary], $connection, $skipSslVerifyServerCert, $extraOptions);
 
         return $spec + ['database' => $connection['database']];
     }

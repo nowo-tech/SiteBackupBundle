@@ -47,6 +47,8 @@ final readonly class BackupOptions
      *                                         keys that look like secrets are refused
      * @param ArchivePassword|null $password 1.29+: zip → AES-256 (WinZip AE-2) per entry; never stored nor logged
      * @param string|null $keyId 1.29+: opaque id of the password in the host's key ring, recorded in the meta
+     * @param bool $recordTableStats 1.29+: record row counts and CHECKSUM TABLE values right after the dump
+     *                               (`table_stats` in the meta) for restore drills
      */
     public function __construct(
         public bool $includeDatabase = true,
@@ -63,6 +65,7 @@ final readonly class BackupOptions
         #[SensitiveParameter]
         public ?ArchivePassword $password = null,
         public ?string $keyId = null,
+        public bool $recordTableStats = false,
     ) {
         $this->validate();
     }
@@ -188,6 +191,7 @@ final readonly class BackupOptions
             'extraMeta'             => $this->extraMeta,
             'password'              => $this->password,
             'keyId'                 => $this->keyId,
+            'recordTableStats'      => $this->recordTableStats,
         ];
 
         /* @phpstan-ignore argument.type (keys are the constructor's parameter names) */

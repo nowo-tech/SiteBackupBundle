@@ -17,6 +17,7 @@ use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\ArrayInput;
 use Symfony\Component\Console\Tester\CommandTester;
 use Symfony\Component\Filesystem\Filesystem;
+use Symfony\Component\Process\Process;
 use ZipArchive;
 
 use function fopen;
@@ -74,6 +75,15 @@ final class CryptoCommandsTest extends TestCase
         self::assertSame(Command::INVALID, $import->execute(['file' => $result['file'], '--password-env' => 'SBB_UNSET_VARIABLE']));
 
         self::assertSame(Command::INVALID, $create->execute(['--format' => 'zip', '--password-env' => 'SBB_UNSET_VARIABLE']));
+
+        // Import warnings are printed (a legacy archive with .env inside).
+        $payload = $this->root . '/legacy';
+        (new Filesystem())->mkdir($payload);
+        file_put_contents($payload . '/.env', 'x');
+        file_put_contents($payload . '/MANIFEST.json', (string) json_encode(['checksums' => ['.env' => hash('sha256', 'x')]]));
+        (new Process(['tar', '-czf', $this->root . '/legacy.tar.gz', '-C', $payload, '.']))->mustRun();
+        self::assertSame(Command::SUCCESS, $import->execute(['file' => $this->root . '/legacy.tar.gz']));
+        self::assertStringContainsString('secret path(s) dropped', $import->getDisplay());
     }
 
     public function testPasswordFromStdin(): void

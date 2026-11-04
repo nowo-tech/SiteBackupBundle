@@ -14,6 +14,7 @@ use Nowo\SiteBackupBundle\Model\BackupArtifact;
 use Nowo\SiteBackupBundle\Retention\RetentionItem;
 use Nowo\SiteBackupBundle\Retention\RetentionPlanner;
 use Nowo\SiteBackupBundle\Retention\RetentionPolicy;
+use Nowo\SiteBackupBundle\Signing\BackupSigner;
 use Psr\Clock\ClockInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\Clock\NativeClock;
@@ -225,6 +226,9 @@ final class RemoteBackupPublisher
             'label'             => $artifact->getLabel(),
             'created_by'        => $artifact->getCreatedBy(),
             'extra_meta'        => is_array($meta['extra'] ?? null) ? $meta['extra'] : [],
+            'checksums_sha256'  => BackupSigner::checksumsDigest($artifact->getChecksums()),
+            'signature'         => is_string($meta['signature'] ?? null) ? $meta['signature'] : null,
+            'signing_key_id'    => is_string($meta['signing_key_id'] ?? null) ? $meta['signing_key_id'] : null,
         ];
     }
 
