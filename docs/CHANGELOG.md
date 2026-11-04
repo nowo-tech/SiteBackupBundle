@@ -115,9 +115,16 @@ spec `specs/008-local-backup-engine`). No cryptography and no network yet (archi
 ### Security (REQ-SEC-004 audit EN of the 1.28.0 branch)
 
 - **EN-M1:** the `mysql` client importer (`db-import`, `sql_file` `importer: client`) disables client commands found
-  in the dump (`\!`, `\T`, `source`): `--system-command=OFF` for Oracle clients 8.0.40+ / 8.4.3+ / 9.1+, `--sandbox`
-  for MariaDB clients 10.5.25+ / 10.6.18+ / 10.11.8+ / 11.0.6+ / 11.1.5+ / 11.2.4+ / 11.3.2+ / 11.4.2+ / 11.5+. Any
-  other client is refused (`DumpFailedException`).
+  in the dump (`\!`, `\T`, `source`, …): `--commands=OFF` for Oracle clients 8.0.43+ / 8.4.6+ / 9.4+ (re-audit:
+  `--system-command=OFF` alone still allowed `\T` and `source`), `--sandbox` for MariaDB clients 10.5.25+ / 10.6.18+ /
+  10.11.8+ / 11.0.6+ / 11.1.5+ / 11.2.4+ / 11.3.2+ / 11.4.2+ / 11.5+. Any other client is refused
+  (`DumpFailedException`). CI runs tampered dumps against the real Oracle mysql 8.4 and MariaDB 11.8 clients.
+- **EN-L6:** each file is opened once, the open handle's inode is compared with the inode at its resolved path (which
+  must be allowed, and a hard-linked inode must not be a floor file), and the copy is made from that handle: a file
+  swapped for a link to a secret during the backup is dropped.
+- **EN-L7 / EN-I11:** the tar size limit uses the decompressed stream (no longer the listing's size column, which an
+  owner name with spaces could shift) and the bytes actually extracted; gzip is inflated in 16 KiB input slices.
+- **EN-I12:** backup warnings (skipped secret paths, external links, table rules) are logged at notice level.
 - **EN-L1 / EN-L2:** collection resolves `.` / `..` and symlinks: each file's real path must stay inside the project
   and must not match the floor; hard links to floor files are skipped (inode match); `backup.include_paths` entries
   with `..` or an absolute path are refused.
@@ -130,7 +137,7 @@ spec `specs/008-local-backup-engine`). No cryptography and no network yet (archi
   `id_ecdsa*`, `id_dsa*`, `.htpasswd`, `credentials.json`, `.aws/credentials`, `.docker/config.json`, `*.ppk`,
   `*.kdbx`; `work_dir` must not be a symlink and must belong to the running user, a run directory whose process died
   is removed at the next start, `storage_dir` is created 0700; `extra_options` names are normalised (`--loose-`,
-  `_`) and `--all-databases` / `--databases` / `--tables` / `--where` are refused; restore staging is in `work_dir`;
+  `_`, unambiguous prefixes such as `--pass=`) and `--all-databases` / `--databases` / `--tables` / `--where` are refused; restore staging is in `work_dir`;
   deletes stay inside `storage_dir` and ids are validated; `backup.extract_limits` (size, entries, ratio) applies to
   every extraction; imports take the operation lock.
 

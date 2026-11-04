@@ -58,7 +58,6 @@ use function fread;
 use function function_exists;
 use function fwrite;
 use function glob;
-use function hash_file;
 use function hash_final;
 use function hash_init;
 use function hash_update;
@@ -119,6 +118,9 @@ final class BackupArchiver
     private const HASH_CHUNK_BYTES = 8 * 1024 * 1024;
 
     private const STREAM_CHUNK_BYTES = 1024 * 1024;
+
+    /** EN-I11: compressed bytes fed to one inflate_add() call (deflate expands at most ~1032×, so ≤ ~16 MiB out). */
+    private const INFLATE_SLICE_BYTES = 16 * 1024;
 
     private const HEARTBEAT_INTERVAL_NS = 2_000_000_000;
 
@@ -733,6 +735,7 @@ final class BackupArchiver
         $project   = rtrim($this->projectDir, '/\\');
         $verdicts  = ['secret' => 0, 'outside' => 0];
         $floor     = null;
+        $hash      = '';
         $beat(BackupProgress::PHASE_COPYING);
 
         foreach ($this->resolveIncludePaths($includePaths) as $relative) {
@@ -746,12 +749,12 @@ final class BackupArchiver
                 if ($this->isExcludedRelative($relative)) {
                     continue;
                 }
-                $verdict = $this->classify($relative, $source, $floor);
+                $verdict = $this->copyVerified($relative, $source, $payloadDir . '/' . $relative, $floor, $hash);
                 if ($verdict !== null) {
                     ++$verdicts[$verdict];
                     continue;
                 }
-                $checksums[$relative] = $this->copyOne($source, $payloadDir . '/' . $relative);
+                $checksums[$relative] = $hash;
                 continue;
             }
 
@@ -772,12 +775,12 @@ final class BackupArchiver
                 if ($this->isExcludedRelative($relPath)) {
                     continue;
                 }
-                $verdict = $this->classify($relPath, $full, $floor);
+                $verdict = $this->copyVerified($relPath, $full, $payloadDir . '/' . $relPath, $floor, $hash);
                 if ($verdict !== null) {
                     ++$verdicts[$verdict];
                     continue;
                 }
-                $checksums[$relPath] = $this->copyOne($full, $payloadDir . '/' . $relPath);
+                $checksums[$relPath] = $hash;
                 $beat();
             }
         }
@@ -788,12 +791,74 @@ final class BackupArchiver
         return $checksums;
     }
 
-    private function copyOne(string $source, string $dest): string
+    /**
+     * EN-L6: classifies the path, opens it once, re-checks the open handle (its inode must be the inode at the
+     * file's current real path, which must still be allowed; a hard-linked inode must not be a floor file) and copies
+     * from that same handle. A file swapped for a link to a secret between the check and the copy is dropped.
+     *
+     * @param array<string, true>|null $floor
+     *
+     * @return string|null the verdict (`secret` / `outside`) when the file is not archived, null when it was copied
+     */
+    private function copyVerified(string $relative, string $absolute, string $dest, ?array &$floor, string &$hash): ?string
     {
-        $this->filesystem->mkdir(dirname($dest), 0o700);
-        $this->filesystem->copy($source, $dest, true);
+        $verdict = $this->classify($relative, $absolute, $floor);
+        if ($verdict !== null) {
+            return $verdict;
+        }
 
-        return (string) hash_file('sha256', $dest);
+        $in = @fopen($absolute, 'r');
+        if ($in === false) {
+            return 'secret';
+        }
+
+        try {
+            $held    = fstat($in);
+            $project = realpath($this->projectDir);
+            $real    = realpath($absolute);
+            if ($held === false || $project === false || $real === false) {
+                return 'secret';
+            }
+            // One resolved path string: it must be inside the project, allowed, and hold the very inode we opened.
+            if (!str_starts_with($real, $project . '/')) {
+                return 'outside';
+            }
+            if ($this->secretPolicy->isForbidden(substr($real, strlen($project) + 1))) {
+                return 'secret';
+            }
+            // lstat: if the resolved path became a link again, its own inode differs from the one we hold.
+            $current = @lstat($real);
+            if ($current === false || $current['dev'] !== $held['dev'] || $current['ino'] !== $held['ino']) {
+                return 'secret';
+            }
+            // Whatever path games happened (hard links, a parent directory swapped for a link), the inode we hold
+            // must not be one of the project's floor files.
+            $floor ??= $this->floorInodes($project);
+            if (isset($floor[$held['dev'] . ':' . $held['ino']])) {
+                return 'secret';
+            }
+
+            $this->filesystem->mkdir(dirname($dest), 0o700);
+            $out = @fopen($dest, 'w');
+            if ($out === false) {
+                throw new RuntimeException('Unable to write into the backup staging directory.');
+            }
+            $context = hash_init('sha256');
+            try {
+                while (!feof($in)) {
+                    $chunk = (string) fread($in, self::STREAM_CHUNK_BYTES);
+                    hash_update($context, $chunk);
+                    fwrite($out, $chunk);
+                }
+            } finally {
+                fclose($out);
+            }
+            $hash = hash_final($context);
+
+            return null;
+        } finally {
+            fclose($in);
+        }
     }
 
     /**
@@ -1096,7 +1161,7 @@ final class BackupArchiver
         try {
             $inflate = inflate_init(ZLIB_ENCODING_GZIP) ?: throw new RuntimeException('gunzip failed: zlib is not available.');
             while (!feof($in)) {
-                $plain = @inflate_add($inflate, (string) fread($in, self::STREAM_CHUNK_BYTES), ZLIB_SYNC_FLUSH);
+                $plain = @inflate_add($inflate, (string) fread($in, self::INFLATE_SLICE_BYTES), ZLIB_SYNC_FLUSH);
                 if ($plain === false) {
                     throw new RuntimeException('gunzip failed: corrupt sql.gz archive.');
                 }
@@ -1173,6 +1238,48 @@ final class BackupArchiver
         if (!$process->isSuccessful()) {
             throw new RuntimeException('tar extract failed: ' . $process->getErrorOutput());
         }
+
+        // EN-L7: the bytes actually written (sparse entries can exceed the stream) are held to the same limit.
+        $written = 0;
+        foreach ((new Finder())->files()->in($destination)->ignoreDotFiles(false) as $file) {
+            $written += (int) $file->getSize();
+        }
+        $this->assertWithinLimits($written, (int) @filesize($archive));
+    }
+
+    /**
+     * Size of the decompressed stream of a gzip file, counted in bounded slices (stops past the limit).
+     *
+     * @param (callable(): void)|null $tick
+     */
+    private function decompressedSize(string $archive, ?callable $tick): int
+    {
+        $in = @fopen($archive, 'r');
+        if ($in === false) {
+            throw new UnsafeArchiveException('The archive cannot be read.');
+        }
+        $limit   = $this->decompressedLimit((int) @filesize($archive));
+        $inflate = inflate_init(ZLIB_ENCODING_GZIP) ?: throw new RuntimeException('gunzip failed: zlib is not available.');
+        $total   = 0;
+        try {
+            while (!feof($in)) {
+                $plain = @inflate_add($inflate, (string) fread($in, self::INFLATE_SLICE_BYTES), ZLIB_SYNC_FLUSH);
+                if ($plain === false) {
+                    throw new UnsafeArchiveException('The archive is not valid gzip data.');
+                }
+                $total += strlen($plain);
+                if ($total > $limit) {
+                    break;
+                }
+                if ($tick !== null) {
+                    $tick();
+                }
+            }
+        } finally {
+            fclose($in);
+        }
+
+        return $total;
     }
 
     /**
@@ -1190,7 +1297,6 @@ final class BackupArchiver
         }
 
         $entries = 0;
-        $total   = 0;
         foreach (explode("\n", trim($listing->getOutput())) as $line) {
             if ($line === '') {
                 continue;
@@ -1201,11 +1307,10 @@ final class BackupArchiver
             if (++$entries > $this->extractLimits['max_entries']) {
                 throw new UnsafeArchiveException('The archive has more entries than backup.extract_limits allows.');
             }
-            if (preg_match('/^\S+\s+\S+\s+(\d+)\s/', $line, $m) === 1) {
-                $total += (int) $m[1];
-            }
         }
-        $this->assertWithinLimits($total, (int) @filesize($archive));
+        // EN-L7: the size is the decompressed tar stream itself, not the listing's size column (an owner name with
+        // spaces shifted the columns). The stream bounds what tar writes; extracted bytes are counted again after.
+        $this->assertWithinLimits($this->decompressedSize($archive, $heartbeat), (int) @filesize($archive));
 
         $names = new Process([$this->tarBinary, '-tzf', $archive]);
         ProcessDeadline::run($names, $this->processTimeoutSeconds, $heartbeat);

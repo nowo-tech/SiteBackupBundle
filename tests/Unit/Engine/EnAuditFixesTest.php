@@ -69,15 +69,17 @@ final class EnAuditFixesTest extends TestCase
      */
     public static function clientVersions(): iterable
     {
-        yield 'oracle 8.4.13' => ['mysql  Ver 8.4.13 for Linux on x86_64 (MySQL Community Server - GPL)', '--system-command=OFF'];
-        yield 'oracle 8.4.3' => ['mysql  Ver 8.4.3 for Linux on x86_64', '--system-command=OFF'];
-        yield 'oracle 8.4.2' => ['mysql  Ver 8.4.2 for Linux on x86_64', null];
-        yield 'oracle 8.0.40' => ['mysql  Ver 8.0.40 for Linux on x86_64', '--system-command=OFF'];
-        yield 'oracle 8.0.39' => ['mysql  Ver 8.0.39 for Linux on x86_64', null];
+        yield 'oracle 8.4.13' => ['mysql  Ver 8.4.13 for Linux on x86_64 (MySQL Community Server - GPL)', '--commands=OFF'];
+        yield 'oracle 8.4.6' => ['mysql  Ver 8.4.6 for Linux on x86_64', '--commands=OFF'];
+        yield 'oracle 8.4.5' => ['mysql  Ver 8.4.5 for Linux on x86_64', null];
+        yield 'oracle 8.4.3 (system-command only)' => ['mysql  Ver 8.4.3 for Linux on x86_64', null];
+        yield 'oracle 8.0.43' => ['mysql  Ver 8.0.43 for Linux on x86_64', '--commands=OFF'];
+        yield 'oracle 8.0.42' => ['mysql  Ver 8.0.42 for Linux on x86_64', null];
         yield 'oracle 8.3.0' => ['mysql  Ver 8.3.0 for Linux on x86_64', null];
-        yield 'oracle 9.0.1' => ['mysql  Ver 9.0.1 for Linux on x86_64', null];
-        yield 'oracle 9.1.0' => ['mysql  Ver 9.1.0 for Linux on x86_64', '--system-command=OFF'];
-        yield 'oracle 9.4.0' => ['mysql  Ver 9.4.0 for Linux on x86_64', '--system-command=OFF'];
+        yield 'oracle 9.1.0' => ['mysql  Ver 9.1.0 for Linux on x86_64', null];
+        yield 'oracle 9.3.0' => ['mysql  Ver 9.3.0 for Linux on x86_64', null];
+        yield 'oracle 9.4.0' => ['mysql  Ver 9.4.0 for Linux on x86_64', '--commands=OFF'];
+        yield 'oracle 9.7.2' => ['mysql  Ver 9.7.2 for Linux on x86_64', '--commands=OFF'];
         yield 'oracle 5.7' => ['mysql  Ver 14.14 Distrib 5.7.44, for Linux (x86_64)', null];
         yield 'mariadb 11.8.9' => ['mariadb from 11.8.9-MariaDB, client 15.2 for debian-linux-gnu (x86_64)', '--sandbox'];
         yield 'mariadb 11.4.2' => ['mariadb from 11.4.2-MariaDB, client 15.2', '--sandbox'];
@@ -104,7 +106,7 @@ final class EnAuditFixesTest extends TestCase
     {
         $marker = $this->root . '/pwned';
         $tee    = $this->root . '/tee-file';
-        $body   = 'safe=0; for a in "$@"; do case "$a" in --system-command=OFF|--sandbox) safe=1;; esac; done' . "\n"
+        $body   = 'safe=0; for a in "$@"; do case "$a" in --commands=OFF|--sandbox) safe=1;; esac; done' . "\n"
             . 'while IFS= read -r line; do case "$line" in "\\! "*) [ $safe = 0 ] && sh -c "${line#\\\\! }";; "\\T "*) [ $safe = 0 ] && : > "${line#\\\\T }";; esac; done; exit 0';
         file_put_contents($this->root . '/tampered.sql', "CREATE TABLE t (id INT);\n\\! touch " . $marker . "\n\\T " . $tee . "\n");
 

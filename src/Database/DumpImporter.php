@@ -34,7 +34,8 @@ use function version_compare;
  * read the whole file into one string). The password stays in `MYSQL_PWD`; the argv holds no secret.
  *
  * EN-M1: the client would otherwise run client commands found in the file (`\! cmd`, `\T file`, `source …`). The
- * importer always disables them: `--system-command=OFF` for Oracle clients (8.0.40+, 8.4.3+, 9.1+) and `--sandbox`
+ * importer always disables them: `--commands=OFF` for Oracle clients (8.0.43+, 8.4.6+, 9.4+; it disables `system`, `tee`,
+ * `source`, `connect`, … — `--system-command=OFF` alone left `\T` and `source` usable, re-audit EN-M1) and `--sandbox`
  * for MariaDB clients (10.5.25+, 10.6.18+, 10.11.8+, 11.0.6+, 11.1.5+, 11.2.4+, 11.4.2+, 11.5+). A client that
  * supports neither is refused. Imports take the operation lock when it is wired (EN-I9).
  */
@@ -52,8 +53,8 @@ final class DumpImporter
     /** Minimum MariaDB client per major.minor for `--sandbox`; later lines all have it. */
     private const MARIADB_SANDBOX = ['10.5' => '10.5.25', '10.6' => '10.6.18', '10.11' => '10.11.8', '11.0' => '11.0.6', '11.1' => '11.1.5', '11.2' => '11.2.4', '11.3' => '11.3.2', '11.4' => '11.4.2'];
 
-    /** Minimum Oracle client per major.minor for `--system-command=OFF`; 9.1+ all have it. */
-    private const ORACLE_SYSTEM_COMMAND = ['8.0' => '8.0.40', '8.4' => '8.4.3'];
+    /** Minimum Oracle client per major.minor for `--commands=OFF` (8.0.43, 8.4.6, 9.4.0); later lines all have it. */
+    private const ORACLE_COMMANDS = ['8.0' => '8.0.43', '8.4' => '8.4.6'];
 
     /**
      * The client option that disables client commands in the imported file (EN-M1).
@@ -75,14 +76,14 @@ final class DumpImporter
 
         $option = self::safetyOptionFor($version);
         if ($option === null) {
-            throw new DumpFailedException('This mysql client cannot disable client commands (\\!, \\T, source) in imported dumps: use Oracle mysql 8.0.40+ / 8.4.3+ / 9.1+ (--system-command=OFF) or MariaDB 10.5.25+ / 10.6.18+ / 10.11.8+ / 11.4.2+ (--sandbox).');
+            throw new DumpFailedException('This mysql client cannot disable client commands (\\!, \\T, source) in imported dumps: use Oracle mysql 8.0.43+ / 8.4.6+ / 9.4+ (--commands=OFF) or MariaDB 10.5.25+ / 10.6.18+ / 10.11.8+ / 11.4.2+ (--sandbox).');
         }
 
         return $option;
     }
 
     /**
-     * @return string|null `--sandbox`, `--system-command=OFF` or null (unsupported) for a `mysql --version` line
+     * @return string|null `--sandbox`, `--commands=OFF` or null (unsupported) for a `mysql --version` line
      */
     public static function safetyOptionFor(string $version): ?string
     {
@@ -98,7 +99,7 @@ final class DumpImporter
             return null;
         }
 
-        return self::atLeast($m[1] . '.' . $m[2], $m[1] . '.' . $m[2] . '.' . $m[3], self::ORACLE_SYSTEM_COMMAND, '9.1') ? '--system-command=OFF' : null;
+        return self::atLeast($m[1] . '.' . $m[2], $m[1] . '.' . $m[2] . '.' . $m[3], self::ORACLE_COMMANDS, '9.4') ? '--commands=OFF' : null;
     }
 
     /**

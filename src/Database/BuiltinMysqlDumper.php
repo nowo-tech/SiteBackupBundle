@@ -15,6 +15,7 @@ use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Process\Exception\ProcessTimedOutException;
 use Symfony\Component\Process\Process;
 
+use function array_filter;
 use function count;
 use function explode;
 use function fclose;
@@ -28,6 +29,7 @@ use function str_contains;
 use function str_replace;
 use function str_starts_with;
 use function stream_copy_to_stream;
+use function strlen;
 use function strtolower;
 use function trim;
 
@@ -172,7 +174,9 @@ final class BuiltinMysqlDumper
             // EN-I4: `--loose-` / `--maximum-` prefixes and `_` spellings name the same option.
             $name = str_replace('_', '-', strtolower(explode('=', $option, 2)[0]));
             $name = (string) preg_replace('/^--(?:loose-|maximum-)+/', '--', $name);
-            if (in_array($name, self::FORBIDDEN_OPTIONS, true)) {
+            // The MariaDB client accepts unambiguous prefixes (`--pass=`, `--res=`): a prefix of a refused option is refused.
+            $isPrefix = strlen($name) >= 5 && array_filter(self::FORBIDDEN_OPTIONS, static fn (string $f): bool => str_starts_with($f, $name)) !== [];
+            if (in_array($name, self::FORBIDDEN_OPTIONS, true) || $isPrefix) {
                 throw new InvalidBackupOptionsException(sprintf('backup.database.extra_options must not contain %s.', $name));
             }
         }
