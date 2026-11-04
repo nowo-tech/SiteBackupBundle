@@ -3,7 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
-  - [To 1.28.0](#to-1280)
+- [To 1.28.0](#to-1280)
 - [To 1.27.0](#to-1270)
 - [To 1.26.0](#to-1260)
 - [To 1.25.1](#to-1251)
@@ -116,7 +116,7 @@
 
 ## Unreleased
 
-### To 1.28.0
+## To 1.28.0
 
 From **1.27.0**:
 
