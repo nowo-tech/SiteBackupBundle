@@ -6,6 +6,7 @@
 - [Attack surface](#attack-surface)
 - [Threat model](#threat-model)
 - [Setup access: default-deny (1.27+)](#setup-access-default-deny-127)
+- [Backups never contain secrets (1.28+)](#backups-never-contain-secrets-128)
 - [Secrets & cryptography](#secrets--cryptography)
 - [Production secrets guard (opt-in, v1.16+)](#production-secrets-guard-opt-in-v116)
 - [CSP nonces](#csp-nonces)
@@ -56,6 +57,21 @@ Since 1.27.0 the wizard is **default-deny**:
 4. `setup.allow_without_token: true` (DEV/DEMO only) reopens the page without a token when no `setup_token` is set; it must be a literal boolean and the container refuses to compile it unless `kernel.debug` is true. It never opens `api/advance`.
 
 On internet-facing hosts still prefer a long random `SITE_SETUP_TOKEN` (or the one-time token) **and** firewall `/_setup`; turn on `security_guard.enabled: true` so an empty or documented static token fails closed.
+
+## Backups never contain secrets (1.28+)
+
+- **Secrets floor** (`SecretPathPolicy`, not removable by config): `.env*` (except the committed root `.env.dist` /
+  `.env.example`), `config/secrets/**`, `var/secrets/**`, `config/jwt/**`, `*.key`, `*.pem`, `*.p12`, `*.pfx`,
+  `*.jks`, SSH keys and credential files are skipped while files are collected (also through symlinks), the final file
+  list is checked again before packing, and restore never writes them. `backup.forbidden_paths` adds patterns.
+- **Staging** happens in `backup.work_dir` (`0700`): per-run directories are removed in a `finally`; archives and
+  sidecars are `0600` and are moved into `storage_dir` only when complete.
+- **Database credentials** travel in `MYSQL_PWD` (dump, schema inspection, import), never argv; subprocess errors are
+  redacted and cut; the importer keeps only the MySQL error code and line (never row data).
+- **Table rules** are validated against the live schema; names are checked against `[A-Za-z0-9_$]{1,64}` and passed as
+  separate argv elements (no shell).
+- The database dump itself is not scrubbed: hash and ciphertext columns, tokens and personal data stay in it. Use
+  structure-only rules for volatile secret tables and protect archives at rest (archive passwords arrive in 1.29).
 
 ## Secrets & cryptography
 

@@ -7,6 +7,7 @@ Root key: `nowo_site_backup`.
 - [Keys](#keys)
   - [Setup locales from a parameter or env var](#setup-locales-from-a-parameter-or-env-var)
   - [Setup step / tab keys](#setup-step--tab-keys)
+- [Secrets floor (1.28+)](#secrets-floor-128)
 - [Profiles (REQ-CFG-001)](#profiles-req-cfg-001)
 - [Timeouts (REQ-RUNTIME-001)](#timeouts-req-runtime-001)
 - [FormKit profile (REQ-TWIG-005)](#formkit-profile-req-twig-005)
@@ -38,10 +39,24 @@ Root key: `nowo_site_backup`.
 | `web_ui.layout_template` | `null` | Layout of the panel pages instead of `nowo_ui_kit.layouts.admin` (null = UiKit). Must render the UiKit canonical blocks; a 1.x layout without `nowo_ui_content` is bridged (deprecated). Aliases: `panel.layout_template`, `templates.panel_layout` (deprecated; the removed bundle layout maps to `null`) |
 | `web_ui.guest_layout_template` | `null` | Layout of the guest pages (panel sign-in, setup wizard, setup token) instead of `nowo_ui_kit.layouts.guest`. **Renders before the app has a database**: no DB-backed Twig in it. Aliases: `setup.layout_template`, `templates.setup_layout` (deprecated) |
 | `web_ui.templates.<page>` | `{}` | Per-page template override: `index`, `history`, `create`, `restore_confirm`, `delete_confirm`, `login`, `setup_wizard`, `setup_token`, `setup_done`, `restore_page` — see [TEMPLATES.md](TEMPLATES.md). Aliases: `templates.panel_index` → `index`, `panel_login` → `login`, `panel_history` → `history`, `setup_wizard`, `setup_token`, `setup_done`, `restore_page` (deprecated) |
-| `backup.include_paths` | config, public, templates, … | Relative to `kernel.project_dir`. **`[]` or `["."]` = entire project** (minus `exclude_patterns`). Omitting the key keeps the selective defaults. |
+| `backup.include_paths` | config, public, templates, … | Relative to `kernel.project_dir`. **`[]` or `["."]` = entire project** (minus `exclude_patterns` and the [secrets floor](#secrets-floor-128)). Omitting the key keeps the selective defaults (1.28+: without `.env`). |
 | `backup.exclude_patterns` | cache/log/vendor/… | `fnmatch` against relative paths |
 | `backup.storage_dir` | `%kernel.project_dir%/var/site-backup/archives` | Archives + `.meta.json`. v1.19+: wherever it lives inside the project it is never packed into an archive (no nested archives) nor overwritten by a restore |
-| `backup.database_dump_command` | `null` | Shell command writing SQL to stdout. Built-in: `php %kernel.project_dir%/bin/console nowo:site-backup:db-dump` (see [USAGE.md](USAGE.md#built-in-database-dumper)) |
+| `backup.database_dump_command` | `null` | Shell command writing SQL to stdout. Built-in: `php %kernel.project_dir%/bin/console nowo:site-backup:db-dump` (see [USAGE.md](USAGE.md#built-in-database-dumper)). Used while `backup.database.dumper` is `command` |
+| `backup.forbidden_paths` | `[]` | (1.28+) fnmatch patterns (project-relative) added to the [secrets floor](#secrets-floor-128): never archived, never written by a restore |
+| `backup.work_dir` | `%kernel.project_dir%/var/site-backup/work` | (1.28+) Must not be a symlink and must belong to the PHP user. Root of the owner-only (`0700`) staging directories: plaintext dump, file copies, the archive being built. Each run removes its own directory in a `finally`; leftovers of killed runs are removed by the next backup and by `nowo:site-backup:cleanup`. Needs about 2× the archive size; avoid a tmpfs |
+| `backup.default_format` | `tar.gz` | (1.28+) `tar.gz`, `zip` (ext-zip) or `sql.gz` (database only) for backups created without explicit options (panel, CLI) |
+| `backup.compression_level` | `6` | (1.28+) 1–9 (0 = store, `tar.gz` / `zip` only) |
+| `backup.extract_limits.max_bytes` / `max_entries` / `max_ratio` | `107374182400` / `200000` / `200` | (1.28+) Checked before any extraction (verify, restore): total uncompressed size, entry count, and size / archive ratio (only above 64 MiB) |
+| `backup.preflight_disk_check` | `true` | (1.28+) Refuse to start when `work_dir` or `storage_dir` has less than ~3× the last archive free |
+| `backup.retention.keep_last` / `backup.retention.max_age_days` | `null` / `null` | (1.28+) Local retention of `storage_dir` after each successful backup (a backup is kept when either rule keeps it; `keep_last: 0` keeps only the new one). Both `null` = keep everything |
+| `backup.lock.key` | `nowo_site_backup.operation` | (1.28+) Operation lock key (backup, delete, restore). `lock.factory` when symfony/lock is installed (use a shared store with several containers), else an `flock()` in `storage_dir` |
+| `backup.database.dumper` | `command` | (1.28+) `command` = `database_dump_command`; `builtin` = `mysqldump` straight into the staging file (`--result-file`, no shell), needed for table rules; adds `--set-gtid-purged=OFF` with the Oracle client |
+| `backup.database.url` | `%env(default::DATABASE_URL)%` | (1.28+) Connection of the builtin dumper, the schema inspection and the `mysql` client importer. Password via `MYSQL_PWD`, never argv |
+| `backup.database.binary` / `backup.database.client_binary` | `mysqldump` / `mysql` | (1.28+) Dump and client binaries (`mariadb-dump` / `mariadb` work too) |
+| `backup.database.skip_ssl_verify_server_cert` | `false` | (1.28+) MariaDB client only: keep TLS, skip CA verification |
+| `backup.database.extra_options` | `[]` | (1.28+) Extra mysqldump long options; options that write elsewhere, read credentials / files or change the dumped scope (`--result-file`, `--password`, `--defaults-*`, `--tab`, `--all-databases`, `--databases`, …, also as `--loose-…` / `_` spellings) are refused at container build. `--set-gtid-purged=OFF` is always added for Oracle clients (harmless without GTIDs) |
+| `backup.database.required_tables` / `backup.database.migrations_table` | `[]` / `doctrine_migration_versions` | (1.28+) Tables a table rule can never skip nor dump without rows |
 | `restore.progress_file` | `%kernel.project_dir%/var/site-backup/restore-progress.json` | Polled by the loading UI. v1.19+: excluded from archives and never overwritten by a restore, also outside `var/site-backup/` |
 | `restore.protected_paths` | `.env.local`, `var/site-backup` | Never overwritten on apply (in addition to `var/site-backup/` and, v1.19+, the configured `backup.storage_dir`, `restore.progress_file`, `storage.history_file` and `setup.progress_file`) |
 | `restore.stale_after_seconds` | `null` (= 2 × `process_timeout`) | (v1.19+) An *active* restore whose progress was not updated for this many seconds is treated as abandoned (worker killed / crashed mid-restore): the loading page (and its 503) stops being served, `progress.json` reports `active: false` and a new restore may start (its log records the abandoned one). `0` = never (pre-1.19: a dead worker kept the site in 503 until the progress file was edited). Since the next release a running restore writes heartbeats during archive hashing, extraction and file apply (at most every 5 s, or every third of this value when smaller), so this is the time since the last heartbeat, not the length of a single step |
@@ -152,6 +167,7 @@ Each entry of `setup.profiles.*.steps` and `setup.profiles.*.tabs` (and the nest
 | `when` | `sample_data` | `opt_in` (default: the operator chooses load / skip); any other value loads without asking |
 | `paths` | `sql_file`, `bootstrap_mode` | SQL files (relative to the project dir) |
 | `if_exists` | `sql_file` | Skip silently when no file exists (default `false`) |
+| `importer` | `sql_file` | (1.28+) `pdo` (default, the whole file through DBAL) or `client` (streamed through the `mysql` client of `backup.database.*`; for large dumps) |
 | `roles` | `admin_user` | Roles of the created admin (default `[ROLE_SUPER_ADMIN]`) |
 | `skip_if_admin_exists` | `admin_user` | Default `true` |
 | `extensions` / `writable` / `require_tar` | `requirements` | PHP extensions (default `[json, pdo]`), writable dirs (default `[var]`), require `tar` (default `true`) |
@@ -162,6 +178,21 @@ Each entry of `setup.profiles.*.steps` and `setup.profiles.*.tabs` (and the nest
 | `template` | tabs | Twig template for a custom `waiting_input` UI |
 | `label_domain` / `description` | tabs | Translation domain (default `NowoSiteBackupBundle`) and subtitle translation id |
 | `runner` | tabs | Nested step config (same keys) executed by a `custom` tab |
+
+## Secrets floor (1.28+)
+
+Owner decision: no secret ever goes into an archive; keys and passwords are kept apart from the backups. These paths
+are skipped while files are collected (also when a symlink points at them), the final file list is checked again
+before anything is packed (`SecretsInArchiveException`), and a restore never writes them, even from an older archive:
+
+- every `.env*` file at any depth, except the committed templates `.env.dist` / `.env.example` at the project root;
+- `config/secrets/**` (Symfony vault, incl. decrypt keys), `var/secrets/**` (Halite / doctrine-encrypt keys),
+  `config/jwt/**`;
+- every `*.key`, `*.pem`, `*.p12`, `*.pfx`, `*.jks`, `id_rsa*`, `id_ed25519*` under the project;
+- `auth.json`, `.npmrc`, `.git-credentials`, `.netrc`, `.pgpass`, `.my.cnf` at any depth.
+
+Matching is case-insensitive. Hosts cannot remove entries; `backup.forbidden_paths` adds more. The database dump is
+not scrubbed: use table rules (structure only) for tables holding sessions, tokens or queued messages.
 
 ## Profiles (REQ-CFG-001)
 

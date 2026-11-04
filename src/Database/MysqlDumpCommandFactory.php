@@ -6,8 +6,11 @@ namespace Nowo\SiteBackupBundle\Database;
 
 use InvalidArgumentException;
 
+use function array_search;
+use function array_slice;
 use function in_array;
 use function is_array;
+use function is_int;
 use function is_string;
 use function ltrim;
 use function parse_str;
@@ -51,6 +54,104 @@ final class MysqlDumpCommandFactory
         string $binary = 'mysqldump',
         array $extraOptions = [],
     ): array {
+        $connection = self::parse($databaseUrl);
+
+        $command = [$binary, '--single-transaction', '--no-tablespaces'];
+
+        return self::assemble($command, $connection, $skipSslVerifyServerCert, $extraOptions);
+    }
+
+    /**
+     * `mysql` client argv + environment for the same `DATABASE_URL` (1.28+): schema queries and dump imports.
+     * The password stays in `MYSQL_PWD`; the database name follows `--`.
+     *
+     * @param list<string> $extraOptions appended before the `--` end-of-options marker (e.g. --batch)
+     *
+     * @throws InvalidArgumentException when the URL is not a usable MySQL / MariaDB URL
+     *
+     * @return array{command: list<string>, env: array<string, string>, database: string}
+     */
+    public static function clientFromDatabaseUrl(
+        string $databaseUrl,
+        bool $skipSslVerifyServerCert = false,
+        string $binary = 'mysql',
+        array $extraOptions = [],
+    ): array {
+        $connection = self::parse($databaseUrl);
+        $spec       = self::assemble([$binary], $connection, $skipSslVerifyServerCert, $extraOptions);
+
+        return $spec + ['database' => $connection['database']];
+    }
+
+    /**
+     * Database name of a `DATABASE_URL` (validated like {@see self::fromDatabaseUrl()}).
+     */
+    public static function databaseName(string $databaseUrl): string
+    {
+        return self::parse($databaseUrl)['database'];
+    }
+
+    /**
+     * Inserts options right before the `--` end-of-options marker of a command built by this factory.
+     *
+     * @param list<string> $command
+     * @param list<string> $options
+     *
+     * @return list<string>
+     */
+    public static function withOptions(array $command, array $options): array
+    {
+        $marker = array_search('--', $command, true);
+        if (!is_int($marker)) {
+            return [...$command, ...$options];
+        }
+
+        return [...array_slice($command, 0, $marker), ...$options, ...array_slice($command, $marker)];
+    }
+
+    /**
+     * @param list<string> $command binary + leading options
+     * @param array{database: string, host: ?string, port: int, socket: ?string, user: string, pass: string} $connection
+     * @param list<string> $extraOptions
+     *
+     * @return array{command: list<string>, env: array<string, string>}
+     */
+    private static function assemble(array $command, array $connection, bool $skipSslVerifyServerCert, array $extraOptions): array
+    {
+        if ($skipSslVerifyServerCert) {
+            $command[] = '--skip-ssl-verify-server-cert';
+        }
+
+        if ($connection['socket'] !== null) {
+            $command[] = '--socket=' . $connection['socket'];
+        } else {
+            $command[] = '--host=' . (string) $connection['host'];
+            $command[] = '--port=' . $connection['port'];
+        }
+
+        $command[] = '--user=' . $connection['user'];
+        foreach ($extraOptions as $option) {
+            if ($option !== '') {
+                $command[] = $option;
+            }
+        }
+        // End of options: whatever the database name holds, the client reads it as the positional db_name.
+        $command[] = '--';
+        $command[] = $connection['database'];
+
+        return [
+            'command' => $command,
+            'env'     => ['MYSQL_PWD' => $connection['pass']],
+        ];
+    }
+
+    /**
+     * @throws InvalidArgumentException
+     *
+     * @return array{database: string, host: ?string, port: int, socket: ?string, user: string, pass: string}
+     */
+    private static function parse(string $databaseUrl): array
+    {
         $parts = $databaseUrl !== '' ? parse_url($databaseUrl) : false;
         if (!is_array($parts) || !isset($parts['scheme'], $parts['path'])) {
             throw new InvalidArgumentException('DATABASE_URL is missing or invalid.');
@@ -75,35 +176,23 @@ final class MysqlDumpCommandFactory
             parse_str($parts['query'], $query);
         }
         $socket = $query['unix_socket'] ?? null;
+        $socket = is_string($socket) && $socket !== '' ? $socket : null;
 
-        $command = [$binary, '--single-transaction', '--no-tablespaces'];
-        if ($skipSslVerifyServerCert) {
-            $command[] = '--skip-ssl-verify-server-cert';
-        }
-
-        if (is_string($socket) && $socket !== '') {
-            $command[] = '--socket=' . $socket;
-        } else {
+        $host = null;
+        if ($socket === null) {
             if (!isset($parts['host']) || $parts['host'] === '') {
                 throw new InvalidArgumentException('DATABASE_URL has no host.');
             }
-            $command[] = '--host=' . rawurldecode($parts['host']);
-            $command[] = '--port=' . ($parts['port'] ?? 3306);
+            $host = rawurldecode($parts['host']);
         }
-
-        $command[] = '--user=' . rawurldecode((string) ($parts['user'] ?? ''));
-        foreach ($extraOptions as $option) {
-            if ($option !== '') {
-                $command[] = $option;
-            }
-        }
-        // End of options: whatever the database name holds, mysqldump reads it as the positional db_name.
-        $command[] = '--';
-        $command[] = $database;
 
         return [
-            'command' => $command,
-            'env'     => ['MYSQL_PWD' => rawurldecode((string) ($parts['pass'] ?? ''))],
+            'database' => $database,
+            'host'     => $host,
+            'port'     => (int) ($parts['port'] ?? 3306),
+            'socket'   => $socket,
+            'user'     => rawurldecode((string) ($parts['user'] ?? '')),
+            'pass'     => rawurldecode((string) ($parts['pass'] ?? '')),
         ];
     }
 }

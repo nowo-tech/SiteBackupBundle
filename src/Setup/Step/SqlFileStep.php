@@ -4,6 +4,9 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Setup\Step;
 
+use Nowo\SiteBackupBundle\Database\DumpImporter;
+use Nowo\SiteBackupBundle\Exception\BackupAlreadyRunningException;
+use Nowo\SiteBackupBundle\Exception\DumpFailedException;
 use Nowo\SiteBackupBundle\Setup\SetupContext;
 use Nowo\SiteBackupBundle\Setup\SetupStepInput;
 use Nowo\SiteBackupBundle\Setup\SetupStepResult;
@@ -40,6 +43,12 @@ final class SqlFileStep extends AbstractSetupStep
     /** Copied by RestoreOrchestrator; deleted after a successful import. */
     public const RESTORE_DUMP = 'var/site-backup/last-restore-dump.sql';
 
+    /** 1.27 behaviour: the whole file through DBAL executeStatement() (memory grows with the dump). */
+    public const IMPORTER_PDO = 'pdo';
+
+    /** 1.28+: streamed through the `mysql` client ({@see DumpImporter}); constant memory, for large dumps. */
+    public const IMPORTER_CLIENT = 'client';
+
     /**
      * @param list<string> $paths Absolute or project-relative paths / globs
      */
@@ -49,6 +58,8 @@ final class SqlFileStep extends AbstractSetupStep
         private readonly array $paths,
         private readonly bool $ifExists = false,
         private readonly mixed $connection = null,
+        private readonly string $importer = self::IMPORTER_PDO,
+        private readonly ?DumpImporter $dumpImporter = null,
     ) {
         parent::__construct($id, $label);
     }
@@ -78,6 +89,10 @@ final class SqlFileStep extends AbstractSetupStep
             return SetupStepResult::fail('No SQL files matched the configured paths.');
         }
 
+        if ($this->importer === self::IMPORTER_CLIENT) {
+            return $this->importWithClient($ctx, $files);
+        }
+
         if ($this->connection === null || !is_object($this->connection) || !method_exists($this->connection, 'executeStatement')) {
             return SetupStepResult::fail(
                 'SQL import requires a DBAL connection with executeStatement(). Wire doctrine.dbal.default_connection or use a console dump-import command instead.',
@@ -104,6 +119,29 @@ final class SqlFileStep extends AbstractSetupStep
             // Driver messages quote the failing SQL (dump contents); only keep the SQLSTATE.
             return SetupStepResult::fail($this->safeErrorMessage($current, $e), $log);
         }
+    }
+
+    /**
+     * @param list<string> $files
+     */
+    private function importWithClient(SetupContext $ctx, array $files): SetupStepResult
+    {
+        if (!$this->dumpImporter instanceof DumpImporter) {
+            return SetupStepResult::fail('importer: client needs the mysql client importer (nowo_site_backup.backup.database.url).');
+        }
+
+        $log = [];
+        foreach ($files as $file) {
+            try {
+                $this->dumpImporter->import($file);
+            } catch (DumpFailedException|BackupAlreadyRunningException $e) {
+                return SetupStepResult::fail(sprintf('SQL import failed for %s (%s).', basename($file), $e->getMessage()), $log);
+            }
+            $log[] = sprintf('imported: %s', $file);
+            $this->discardRestoreDump($ctx, $file);
+        }
+
+        return SetupStepResult::ok(sprintf('Imported %d SQL file(s).', count($files)), $log);
     }
 
     private function safeErrorMessage(string $file, Throwable $e): string

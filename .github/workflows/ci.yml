@@ -52,12 +52,17 @@ jobs:
       matrix:
         php: ['8.2', '8.3', '8.4', '8.5']
         # Symfony 8.0 reached end of maintenance (July 2026): its CI cell is dropped (REQ-SF-002); composer.json still allows ^8.0.
-        symfony: ['7.4', '8.1']
+        # 8.2 is 8.2.x-dev until the November 2026 stable.
+        symfony: ['7.4', '8.1', '8.2']
         exclude:
           - php: '8.2'
             symfony: '8.1'
           - php: '8.3'
             symfony: '8.1'
+          - php: '8.2'
+            symfony: '8.2'
+          - php: '8.3'
+            symfony: '8.2'
 
     steps:
       - name: Checkout code
@@ -67,7 +72,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: ${{ matrix.php }}
-          extensions: json
+          extensions: json, zip, sodium
           coverage: pcov
           tools: composer:v2
 
@@ -92,6 +97,17 @@ jobs:
         if: startsWith(matrix.symfony, '8.')
         run: composer config platform.php 8.4.1
 
+      # Symfony 8.2 is under development (8.2.x-dev) until November 2026.
+      - name: Allow Symfony 8.2 development packages
+        if: matrix.symfony == '8.2'
+        run: |
+          composer config minimum-stability dev
+          composer config prefer-stable true
+          # symfony/event-dispatcher-contracts v3.8.0 was tagged without ListenerIntrospectionInterface, which
+          # symfony/event-dispatcher 8.2.x-dev already uses ("Interface ... ListenerIntrospectionInterface not found").
+          # Take the contracts from main, aliased into the ^3 range, until a release ships the interface.
+          composer require --dev --no-update "symfony/event-dispatcher-contracts:dev-main as 3.8.99"
+
       - name: Override Composer platform PHP (composer.json pins the minimum PHP for the lock)
         run: composer config platform.php "${{ matrix.php }}.99"
 
@@ -113,6 +129,57 @@ jobs:
         env:
           SYMFONY_DEPRECATIONS_HELPER: 'max[direct]=0'
         run: composer test-coverage
+
+  # REQ-SEC-004 EN-M1: the importer against the REAL Oracle mysql 8.4 and MariaDB 11.8 client binaries.
+  real-mysql-clients:
+    name: Real MySQL clients (EN-M1)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: json, zip, sodium
+          coverage: none
+          tools: composer:v2
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Start MySQL 8.4 and create the client wrappers
+        run: |
+          set -eu
+          PW="ci-$(openssl rand -hex 12)"
+          echo "::add-mask::$PW"
+          docker run -d --name sbb-mysql -p 127.0.0.1:3306:3306 -e MYSQL_ROOT_PASSWORD="$PW" -e MYSQL_DATABASE=beacon mysql:8.4 --mysql-native-password=ON
+          for i in $(seq 1 60); do docker exec -e MYSQL_PWD="$PW" sbb-mysql mysql -uroot -e "SELECT 1" >/dev/null 2>&1 && break; sleep 2; done
+          docker exec -e MYSQL_PWD="$PW" sbb-mysql mysql -uroot -e "CREATE USER 'app'@'%' IDENTIFIED WITH mysql_native_password BY '$PW'; GRANT ALL ON beacon.* TO 'app'@'%';"
+          SHARED="$RUNNER_TEMP/sbb-shared"
+          mkdir -p "$SHARED" "$RUNNER_TEMP/bin"
+          for flavour in oracle mariadb; do
+            if [ "$flavour" = oracle ]; then IMAGE=mysql:8.4; BIN=mysql; else IMAGE=mariadb:11.8; BIN=mariadb; fi
+            docker pull -q "$IMAGE" >/dev/null
+            printf '#!/bin/sh\nexec docker run --rm -i --network host --user %s -e MYSQL_PWD -v "%s:%s" %s %s "$@"\n' "$(id -u):$(id -g)" "$SHARED" "$SHARED" "$IMAGE" "$BIN" > "$RUNNER_TEMP/bin/$flavour-client"
+            chmod +x "$RUNNER_TEMP/bin/$flavour-client"
+            "$RUNNER_TEMP/bin/$flavour-client" --version
+          done
+          {
+            echo "SBB_REAL_DATABASE_URL=mysql://app:$PW@127.0.0.1:3306/beacon"
+            echo "SBB_REAL_SHARED_DIR=$SHARED"
+            echo "SBB_REAL_CLIENT_ORACLE=$RUNNER_TEMP/bin/oracle-client"
+            echo "SBB_REAL_CLIENT_MARIADB=$RUNNER_TEMP/bin/mariadb-client"
+          } >> "$GITHUB_ENV"
+
+      - name: Tampered dumps must not run client commands (system, tee, source)
+        run: vendor/bin/phpunit --no-coverage --display-skipped --fail-on-skipped tests/Integration/RealClient
+
+      - name: Stop MySQL
+        if: always()
+        run: docker rm -f sbb-mysql >/dev/null 2>&1 || true
 
   code-style:
     name: Code Style
@@ -223,7 +290,7 @@ jobs:
         uses: shivammathur/setup-php@v2
         with:
           php-version: '8.2'
-          extensions: json
+          extensions: json, zip, sodium
           coverage: pcov
           tools: composer:v2
 

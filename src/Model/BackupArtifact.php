@@ -6,6 +6,7 @@ namespace Nowo\SiteBackupBundle\Model;
 
 use DateTimeImmutable;
 use InvalidArgumentException;
+use Nowo\SiteBackupBundle\Enum\ArchiveFormat;
 
 use function is_array;
 use function is_int;
@@ -96,6 +97,91 @@ final class BackupArtifact
     public function getCreatedBy(): ?string
     {
         return $this->createdBy;
+    }
+
+    /**
+     * Archive format (1.28+): `meta.format`, else the file name (1.27 archives are `tar.gz`).
+     */
+    public function getFormat(): ArchiveFormat
+    {
+        $format = $this->meta['format'] ?? null;
+        if (is_string($format)) {
+            $known = ArchiveFormat::tryFrom($format);
+            if ($known instanceof ArchiveFormat) {
+                return $known;
+            }
+        }
+
+        return ArchiveFormat::fromFilename($this->filename);
+    }
+
+    /**
+     * `database` | `files` | `database_files` (1.28+). 1.27 archives: derived from the presence of a dump.
+     */
+    public function getContent(): string
+    {
+        $content = $this->meta['content'] ?? null;
+        if (is_string($content) && $content !== '') {
+            return $content;
+        }
+
+        return isset($this->meta['database_dump']) ? 'database_files' : 'files';
+    }
+
+    /**
+     * @return array<string, string> table => `skip` | `structure` (1.28+)
+     */
+    public function getTableRules(): array
+    {
+        $rules = [];
+        $raw   = $this->meta['table_rules'] ?? null;
+        if (is_array($raw)) {
+            foreach ($raw as $table => $rule) {
+                if (is_string($table) && is_string($rule)) {
+                    $rules[$table] = $rule;
+                }
+            }
+        }
+
+        return $rules;
+    }
+
+    /**
+     * Table-rule and secret-path warnings recorded at creation (1.28+); names and reasons only.
+     *
+     * @return list<string>
+     */
+    public function getWarnings(): array
+    {
+        $warnings = [];
+        $raw      = $this->meta['warnings'] ?? null;
+        if (is_array($raw)) {
+            foreach ($raw as $warning) {
+                if (is_string($warning)) {
+                    $warnings[] = $warning;
+                }
+            }
+        }
+
+        return $warnings;
+    }
+
+    /**
+     * SHA-256 of the uncompressed SQL of a `sql.gz` archive (1.28+), else null.
+     */
+    public function getPlaintextSha256(): ?string
+    {
+        $sha = $this->meta['plaintext_sha256'] ?? null;
+
+        return is_string($sha) && $sha !== '' ? $sha : null;
+    }
+
+    /**
+     * Always false in 1.28 (archive passwords arrive in 1.29).
+     */
+    public function isEncrypted(): bool
+    {
+        return ($this->meta['encrypted'] ?? false) === true;
     }
 
     /**
