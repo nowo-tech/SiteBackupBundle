@@ -132,6 +132,10 @@ final class SiteBackupManager
                 throw $e;
             }
             $this->logger->info('SiteBackup: backup created.', $this->context('create', $artifact->getId()) + ['size_bytes' => $artifact->getSizeBytes(), 'operation_id' => $operationId]);
+            // EN-I12: skipped secret paths / external links / table-rule warnings (counts and names only) at notice.
+            foreach ($artifact->getWarnings() as $warning) {
+                $this->logger->notice('SiteBackup: backup warning.', $this->context('create', $artifact->getId()) + ['warning' => $warning]);
+            }
             // @igor-ignore - Service coordinates I/O or request-scoped work; not unsafe worker singleton state.
             $this->historyStorage->append(new BackupHistoryEntry(
                 action: 'create',

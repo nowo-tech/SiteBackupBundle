@@ -138,6 +138,57 @@ jobs:
           SYMFONY_DEPRECATIONS_HELPER: 'max[direct]=0'
         run: composer test-coverage
 
+  # REQ-SEC-004 EN-M1: the importer against the REAL Oracle mysql 8.4 and MariaDB 11.8 client binaries.
+  real-mysql-clients:
+    name: Real MySQL clients (EN-M1)
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: json, zip, sodium
+          coverage: none
+          tools: composer:v2
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Start MySQL 8.4 and create the client wrappers
+        run: |
+          set -eu
+          PW="ci-$(openssl rand -hex 12)"
+          echo "::add-mask::$PW"
+          docker run -d --name sbb-mysql -p 127.0.0.1:3306:3306 -e MYSQL_ROOT_PASSWORD="$PW" -e MYSQL_DATABASE=beacon mysql:8.4 --mysql-native-password=ON
+          for i in $(seq 1 60); do docker exec -e MYSQL_PWD="$PW" sbb-mysql mysql -uroot -e "SELECT 1" >/dev/null 2>&1 && break; sleep 2; done
+          docker exec -e MYSQL_PWD="$PW" sbb-mysql mysql -uroot -e "CREATE USER 'app'@'%' IDENTIFIED WITH mysql_native_password BY '$PW'; GRANT ALL ON beacon.* TO 'app'@'%';"
+          SHARED="$RUNNER_TEMP/sbb-shared"
+          mkdir -p "$SHARED" "$RUNNER_TEMP/bin"
+          for flavour in oracle mariadb; do
+            if [ "$flavour" = oracle ]; then IMAGE=mysql:8.4; BIN=mysql; else IMAGE=mariadb:11.8; BIN=mariadb; fi
+            docker pull -q "$IMAGE" >/dev/null
+            printf '#!/bin/sh\nexec docker run --rm -i --network host --user %s -e MYSQL_PWD -v "%s:%s" %s %s "$@"\n' "$(id -u):$(id -g)" "$SHARED" "$SHARED" "$IMAGE" "$BIN" > "$RUNNER_TEMP/bin/$flavour-client"
+            chmod +x "$RUNNER_TEMP/bin/$flavour-client"
+            "$RUNNER_TEMP/bin/$flavour-client" --version
+          done
+          {
+            echo "SBB_REAL_DATABASE_URL=mysql://app:$PW@127.0.0.1:3306/beacon"
+            echo "SBB_REAL_SHARED_DIR=$SHARED"
+            echo "SBB_REAL_CLIENT_ORACLE=$RUNNER_TEMP/bin/oracle-client"
+            echo "SBB_REAL_CLIENT_MARIADB=$RUNNER_TEMP/bin/mariadb-client"
+          } >> "$GITHUB_ENV"
+
+      - name: Tampered dumps must not run client commands (system, tee, source)
+        run: vendor/bin/phpunit --no-coverage --display-skipped --fail-on-skipped tests/Integration/RealClient
+
+      - name: Stop MySQL
+        if: always()
+        run: docker rm -f sbb-mysql >/dev/null 2>&1 || true
+
   code-style:
     name: Code Style
     runs-on: ubuntu-latest

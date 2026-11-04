@@ -162,8 +162,13 @@ Everything new is opt-in, except the **secrets floor** (owner decision: no secre
   files are skipped. `backup.include_paths` entries with `..` or an absolute path fail the container build.
 - Restore applies only the regular files listed in the archive's MANIFEST and refuses archives with link entries.
 - `backup.extract_limits` (100 GiB, 200 000 entries, ratio 200 above 64 MiB by default) applies to verify / restore.
-- The `mysql` client importer needs a client that can disable client commands: Oracle 8.0.40+ / 8.4.3+ / 9.1+ or
-  MariaDB 10.5.25+ / 10.6.18+ / 10.11.8+ / 11.4.2+ (Debian's current `mariadb-client` qualifies).
+- The `mysql` client importer needs a client that can disable client commands: Oracle 8.0.43+ / 8.4.6+ / 9.4+
+  (`--commands=OFF`) or MariaDB 10.5.25+ / 10.6.18+ / 10.11.8+ / 11.4.2+ (`--sandbox`; Debian's current
+  `mariadb-client` qualifies).
+- Links to directories outside the project (e.g. Deployer / Capistrano `shared/` uploads) are skipped with a warning
+  (logged at notice): back those directories up separately. Hard links are compared with the secret files of the
+  project tree (excluding `vendor/`, `node_modules/`, `var/cache/`, `var/log/`); a hard link to a secret stored
+  elsewhere cannot be recognised.
 - `backup.work_dir` must not be a symlink and must belong to the PHP user.
 
 **Recommended for large databases:**

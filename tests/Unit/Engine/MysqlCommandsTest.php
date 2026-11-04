@@ -229,7 +229,7 @@ final class MysqlCommandsTest extends TestCase
         (new DumpImporter(self::URL, $client))->import($this->dir . '/in.sql');
 
         self::assertSame("INSERT INTO t VALUES (1);\n", file_get_contents($this->dir . '/received.sql'));
-        self::assertSame("--host=db --port=3307 --user=app --batch --system-command=OFF -- beacon\n", file_get_contents($this->dir . '/argv'));
+        self::assertSame("--host=db --port=3307 --user=app --batch --commands=OFF -- beacon\n", file_get_contents($this->dir . '/argv'));
         self::assertSame(EngineFixtures::DB_CANARY . "\n", file_get_contents($this->dir . '/pwd'));
     }
 
