@@ -39,6 +39,7 @@ final class EoResidualsTest extends TestCase
 
         mkdir($this->root . '/open');
         $age = EngineFixtures::fakeAge($this->root . '/open');
+        chmod($age, 0o755);
         chmod($this->root . '/open', 0o777);
         $this->assertRefused(new AgeBinaryEncryptor($age), 'world-writable');
 
@@ -53,7 +54,9 @@ final class EoResidualsTest extends TestCase
     public function testABareNameIsResolvedOnceAndLogged(): void
     {
         mkdir($this->root . '/bin');
-        $age    = (string) realpath(EngineFixtures::fakeAge($this->root . '/bin'));
+        $age = (string) realpath(EngineFixtures::fakeAge($this->root . '/bin'));
+        chmod($this->root . '/bin', 0o755);
+        chmod($age, 0o755);
         $logger = new RecordingLogger();
 
         $path = getenv('PATH');

@@ -15,6 +15,7 @@ use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Process\ExecutableFinder;
 use Symfony\Component\Process\Process;
 
+use function clearstatcache;
 use function dirname;
 use function fclose;
 use function fileperms;
@@ -238,6 +239,8 @@ final class AgeBinaryEncryptor implements ArchiveEncryptorInterface
             }
         }
 
+        // Fresh permissions, not a cached stat (PHP 8.2 keeps the last stat across chmod()).
+        clearstatcache(true);
         $real = realpath($found);
         if ($real === false || !is_file($real) || !is_executable($real)) {
             return null;
