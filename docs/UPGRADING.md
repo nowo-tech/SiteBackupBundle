@@ -3,7 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
-  - [To 1.29.1](#to-1291)
+- [To 1.29.1](#to-1291)
 - [To 1.29.0](#to-1290)
 - [To 1.28.0](#to-1280)
 - [To 1.27.0](#to-1270)
@@ -118,7 +118,9 @@
 
 ## Unreleased
 
-### To 1.29.1
+## To 1.29.1
+
+From **1.28.0** or **1.29.0** (1.29.0 was never tagged; read "To 1.29.0" below for the 1.29 changes).
 
 No configuration change. Encrypted zips are now authenticated entry by entry before extraction on every PHP version
 (PHP < 8.4 used to ignore libzip's HMAC errors): an archive that was modified after it was written now fails verify /
