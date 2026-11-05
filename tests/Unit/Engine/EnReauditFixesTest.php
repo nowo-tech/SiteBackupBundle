@@ -31,6 +31,8 @@ use function str_pad;
 use function str_repeat;
 use function strlen;
 use function substr;
+use function touch;
+use function usleep;
 
 /**
  * Fixes for the re-audit of `ec42e98` (appendix EN, "1.28.0 delta"). Canary values only.
@@ -60,7 +62,8 @@ final class EnReauditFixesTest extends TestCase
      */
     public function testSwappingAFileForASecretDuringTheBackupNeverLeaksIt(): void
     {
-        $flipper = new Process(['sh', '-c', 'cd "$0" && while :; do echo plain > f.tmp; mv -f f.tmp race.txt; ln -sf ../.env.local l.tmp; mv -f l.tmp race.txt; ln -f ../.env.local h.tmp 2>/dev/null && mv -f h.tmp race.txt; done', $this->project . '/public']);
+        // The flipper stops itself when `stop` appears, so no child is still writing while tearDown() cleans up.
+        $flipper = new Process(['sh', '-c', 'cd "$0" && while [ ! -f "$1" ]; do echo plain > f.tmp; mv -f f.tmp race.txt; ln -sf ../.env.local l.tmp; mv -f l.tmp race.txt; ln -f ../.env.local h.tmp 2>/dev/null && mv -f h.tmp race.txt; done', $this->project . '/public', $this->root . '/stop']);
         $flipper->start();
         $archiver = new BackupArchiver($this->project, $this->root . '/storage', ['public'], [], null, 60);
 
@@ -76,6 +79,10 @@ final class EnReauditFixesTest extends TestCase
                 (new Filesystem())->remove([$extract, $artifact->getAbsolutePath()]);
             }
         } finally {
+            touch($this->root . '/stop');
+            for ($wait = 0; $flipper->isRunning() && $wait < 500; ++$wait) {
+                usleep(10_000);
+            }
             $flipper->stop(0);
         }
     }
