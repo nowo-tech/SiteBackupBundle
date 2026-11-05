@@ -68,7 +68,8 @@ The zip central directory (file names, sizes, dates) is not encrypted. For datab
 `MANIFEST.json` (SHA-256 per file) is inside the encrypted archive; the SHA-256 of the archive bytes is in the
 sidecar and in the remote metadata (`nowo-sha256`), so a download can be checked without the password. AE-2 also
 authenticates every entry (HMAC-SHA1) and age every 64 KiB chunk: a wrong password or a modified byte fails the
-extraction. Partial output (libzip writes the entry before its check fails; age stops at the bad chunk) stays inside
+extraction. Since 1.29.1 the bundle checks each zip entry's HMAC itself before extracting (`ZipAesAuthenticator`):
+`ZipArchive::extractTo()` on PHP < 8.4 ignores libzip's authentication errors. Partial output (libzip writes the entry before its check fails; age stops at the bad chunk) stays inside
 the owner-only work directory and is removed.
 
 **No downgrade (EO-M1):** when a password is given, `importArchive()` and `verify --file` accept only an age container

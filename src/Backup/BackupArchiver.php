@@ -1805,19 +1805,14 @@ final class BackupArchiver
                 if ($password === null) {
                     throw new WrongPasswordException('This archive is encrypted: a password is needed.');
                 }
+                // Every entry's HMAC is checked first: extractTo() on PHP < 8.4 ignores libzip's authentication errors.
+                ZipAesAuthenticator::verify($archive, $password);
                 $zip->setPassword($password->reveal());
             }
 
             // The failure is reported below; the extension warning would only repeat it.
+            // EO-I1: wrong passwords and tampered AES entries were told apart by ZipAesAuthenticator above.
             if (!@$zip->extractTo($destination)) {
-                // EO-I1: a wrong password and a tampered entry (CRC / HMAC) are told apart.
-                if ($encrypted && $zip->status === ZipArchive::ER_WRONGPASSWD) {
-                    throw new WrongPasswordException('Unable to decrypt the archive: wrong password.');
-                }
-                if ($encrypted) {
-                    throw new CorruptArchiveException('The encrypted archive failed its integrity check (tampered or truncated).', CorruptArchiveException::CHECKSUM);
-                }
-
                 throw new RuntimeException('zip extract failed.');
             }
         } finally {

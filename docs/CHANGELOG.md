@@ -68,6 +68,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **Zip AES entries are now always authenticated.** On PHP < 8.4, `ZipArchive::extractTo()` ignores libzip's read
+  errors, so an AES-256 entry whose ciphertext had been modified was extracted (as altered plaintext) and reported as
+  success: the WinZip AE HMAC-SHA1 was never enforced. A flipped byte in `MANIFEST.json` (which carries the checksums,
+  not one of its own) then passed `verifyFile()` / `verifyIntegrity()` / import / restore. The new
+  `ZipAesAuthenticator` checks every AES entry's authentication code (and password verifier) in PHP before anything is
+  extracted, on every PHP version, ZIP64 included. Cost: one PBKDF2-SHA1 (1000 iterations) per entry, which libzip
+  also does when it extracts.
+
+### Fixed
+
+- The zip tamper regression test flipped one byte, which hit the case above only on some PHP versions and archive
+  layouts (red CI on main after the 1.29.0 release). It now flips every byte of every encrypted entry and expects an
+  integrity failure (or a wrong password inside the salt / verifier).
+
 ## [1.29.0] - 2026-11-04
 
 Archive passwords, archive import, remote targets, optional Ed25519 signatures and the restore drill (1.29.0,
