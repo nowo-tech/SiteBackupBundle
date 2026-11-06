@@ -69,6 +69,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Security
+
+- **`backup.extract_limits` now holds for zip archives on the bytes really written.** The limit check summed
+  `ZipArchive::statIndex()['size']`, which is only what the archive declares, and `extractTo()` then wrote whatever the
+  deflate data held: a 1 MiB plaintext zip declaring 147 bytes wrote 1 GiB past its 199 MiB limit (ratio 200), and verify and
+  import reported success. Entries that share one compressed stream multiply that, past `max_bytes` too. The same goes for AES-256 zips made by someone who holds the password, because the HMAC does not
+  cover the declared sizes. Entries now go through counted streams: nothing over the limit reaches the disk, and
+  everything the call wrote is removed on failure. Affects 1.28.0, 1.29.0 (never tagged) and 1.29.1: zip reached through
+  `extractTo()`, `verifyIntegrity()` (panel verify and restore, `nowo:site-backup:verify <id>`, `nowo:site-backup:drill`),
+  `verifyFile()` (`nowo:site-backup:verify --file`) and `import()` (`nowo:site-backup:import`). Availability only.
+
+### Changed
+
+- Zip extraction reports a wrong CRC or a damaged entry as `zip extract failed.` on every PHP version. Before, PHP < 8.4
+  ignored these errors and the MANIFEST checksums were the only check. When a zip repeats a name, the last entry wins on
+  every PHP version, as it already did on 8.4+. Paths, modes (the umask, as before: zip extraction has never applied the
+  modes stored in the archive), mtimes and the name, link, mixed-AES and HMAC checks are unchanged.
+
 ## [1.29.1] - 2026-11-05
 
 ### Security

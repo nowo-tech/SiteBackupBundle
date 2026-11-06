@@ -54,6 +54,8 @@ use function deflate_add;
 use function deflate_init;
 use function dirname;
 use function disk_free_space;
+use function error_clear_last;
+use function error_get_last;
 use function escapeshellarg;
 use function explode;
 use function fclose;
@@ -73,6 +75,7 @@ use function hash_equals;
 use function hash_final;
 use function hash_init;
 use function hash_update;
+use function hexdec;
 use function hrtime;
 use function in_array;
 use function inflate_add;
@@ -82,17 +85,21 @@ use function is_dir;
 use function is_file;
 use function is_link;
 use function is_readable;
+use function is_resource;
 use function is_string;
 use function json_decode;
 use function json_encode;
 use function ltrim;
 use function max;
 use function mb_substr;
+use function min;
+use function mkdir;
 use function preg_match;
 use function preg_replace;
 use function random_bytes;
 use function realpath;
 use function rename;
+use function rmdir;
 use function rtrim;
 use function sprintf;
 use function str_contains;
@@ -103,7 +110,9 @@ use function strlen;
 use function strtolower;
 use function substr;
 use function sys_get_temp_dir;
+use function touch;
 use function trim;
+use function unlink;
 
 use const DATE_ATOM;
 use const GLOB_ONLYDIR;
@@ -384,7 +393,7 @@ final class BackupArchiver
      * dropped, and the result is stored as a plain `tar.gz` in the bundle layout, so `restore()` and the panel can use it.
      * The stored copy is plaintext (`0600`, owner-only, owner decision Q-O6): delete it after the restore.
      *
-     * @throws CorruptArchiveException|FormatUnavailableException|WrongPasswordException
+     * @throws CorruptArchiveException|FormatUnavailableException|UnsafeArchiveException|WrongPasswordException
      */
     public function import(string $path, #[SensitiveParameter] ?ArchivePassword $password = null, ?string $createdBy = null, ?ImportOptions $options = null): BackupArtifact
     {
@@ -1753,6 +1762,10 @@ final class BackupArchiver
 
     /**
      * Refuses unsafe names, symlinks and encrypted entries (zip-slip guard), then extracts.
+     *
+     * The size check here only refuses early what the archive admits to: `statIndex()['size']` is what the archive
+     * declares, and neither libzip nor the AES HMAC holds an entry to it. {@see self::writeZipEntries()} enforces
+     * the limits on the bytes really written.
      */
     private function extractZip(string $archive, string $destination, #[SensitiveParameter] ?ArchivePassword $password = null): void
     {
@@ -1805,18 +1818,128 @@ final class BackupArchiver
                 if ($password === null) {
                     throw new WrongPasswordException('This archive is encrypted: a password is needed.');
                 }
-                // Every entry's HMAC is checked first: extractTo() on PHP < 8.4 ignores libzip's authentication errors.
+                // Every entry's HMAC is checked first, before any byte is written.
                 ZipAesAuthenticator::verify($archive, $password);
                 $zip->setPassword($password->reveal());
             }
 
-            // The failure is reported below; the extension warning would only repeat it.
             // EO-I1: wrong passwords and tampered AES entries were told apart by ZipAesAuthenticator above.
-            if (!@$zip->extractTo($destination)) {
-                throw new RuntimeException('zip extract failed.');
-            }
+            $this->writeZipEntries($zip, $destination, $this->decompressedLimit((int) @filesize($archive)));
         } finally {
             $zip->close();
+        }
+    }
+
+    /**
+     * Same result as `ZipArchive::extractTo()` (paths, umask modes, mtimes, no modes from the archive), but through
+     * counted streams: nothing past `backup.extract_limits` reaches the disk, whatever the entries declare. On any
+     * failure everything this call wrote is removed.
+     */
+    private function writeZipEntries(ZipArchive $zip, string $destination, int $limit): void
+    {
+        $written = 0;
+        /** @var list<string> $paths what this call created, parents first */
+        $paths = [];
+
+        try {
+            for ($i = 0; $i < $zip->numFiles; ++$i) {
+                $stat = $zip->statIndex($i);
+                if ($stat === false) {
+                    throw new RuntimeException('zip extract failed.');
+                }
+                $name     = $stat['name'];
+                $segments = array_filter(explode('/', $name), static fn (string $segment): bool => $segment !== '' && $segment !== '.');
+                $target   = rtrim($destination . '/' . implode('/', $segments), '/');
+                if (str_ends_with($name, '/')) {
+                    self::makeZipDirectory($target, $paths);
+                    continue;
+                }
+                if ($segments === []) {
+                    throw new RuntimeException('zip extract failed.');
+                }
+                self::makeZipDirectory(dirname($target), $paths);
+                $written += self::writeZipEntry($zip, $i, $stat, $target, $limit - $written, $paths);
+            }
+        } catch (Throwable $e) {
+            foreach (array_reverse($paths) as $path) {
+                is_dir($path) && !is_link($path) ? @rmdir($path) : @unlink($path);
+            }
+
+            throw $e;
+        }
+    }
+
+    /**
+     * @param array<string, mixed> $stat the entry's `statIndex()`
+     * @param int $room bytes still allowed by the limits
+     * @param list<string> $paths
+     *
+     * @return int bytes written
+     */
+    private static function writeZipEntry(ZipArchive $zip, int $index, array $stat, string $target, int $room, array &$paths): int
+    {
+        // The default password set on $zip applies to the stream.
+        $in = @$zip->getStreamIndex($index);
+        if (!is_resource($in)) {
+            throw new RuntimeException('zip extract failed.');
+        }
+        $out = @fopen($target, 'w');
+        if ($out === false) {
+            fclose($in);
+
+            throw new RuntimeException('zip extract failed.');
+        }
+        $paths[] = $target;
+        // A zip stream stops at its last short read, before libzip compares the CRC, so it is compared here. AES-256
+        // entries were authenticated by ZipAesAuthenticator, and AE-2 entries carry no CRC.
+        $crc     = ($stat['encryption_method'] ?? ZipArchive::EM_NONE) === ZipArchive::EM_NONE ? hash_init('crc32b') : null;
+        $written = 0;
+        $failed  = false;
+
+        try {
+            while (!$failed && !feof($in)) {
+                // A read error is only a warning here, and feof() is true after it.
+                error_clear_last();
+                $chunk  = (string) @fread($in, self::STREAM_CHUNK_BYTES);
+                $failed = error_get_last() !== null;
+                $written += strlen($chunk);
+                if ($written > $room) {
+                    throw new UnsafeArchiveException('The decompressed size exceeds backup.extract_limits.');
+                }
+                $failed = @fwrite($out, $chunk) !== strlen($chunk) || $failed;
+                if ($crc !== null) {
+                    hash_update($crc, $chunk);
+                }
+            }
+        } finally {
+            fclose($in);
+            fclose($out);
+        }
+
+        if ($failed || ($crc !== null && (int) hexdec(hash_final($crc)) !== (int) $stat['crc'])) {
+            throw new RuntimeException('zip extract failed.');
+        }
+        @touch($target, (int) $stat['mtime']);
+
+        return $written;
+    }
+
+    /**
+     * @param list<string> $paths receives the directories this call creates, parents first
+     */
+    private static function makeZipDirectory(string $directory, array &$paths): void
+    {
+        if (is_dir($directory)) {
+            return;
+        }
+        $missing = [];
+        for ($path = $directory; !file_exists($path) && $path !== dirname($path); $path = dirname($path)) {
+            $missing[] = $path;
+        }
+        array_push($paths, ...array_reverse($missing));
+        // 0777 less the umask, as `ZipArchive::extractTo()` does; callers extract under an owner-only directory.
+        if (!@mkdir($directory, 0o777, true)) {
+            throw new RuntimeException('zip extract failed.');
         }
     }
 
