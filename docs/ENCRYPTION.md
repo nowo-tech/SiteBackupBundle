@@ -68,11 +68,13 @@ The zip central directory (file names, sizes, dates) is not encrypted. For datab
 `MANIFEST.json` (SHA-256 per file) is inside the encrypted archive; the SHA-256 of the archive bytes is in the
 sidecar and in the remote metadata (`nowo-sha256`), so a download can be checked without the password. AE-2 also
 authenticates every entry (HMAC-SHA1) and age every 64 KiB chunk: a wrong password or a modified byte fails the
-extraction. Since 1.29.1 the bundle checks each zip entry's HMAC itself before extracting (`ZipAesAuthenticator`):
-`ZipArchive::extractTo()` on PHP < 8.4 ignores libzip's authentication errors. Partial output (libzip writes the entry before its check fails; age stops at the bad chunk) stays inside
+extraction. The bundle checks each zip entry's HMAC itself before extracting (`ZipAesAuthenticator`, on the raw bytes libzip reads):
+`ZipArchive::extractTo()` on PHP < 8.4 ignores libzip's authentication errors. In 1.29.1 this check could be bypassed by
+an end record planted in the zip comment (see [UPGRADING.md](UPGRADING.md#unreleased)). The HMAC covers the ciphertext
+only, not names or sizes. Partial output (libzip writes the entry before its check fails; age stops at the bad chunk) stays inside
 the owner-only work directory and is removed.
 
-**No downgrade (EO-M1):** when a password is given, `importArchive()` and `verify --file` accept only an age container
+**No downgrade (EO-M1):** when a password is given, every path (import, verify, `extractTo()`, the drill) accepts only an age container
 or a zip whose **every** entry is AES-256; a plaintext archive is refused (exit 5) unless `allowPlaintext` /
 `--allow-plaintext`, and a zip mixing AES and plaintext entries is always refused. Whether an import was encrypted
 comes from the container, never from the MANIFEST.

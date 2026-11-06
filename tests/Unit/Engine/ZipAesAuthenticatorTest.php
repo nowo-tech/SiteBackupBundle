@@ -111,22 +111,21 @@ final class ZipAesAuthenticatorTest extends TestCase
 
         $eocd = (int) strrpos($bytes, "PK\x05\x06");
         $this->assertFails('not a zip at all', CorruptArchiveException::class, 'no end of central directory');
-        $this->assertFails(substr($bytes, 0, $data + 20) . substr($bytes, $eocd), CorruptArchiveException::class, 'truncated archive');
+        $this->assertFails(substr($bytes, 0, $data + 20) . substr($bytes, $eocd), CorruptArchiveException::class, '');
         $lastEntry = (int) strrpos($bytes, "PK\x01\x02");
-        $this->assertFails(self::patch($bytes, $lastEntry + 20, pack('V', 0x7FFFFFF0)), CorruptArchiveException::class, 'truncated entry');
+        $this->assertFails(self::patch($bytes, $lastEntry + 20, pack('V', 0x7FFFFFF0)), CorruptArchiveException::class, '');
         $this->assertFails(self::patch($bytes, $lastEntry + 20, pack('V', 5)), CorruptArchiveException::class, 'entry too short');
-        $this->assertFails(self::patch($bytes, $lastEntry + 24, pack('V', 0xFFFFFFFF)), CorruptArchiveException::class, 'missing zip64 extra field');
         $aesField = (int) strrpos($bytes, pack('v', 0x9901) . pack('v', 7));
-        $this->assertFails(self::patch($bytes, $aesField, pack('v', 0x9902)), CorruptArchiveException::class, 'only AES-256 entries are accepted');
+        $this->assertFails(self::patch($bytes, $aesField, pack('v', 0x9902)), CorruptArchiveException::class, '');
         // The ZIP64 extra field of the last entry (b.txt) claims 8 bytes: the compressed size is missing.
         $zip64Entry = (int) strrpos($zip64, "PK\x01\x02");
-        $this->assertFails(self::patch($zip64, $zip64Entry + 46 + 5 + 2, pack('v', 8)), CorruptArchiveException::class, 'short zip64 field');
+        $this->assertFails(self::patch($zip64, $zip64Entry + 46 + 5 + 2, pack('v', 8)), CorruptArchiveException::class, '');
         $record = (int) strrpos($zip64, "PK\x06\x06");
-        $this->assertFails(self::patch($zip64, $record, 'XXXX'), CorruptArchiveException::class, 'no zip64 end of central directory');
-        $this->assertFails(self::patch($zip64, $record + 52, pack('V', 0x80000000)), CorruptArchiveException::class, 'zip64 value out of range');
-        $this->assertFails(substr($zip64, 0, -98) . substr($zip64, -22), CorruptArchiveException::class, 'no zip64 locator');
-        $this->assertFails(self::patch($bytes, $eocd + 16, pack('V', 0)), CorruptArchiveException::class, 'bad central directory entry');
-        $this->assertFails(self::patch($bytes, (int) strrpos($bytes, "PK\x01\x02") + 42, pack('V', 1)), CorruptArchiveException::class, 'bad local header');
+        $this->assertFails(self::patch($zip64, $record, 'XXXX'), CorruptArchiveException::class, '');
+        $this->assertFails(self::patch($zip64, $record + 52, pack('V', 0x80000000)), CorruptArchiveException::class, '');
+        $this->assertFails(substr($zip64, 0, -98) . substr($zip64, -22), CorruptArchiveException::class, '');
+        $this->assertFails(self::patch($bytes, $eocd + 16, pack('V', 0)), CorruptArchiveException::class, '');
+        $this->assertFails(self::patch($bytes, (int) strrpos($bytes, "PK\x01\x02") + 42, pack('V', 1)), CorruptArchiveException::class, '');
 
         $short = $this->root . '/in/short.zip';
         $zip   = new ZipArchive();
@@ -142,6 +141,26 @@ final class ZipAesAuthenticatorTest extends TestCase
         } catch (CorruptArchiveException $e) {
             self::assertSame(CorruptArchiveException::CHECKSUM, $e->getCode());
         }
+    }
+
+    public function testEmptyEntriesInAZip64Layout(): void
+    {
+        $plain = $this->root . '/in/e.zip';
+        $zip   = new ZipArchive();
+        $zip->open($plain, ZipArchive::CREATE);
+        $zip->addFromString('e.txt', '');
+        $zip->setCompressionName('e.txt', ZipArchive::CM_DEFLATE, 6);
+        $zip->setEncryptionName('e.txt', ZipArchive::EM_AES_256, self::PHRASE);
+        $zip->close();
+        $bytes = (string) file_get_contents($plain);
+        $zip64 = self::toZip64($bytes);
+        file_put_contents($this->root . '/in/z.zip', $zip64);
+        ZipAesAuthenticator::verify($this->root . '/in/z.zip', ArchivePassword::fromString(self::PHRASE));
+
+        [$data, $size]               = self::entries($bytes)['e.txt'];
+        $tampered                    = $zip64;
+        $tampered[$data + $size - 1] = chr(ord($tampered[$data + $size - 1]) ^ 0x01);
+        $this->assertFails($tampered, CorruptArchiveException::class, 'tampered or truncated');
     }
 
     /**

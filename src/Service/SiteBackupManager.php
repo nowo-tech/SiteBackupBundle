@@ -231,17 +231,18 @@ final class SiteBackupManager
 
     /**
      * @param ArchivePassword|null $password 1.29+: needed for an encrypted (zip AES) archive
+     * @param bool $allowPlaintext with a password, also accept an archive that is not encrypted
      *
      * @return array{ok: bool, errors: list<string>, checksums: array<string, string>}
      */
-    public function verifyBackup(string $id, #[SensitiveParameter] ?ArchivePassword $password = null): array
+    public function verifyBackup(string $id, #[SensitiveParameter] ?ArchivePassword $password = null, bool $allowPlaintext = false): array
     {
         $artifact = $this->archiver->find($id);
         if (!$artifact instanceof BackupArtifact) {
             return ['ok' => false, 'errors' => [sprintf('Backup "%s" not found.', $id)], 'checksums' => []];
         }
 
-        return $this->archiver->verifyIntegrity($artifact, null, $password);
+        return $this->archiver->verifyIntegrity($artifact, null, $password, $allowPlaintext);
     }
 
     /**

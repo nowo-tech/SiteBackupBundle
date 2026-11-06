@@ -118,6 +118,45 @@
 
 ## Unreleased
 
+No configuration change, and valid zip backups extract exactly as before into a fresh directory, which is what every
+flow of the bundle uses.
+
+**Security fix for zip archives.** Versions 1.28.0, 1.29.0 and 1.29.1 checked `backup.extract_limits` on the sizes a zip
+declares, not on what it writes, so a small zip could fill the disk under `backup.work_dir` (the system temp dir by
+default) during verify, import, restore or a drill. Now the limits hold on the bytes written, and `UnsafeArchiveException`
+can be raised during extraction as well as before it; the partial output is removed.
+
+What you may notice:
+
+- A zip that used to pass with a false declared size and more bytes than the limits allow is now refused.
+- On PHP < 8.4, a plaintext zip with a wrong CRC or a damaged entry now fails with `zip extract failed.`, as it already
+  did on 8.4+, instead of reaching the MANIFEST check.
+- **Calling `BackupArchiver::extractTo()` yourself on a zip:** a target that already exists, or a link on the way to one,
+  now fails with `zip extract failed.`. It used to overwrite, and to write through links. Extract into a fresh directory.
+- **Passing a password with a plaintext archive:** `extractTo()`, `verifyIntegrity()`, `verifyBackup()`, `verify <id>` and
+  the drill now refuse it (`CorruptArchiveException`, code `NOT_ENCRYPTED`), as import and `verify --file` already did.
+  Drop the password, or pass `allowPlaintext` / `--allow-plaintext`. The drill has no such option: drop the password.
+- `verifyIntegrity()` returns only the SHA-256 or signature error when one of those fails. It no longer extracts, so it
+  does not add MANIFEST errors to it.
+- An AES-256 zip with data after its end record, or a comment holding `PK\x05\x06`, is refused. The bundle never writes
+  either.
+
+**Security fix for AES-256 zips (1.29.1 only).** The authentication added in 1.29.1 could be turned off by bytes planted
+in the zip comment, without the password. Until you upgrade, do not rely on it for an archive you cannot trust. Check the
+archive with `--sha256` or a signature first, as below. A `sha256` you stored in a sidecar next to the archive proves
+nothing if the same person can write both.
+
+Until you can upgrade:
+
+- Only import or verify zip archives you made yourself. Check them first with `nowo:site-backup:verify --file=<zip>
+  --sha256=<known hash>`, or `--require-signature` with a signed sidecar (or set `backup.signing.required` for import and
+  verify `--file`): those checks run before anything is extracted. Before this release, `verify <id>` and the panel
+  extract even when the SHA-256 or the signature fails, so they are no protection for a zip planted in `storage_dir`.
+- Do not pass untrusted uploads to `SiteBackupManager::importArchive()` or `verifyFile()`. The bundle itself has no upload
+  route.
+- Put `backup.work_dir` on its own size-limited file system or quota, so that a bomb cannot starve the rest of the host.
+- Keep `storage_dir` writable by the application user only.
+
 ## To 1.29.1
 
 From **1.28.0** or **1.29.0** (1.29.0 was never tagged; read "To 1.29.0" below for the 1.29 changes).

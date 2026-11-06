@@ -85,9 +85,13 @@ final class AgeEncryptionTest extends TestCase
         foreach ($seen as $process) {
             self::assertStringNotContainsString(self::PHRASE, $process['cmdline']);
             self::assertStringNotContainsString(self::PHRASE, $process['environ']);
-            self::assertStringContainsString('AGE_PASSPHRASE_FD=3', $process['environ']);
             self::assertStringNotContainsString('AGE_PASSPHRASE=', str_replace('AGE_PASSPHRASE_', '', $process['environ']));
+            // Other children of this PHP process (left by earlier tests) have their own environment: age's is what counts.
+            if (str_contains($process['cmdline'], $age)) {
+                self::assertStringContainsString('AGE_PASSPHRASE_FD=3', $process['environ']);
+            }
         }
+        self::assertNotSame([], array_filter($seen, static fn (array $process): bool => str_contains($process['cmdline'], $age)), 'age itself was observed');
     }
 
     public function testAvailabilityChecks(): void
