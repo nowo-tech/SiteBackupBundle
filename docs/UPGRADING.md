@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.30.0](#to-1300)
 - [To 1.29.1](#to-1291)
 - [To 1.29.0](#to-1290)
 - [To 1.28.0](#to-1280)
@@ -117,6 +118,14 @@
   - [Breaking changes](#breaking-changes-1)
 
 ## Unreleased
+
+## To 1.30.0
+
+From **1.29.1**:
+
+```bash
+composer update nowo-tech/site-backup-bundle
+```
 
 No configuration change, and valid zip backups extract exactly as before into a fresh directory, which is what every
 flow of the bundle uses.

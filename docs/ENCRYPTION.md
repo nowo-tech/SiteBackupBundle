@@ -70,7 +70,7 @@ sidecar and in the remote metadata (`nowo-sha256`), so a download can be checked
 authenticates every entry (HMAC-SHA1) and age every 64 KiB chunk: a wrong password or a modified byte fails the
 extraction. The bundle checks each zip entry's HMAC itself before extracting (`ZipAesAuthenticator`, on the raw bytes libzip reads):
 `ZipArchive::extractTo()` on PHP < 8.4 ignores libzip's authentication errors. In 1.29.1 this check could be bypassed by
-an end record planted in the zip comment (see [UPGRADING.md](UPGRADING.md#unreleased)). The HMAC covers the ciphertext
+an end record planted in the zip comment (see [UPGRADING.md](UPGRADING.md#to-1300)). The HMAC covers the ciphertext
 only, not names or sizes. Partial output (libzip writes the entry before its check fails; age stops at the bad chunk) stays inside
 the owner-only work directory and is removed.
 
