@@ -52,7 +52,7 @@ final class VerifyBackupCommand extends Command
             ->addOption('file', null, InputOption::VALUE_REQUIRED, 'Verify this archive file instead (zip, tar.gz, sql.gz, .age)')
             ->addOption('sha256', null, InputOption::VALUE_REQUIRED, 'Expected SHA-256 of the archive file (--file)')
             ->addOption('sidecar', null, InputOption::VALUE_REQUIRED, 'Its .backup.json / .meta.json (--file): checksums and signature')
-            ->addOption('allow-plaintext', null, InputOption::VALUE_NONE, 'With a password, also accept an archive that is not encrypted (--file)')
+            ->addOption('allow-plaintext', null, InputOption::VALUE_NONE, 'With a password, also accept an archive that is not encrypted')
             ->addOption('require-signature', null, InputOption::VALUE_NEGATABLE, 'Require a valid signed sidecar (--file; default: backup.signing.required)');
         PasswordInput::configure($this);
     }
@@ -83,7 +83,7 @@ final class VerifyBackupCommand extends Command
             return Command::INVALID;
         }
 
-        $result = $this->manager->verifyBackup($id, $password);
+        $result = $this->manager->verifyBackup($id, $password, (bool) $input->getOption('allow-plaintext'));
         $password?->wipe();
         if ($result['ok']) {
             $io->success(sprintf('Integrity OK (%d files).', count($result['checksums'])));

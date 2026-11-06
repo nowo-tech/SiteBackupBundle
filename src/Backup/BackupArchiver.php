@@ -44,6 +44,7 @@ use ZipArchive;
 use function array_filter;
 use function array_keys;
 use function array_merge;
+use function array_pop;
 use function array_reverse;
 use function array_unique;
 use function array_values;
@@ -582,10 +583,10 @@ final class BackupArchiver
         }
         // EO-M1: with a password, only a fully encrypted container is accepted (no plaintext or mixed downgrade).
         if ($password !== null && $encryption === null && !$allowPlaintext) {
-            throw new CorruptArchiveException('A password was given but the archive is not encrypted (possible downgrade); pass allowPlaintext to accept it.', CorruptArchiveException::NOT_ENCRYPTED);
+            throw self::plaintextWithPassword();
         }
         match ($source) {
-            ArchiveFormat::Zip   => $this->extractZip($plainPath, $payloadDir, $password),
+            ArchiveFormat::Zip   => $this->extractZip($plainPath, $payloadDir, $password, $allowPlaintext),
             ArchiveFormat::TarGz => $this->extractTarGzSafely($plainPath, $payloadDir),
             ArchiveFormat::SqlGz => $this->gunzipFile($plainPath, $payloadDir . '/database/dump.sql', null),
         };
@@ -597,6 +598,11 @@ final class BackupArchiver
         [$checksums, $original] = $this->importedChecksums($payloadDir, $source, $dropped);
 
         return ['source' => $source, 'encryption' => $encryption, 'dropped' => $dropped, 'checksums' => $checksums, 'original' => $original];
+    }
+
+    private static function plaintextWithPassword(): CorruptArchiveException
+    {
+        return new CorruptArchiveException('A password was given but the archive is not encrypted (possible downgrade); pass allowPlaintext to accept it.', CorruptArchiveException::NOT_ENCRYPTED);
     }
 
     /**
@@ -768,15 +774,15 @@ final class BackupArchiver
      */
     private function extractTarGzSafely(string $archive, string $destination): void
     {
-        $listing = new Process([$this->tarBinary, '-tvzf', $archive]);
-        ProcessDeadline::run($listing, $this->processTimeoutSeconds);
-        if (!$listing->isSuccessful()) {
-            throw new CorruptArchiveException('The tar.gz archive cannot be listed.');
-        }
-        foreach (explode("\n", trim($listing->getOutput())) as $line) {
-            if ($line !== '' && ($line[0] === 'l' || $line[0] === 'h')) {
+        $entries = 0;
+        $listed  = $this->scanTarListing($archive, null, function (string $line) use (&$entries): void {
+            if ($line[0] === 'l' || $line[0] === 'h') {
                 throw new CorruptArchiveException('Links are not allowed in an imported archive.');
             }
+            $this->countTarEntry($entries);
+        });
+        if (!$listed) {
+            throw new CorruptArchiveException('The tar.gz archive cannot be listed.');
         }
 
         $names = new Process([$this->tarBinary, '-tzf', $archive]);
@@ -950,8 +956,8 @@ final class BackupArchiver
     }
 
     /**
-     * Verifies archive SHA-256 and every MANIFEST entry after extract to a temp dir (`sql.gz`: the SHA-256 of the
-     * decompressed SQL against the sidecar).
+     * Verifies archive SHA-256 and signature, then every MANIFEST entry after extract to a temp dir (`sql.gz`: the
+     * SHA-256 of the decompressed SQL against the sidecar). An archive that fails the first two is not extracted.
      *
      * @param (callable(): void)|null $heartbeat called regularly while hashing and extracting (each hashed chunk,
      *                                           each manifest file, every poll of the running tar process) so a caller
@@ -959,7 +965,7 @@ final class BackupArchiver
      *
      * @return array{ok: bool, errors: list<string>, checksums: array<string, string>}
      */
-    public function verifyIntegrity(BackupArtifact $artifact, ?callable $heartbeat = null, #[SensitiveParameter] ?ArchivePassword $password = null): array
+    public function verifyIntegrity(BackupArtifact $artifact, ?callable $heartbeat = null, #[SensitiveParameter] ?ArchivePassword $password = null, bool $allowPlaintext = false): array
     {
         $errors = [];
         if (!is_file($artifact->getAbsolutePath())) {
@@ -979,11 +985,15 @@ final class BackupArchiver
             // EO-M2: stripping the signature from a sidecar is not a way around a required signature.
             $errors[] = 'Signature missing: a signed sidecar is required (backup.signing.required).';
         }
+        // Nothing is unpacked from bytes that are already known not to be the backup.
+        if ($errors !== []) {
+            return ['ok' => false, 'errors' => $errors, 'checksums' => []];
+        }
 
         $extractDir = PrivateTempDirectory::create(self::WORK_DIR_PREFIX . 'verify-' . $artifact->getId() . '-', $this->workRoot());
 
         try {
-            $this->extractTo($artifact, $extractDir, $heartbeat, $password);
+            $this->extractTo($artifact, $extractDir, $heartbeat, $password, $allowPlaintext);
 
             if ($artifact->getFormat() === ArchiveFormat::SqlGz) {
                 $got      = $this->hashFile($extractDir . '/database/dump.sql', $heartbeat);
@@ -1039,9 +1049,13 @@ final class BackupArchiver
     /**
      * Extracts an archive of any format into $destinationDir (`sql.gz` → `database/dump.sql`).
      *
+     * With a password, an archive that is not encrypted is refused unless $allowPlaintext. A `zip` never writes over a
+     * path that already exists or through a link in the destination, and removes only what it created when it fails:
+     * extract into a fresh directory.
+     *
      * @param (callable(): void)|null $heartbeat called while tar is running (see verifyIntegrity())
      */
-    public function extractTo(BackupArtifact $artifact, string $destinationDir, ?callable $heartbeat = null, #[SensitiveParameter] ?ArchivePassword $password = null): void
+    public function extractTo(BackupArtifact $artifact, string $destinationDir, ?callable $heartbeat = null, #[SensitiveParameter] ?ArchivePassword $password = null, bool $allowPlaintext = false): void
     {
         $this->filesystem->mkdir($destinationDir);
 
@@ -1054,11 +1068,13 @@ final class BackupArchiver
             $decrypted = PrivateTempDirectory::create(self::WORK_DIR_PREFIX . 'decrypt-', $this->workRoot());
             $source    = $decrypted . '/plain';
             $this->requireEncryptor()->decrypt($artifact->getAbsolutePath(), $source, $password, $heartbeat);
+        } elseif ($password !== null && !$allowPlaintext && $artifact->getFormat() !== ArchiveFormat::Zip) {
+            throw self::plaintextWithPassword();
         }
 
         try {
             match ($artifact->getFormat()) {
-                ArchiveFormat::Zip   => $this->extractZip($source, $destinationDir, $password),
+                ArchiveFormat::Zip   => $this->extractZip($source, $destinationDir, $password, $allowPlaintext),
                 ArchiveFormat::SqlGz => $this->gunzipFile($source, $destinationDir . '/database/dump.sql', $heartbeat),
                 ArchiveFormat::TarGz => $this->extractTarGz($source, $destinationDir, $heartbeat),
             };
@@ -1767,7 +1783,7 @@ final class BackupArchiver
      * declares, and neither libzip nor the AES HMAC holds an entry to it. {@see self::writeZipEntries()} enforces
      * the limits on the bytes really written.
      */
-    private function extractZip(string $archive, string $destination, #[SensitiveParameter] ?ArchivePassword $password = null): void
+    private function extractZip(string $archive, string $destination, #[SensitiveParameter] ?ArchivePassword $password = null, bool $allowPlaintext = false): void
     {
         if (!class_exists(ZipArchive::class)) {
             throw new FormatUnavailableException('The zip format needs ext-zip.');
@@ -1814,12 +1830,16 @@ final class BackupArchiver
             if ($encrypted && $plainEntries) {
                 throw new CorruptArchiveException('The zip mixes AES-256 and plaintext entries.', CorruptArchiveException::NOT_ENCRYPTED);
             }
+            // EO-M1, on every path: with a password, only a fully encrypted container is accepted.
+            if ($password !== null && !$encrypted && !$allowPlaintext) {
+                throw self::plaintextWithPassword();
+            }
             if ($encrypted) {
                 if ($password === null) {
                     throw new WrongPasswordException('This archive is encrypted: a password is needed.');
                 }
                 // Every entry's HMAC is checked first, before any byte is written.
-                ZipAesAuthenticator::verify($archive, $password);
+                ZipAesAuthenticator::verify($archive, $password, $zip);
                 $zip->setPassword($password->reveal());
             }
 
@@ -1831,15 +1851,16 @@ final class BackupArchiver
     }
 
     /**
-     * Same result as `ZipArchive::extractTo()` (paths, umask modes, mtimes, no modes from the archive), but through
-     * counted streams: nothing past `backup.extract_limits` reaches the disk, whatever the entries declare. On any
-     * failure everything this call wrote is removed.
+     * Same result as `ZipArchive::extractTo()` in a fresh directory (paths, umask modes, mtimes, no modes from the
+     * archive), but through counted streams: nothing past `backup.extract_limits` reaches the disk, whatever the
+     * entries declare. A path that already exists, or a link on the way to one, fails the extraction, and a failure
+     * removes what this call created and nothing else.
      */
     private function writeZipEntries(ZipArchive $zip, string $destination, int $limit): void
     {
         $written = 0;
-        /** @var list<string> $paths what this call created, parents first */
-        $paths = [];
+        /** @var array<string, true> $created what this call created, parents first */
+        $created = [];
 
         try {
             for ($i = 0; $i < $zip->numFiles; ++$i) {
@@ -1848,21 +1869,21 @@ final class BackupArchiver
                     throw new RuntimeException('zip extract failed.');
                 }
                 $name     = $stat['name'];
-                $segments = array_filter(explode('/', $name), static fn (string $segment): bool => $segment !== '' && $segment !== '.');
-                $target   = rtrim($destination . '/' . implode('/', $segments), '/');
+                $segments = array_values(array_filter(explode('/', $name), static fn (string $segment): bool => $segment !== '' && $segment !== '.'));
                 if (str_ends_with($name, '/')) {
-                    self::makeZipDirectory($target, $paths);
+                    self::makeZipDirectories($destination, $segments, $created);
                     continue;
                 }
-                if ($segments === []) {
+                $file = array_pop($segments);
+                if ($file === null) {
                     throw new RuntimeException('zip extract failed.');
                 }
-                self::makeZipDirectory(dirname($target), $paths);
-                $written += self::writeZipEntry($zip, $i, $stat, $target, $limit - $written, $paths);
+                $directory = self::makeZipDirectories($destination, $segments, $created);
+                $written += self::writeZipEntry($zip, $i, $stat, $directory . '/' . $file, $limit - $written, $created);
             }
         } catch (Throwable $e) {
-            foreach (array_reverse($paths) as $path) {
-                is_dir($path) && !is_link($path) ? @rmdir($path) : @unlink($path);
+            foreach (array_reverse(array_keys($created)) as $path) {
+                is_dir($path) ? @rmdir($path) : @unlink($path);
             }
 
             throw $e;
@@ -1872,24 +1893,25 @@ final class BackupArchiver
     /**
      * @param array<string, mixed> $stat the entry's `statIndex()`
      * @param int $room bytes still allowed by the limits
-     * @param list<string> $paths
+     * @param array<string, true> $created
      *
      * @return int bytes written
      */
-    private static function writeZipEntry(ZipArchive $zip, int $index, array $stat, string $target, int $room, array &$paths): int
+    private static function writeZipEntry(ZipArchive $zip, int $index, array $stat, string $target, int $room, array &$created): int
     {
         // The default password set on $zip applies to the stream.
         $in = @$zip->getStreamIndex($index);
         if (!is_resource($in)) {
             throw new RuntimeException('zip extract failed.');
         }
-        $out = @fopen($target, 'w');
+        // Exclusive: never over a file or through a link that was already there. Only a repeated name reopens a file.
+        $out = @fopen($target, isset($created[$target]) ? 'w' : 'x');
         if ($out === false) {
             fclose($in);
 
             throw new RuntimeException('zip extract failed.');
         }
-        $paths[] = $target;
+        $created[$target] = true;
         // A zip stream stops at its last short read, before libzip compares the CRC, so it is compared here. AES-256
         // entries were authenticated by ZipAesAuthenticator, and AE-2 entries carry no CRC.
         $crc     = ($stat['encryption_method'] ?? ZipArchive::EM_NONE) === ZipArchive::EM_NONE ? hash_init('crc32b') : null;
@@ -1925,22 +1947,32 @@ final class BackupArchiver
     }
 
     /**
-     * @param list<string> $paths receives the directories this call creates, parents first
+     * Creates the missing directories below $destination, refusing a link or a file on the way. 0777 less the umask, as
+     * `ZipArchive::extractTo()` does; the bundle extracts under owner-only directories.
+     *
+     * @param list<string> $segments
+     * @param array<string, true> $created receives the directories this call creates, parents first
+     *
+     * @return string the deepest directory
      */
-    private static function makeZipDirectory(string $directory, array &$paths): void
+    private static function makeZipDirectories(string $destination, array $segments, array &$created): string
     {
-        if (is_dir($directory)) {
-            return;
+        $path = $destination;
+        foreach ($segments as $segment) {
+            $path .= '/' . $segment;
+            if (is_link($path)) {
+                throw new RuntimeException('zip extract failed.');
+            }
+            if (is_dir($path)) {
+                continue;
+            }
+            if (!@mkdir($path, 0o777)) {
+                throw new RuntimeException('zip extract failed.');
+            }
+            $created[$path] = true;
         }
-        $missing = [];
-        for ($path = $directory; !file_exists($path) && $path !== dirname($path); $path = dirname($path)) {
-            $missing[] = $path;
-        }
-        array_push($paths, ...array_reverse($missing));
-        // 0777 less the umask, as `ZipArchive::extractTo()` does; callers extract under an owner-only directory.
-        if (!@mkdir($directory, 0o777, true)) {
-            throw new RuntimeException('zip extract failed.');
-        }
+
+        return $path;
     }
 
     /**
@@ -2007,23 +2039,15 @@ final class BackupArchiver
      */
     private function assertSafeTar(string $archive, ?callable $heartbeat): void
     {
-        $listing = new Process([$this->tarBinary, '-tvzf', $archive]);
-        ProcessDeadline::run($listing, $this->processTimeoutSeconds, $heartbeat);
-        if (!$listing->isSuccessful()) {
-            throw new UnsafeArchiveException('The tar.gz archive cannot be listed.');
-        }
-
         $entries = 0;
-        foreach (explode("\n", trim($listing->getOutput())) as $line) {
-            if ($line === '') {
-                continue;
-            }
+        $listed  = $this->scanTarListing($archive, $heartbeat, function (string $line) use (&$entries): void {
             if (!in_array($line[0], ['-', 'd'], true) || str_contains($line, ' link to ') || str_contains($line, ' -> ')) {
                 throw new UnsafeArchiveException('Links and special files are not allowed in a backup archive.');
             }
-            if (++$entries > $this->extractLimits['max_entries']) {
-                throw new UnsafeArchiveException('The archive has more entries than backup.extract_limits allows.');
-            }
+            $this->countTarEntry($entries);
+        });
+        if (!$listed) {
+            throw new UnsafeArchiveException('The tar.gz archive cannot be listed.');
         }
         // EN-L7: the size is the decompressed tar stream itself, not the listing's size column (an owner name with
         // spaces shifted the columns). The stream bounds what tar writes; extracted bytes are counted again after.
@@ -2041,6 +2065,59 @@ final class BackupArchiver
             } catch (RuntimeException $e) {
                 throw new UnsafeArchiveException($e->getMessage(), 0, $e);
             }
+        }
+    }
+
+    /**
+     * `tar -tv`, line by line while it runs: the listing is not kept, and a refusal stops tar at once.
+     *
+     * @param (callable(): void)|null $heartbeat
+     * @param callable(string): void $onLine called for each non-empty line; what it throws ends the listing
+     *
+     * @return bool whether tar could list the archive
+     */
+    private function scanTarListing(string $archive, ?callable $heartbeat, callable $onLine): bool
+    {
+        $process = new Process([$this->tarBinary, '-tvzf', $archive]);
+        $partial = '';
+        $drain   = static function () use ($process, $onLine, &$partial): void {
+            $partial .= $process->getIncrementalOutput();
+            $process->clearOutput();
+            $lines   = explode("\n", $partial);
+            $partial = (string) array_pop($lines);
+            foreach ($lines as $line) {
+                if ($line !== '') {
+                    $onLine($line);
+                }
+            }
+        };
+
+        try {
+            ProcessDeadline::run($process, $this->processTimeoutSeconds, static function () use ($process, $heartbeat, $drain): void {
+                if ($heartbeat !== null) {
+                    $heartbeat();
+                }
+                if ($process->isStarted()) {
+                    $drain();
+                }
+            });
+            $drain();
+            if ($partial !== '') {
+                $onLine($partial);
+            }
+        } finally {
+            if ($process->isRunning()) {
+                ProcessDeadline::killTree($process);
+            }
+        }
+
+        return $process->isSuccessful();
+    }
+
+    private function countTarEntry(int &$entries): void
+    {
+        if (++$entries > $this->extractLimits['max_entries']) {
+            throw new UnsafeArchiveException('The archive has more entries than backup.extract_limits allows.');
         }
     }
 
