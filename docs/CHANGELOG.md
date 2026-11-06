@@ -71,6 +71,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Security
 
+- Independent audit Appendix HK (2026-11-06): verified at `2e54dd1`, no Critical or High, nothing above Low open at that head. The two Medium findings below exist in published versions and are fixed here.
 - **`backup.extract_limits` now holds for zip archives on the bytes really written.** The limit check summed
   `ZipArchive::statIndex()['size']`, which is only what the archive declares, and `extractTo()` then wrote whatever the
   deflate data held: a 1 MiB plaintext zip declaring 147 bytes wrote 1 GiB past its 199 MiB limit (ratio 200), and verify and
