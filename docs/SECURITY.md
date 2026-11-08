@@ -104,6 +104,14 @@ The site gate (`SetupRequestSubscriber`, the redirect to the wizard while setup 
   or by an operator with `nowo:site-backup:setup-reset --initial`. The token model is unchanged: a static
   `setup_token` still opens the re-opened wizard, but it can no longer create an admin, rewrite `DATABASE_URL` or
   import SQL there. Keep the marker on the same storage as `setup.done` (shared `var/site-backup` on multi-node hosts).
+  **Limits (audit IR):** the marker is a local file. A new node, an autoscaled container or a `var/` wipe while a
+  reopen is open sees "not done, not reopened", which is an initial install with every step (IR-L1 b); keep
+  `setup.done` and `setup.reopened` on shared or persistent storage. A durable reopened state is a follow-up. A plain
+  `setup-reset` (without `--initial`) on an instance that was never reopened, or deleting `setup.done` by hand without
+  a durable store, also gives a full install: that is an operator action, not reachable from HTTP (IR-I2). Host step
+  services, `console` and `sample_data` steps still run on a reopen unless they implement
+  `InitialInstallOnlyStepInterface` (IR-I3). If `reopen()` fails (the marker cannot be written), the site gate logs a
+  warning and the instance stays done (IR-L2).
   Audit status: re-verification pending.
 
 ## Backups never contain secrets (1.28+)

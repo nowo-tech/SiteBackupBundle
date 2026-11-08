@@ -1047,7 +1047,7 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
         $container->getDefinition(SetupMarkerManager::class)
             ->setArgument('$requiredFile', $setup['required_marker_file'])
             ->setArgument('$doneFile', $setup['done_marker_file'])
-            ->setArgument('$reopenedFile', $setup['reopened_marker_file'] ?? '%kernel.project_dir%/var/site-backup/setup.reopened');
+            ->setArgument('$reopenedFile', $setup['reopened_marker_file'] ?? null);
 
         // One-time setup access token (1.27+, REQ-SEC-004 CG F1): issued by nowo:site-backup:setup-token.
         $container->register(SetupAccessTokenStore::class, SetupAccessTokenStore::class)

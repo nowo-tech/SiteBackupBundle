@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Tests\Unit\Setup;
 
+use Nowo\SiteBackupBundle\DependencyInjection\SiteBackupExtension;
 use Nowo\SiteBackupBundle\EventSubscriber\SetupRequestSubscriber;
 use Nowo\SiteBackupBundle\Exclusion\SiteBackupExclusionMatcher;
 use Nowo\SiteBackupBundle\Model\SetupProgress;
@@ -19,11 +20,14 @@ use PHPUnit\Framework\TestCase;
 use Psr\Log\AbstractLogger;
 use RuntimeException;
 use Stringable;
+use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
 use Throwable;
+
+use function file_put_contents;
 
 /**
  * Audit IN-L2 (1.32): `setup.reopen_when_detector_requires` goes through the 1.31 reopen guards.
@@ -115,6 +119,63 @@ final class SetupReopenFlagGuardsTest extends TestCase
         $this->markers->clearDone();
         $this->durable->clearDone();
         self::assertTrue($evaluator->isSetupRequired());
+    }
+
+    /**
+     * IR-L2: the setup.reopened marker cannot be written (read-only / broken var/): logged, setup stays done, no 500.
+     */
+    public function testAFailedReopenKeepsTheInstanceDoneAndIsLogged(): void
+    {
+        $blocker = $this->harnessProjectDir . '/blocker';
+        file_put_contents($blocker, 'a file, not a directory');
+        $dir     = $this->harnessProjectDir . '/_setup';
+        $markers = new SetupMarkerManager($dir . '/required', $dir . '/done', reopenedFile: $blocker . '/setup.reopened');
+        $logger  = new class extends AbstractLogger {
+            /** @var list<string> */
+            public array $records = [];
+
+            public function log($level, string|Stringable $message, array $context = []): void
+            {
+                $this->records[] = $level . ':' . $message;
+            }
+        };
+        $detector  = $this->detector(true);
+        $evaluator = new SetupNeedEvaluator([$detector], true, true, $markers, $this->durable, reopener: new SetupWizardReopener($markers, $this->progress, $this->durable), reopenDetectors: [$detector], logger: $logger);
+
+        self::assertNull($this->dispatch($this->gate($evaluator), Request::create('/', 'GET')));
+        self::assertTrue($markers->isDone(), 'setup.done kept');
+        self::assertSame(0, $this->durable->clearCalls, 'durable store kept');
+        self::assertSame(SetupProgress::PHASE_COMPLETED, $this->progress->load()->getPhase());
+        self::assertSame(['warning:nowo_site_backup: re-opening the setup wizard failed; setup stays done.'], $logger->records);
+
+        // Same through reopen_when_detector_requires, and without a logger.
+        $flag = new SetupNeedEvaluator([$detector], true, true, $markers, $this->durable, reopenWhenDetectorRequires: true, reopener: new SetupWizardReopener($markers, $this->progress, $this->durable));
+        self::assertFalse($flag->isSetupRequired(true));
+        self::assertTrue($markers->isDone());
+    }
+
+    /**
+     * IR-L1 (a): with no reopened_marker_file, the marker follows a moved done_marker_file.
+     */
+    public function testTheDefaultReopenedMarkerFollowsTheDoneMarker(): void
+    {
+        $container = new ContainerBuilder();
+        $container->setParameter('kernel.project_dir', $this->harnessProjectDir);
+        (new SiteBackupExtension())->load([['enabled' => true, 'security' => ['allow_unauthenticated' => true], 'setup' => [
+            'done_marker_file' => $this->harnessProjectDir . '/worker-3/setup.done',
+        ]]], $container);
+        $definition = $container->getDefinition(SetupMarkerManager::class);
+        self::assertNull($definition->getArgument('$reopenedFile'));
+
+        $markers = new SetupMarkerManager((string) $definition->getArgument('$requiredFile'), (string) $definition->getArgument('$doneFile'), reopenedFile: $definition->getArgument('$reopenedFile'));
+        self::assertSame($this->harnessProjectDir . '/worker-3/setup.reopened', $markers->getReopenedFile());
+
+        $explicit = new ContainerBuilder();
+        $explicit->setParameter('kernel.project_dir', $this->harnessProjectDir);
+        (new SiteBackupExtension())->load([['enabled' => true, 'security' => ['allow_unauthenticated' => true], 'setup' => [
+            'reopened_marker_file' => '/shared/setup.reopened',
+        ]]], $explicit);
+        self::assertSame('/shared/setup.reopened', $explicit->getDefinition(SetupMarkerManager::class)->getArgument('$reopenedFile'));
     }
 
     public function testFlagOffKeepsTheFastPath(): void

@@ -78,9 +78,7 @@ final class SetupNeedEvaluator
 
         foreach ($this->reopenWhenDetectorRequires ? $this->detectors : $this->reopenDetectors as $detector) {
             if ($this->reopenDetectorRequires($detector)) {
-                $this->reopener?->reopen();
-
-                return true;
+                return $this->reopen();
             }
         }
 
@@ -109,6 +107,25 @@ final class SetupNeedEvaluator
         }
 
         return $reasons;
+    }
+
+    /**
+     * IR-L2: a failed reopen (e.g. the setup.reopened marker cannot be written) keeps the instance done and is logged,
+     * instead of answering 500 on every navigational request.
+     */
+    private function reopen(): bool
+    {
+        try {
+            $this->reopener?->reopen();
+        } catch (Throwable $e) {
+            $this->logger?->warning('nowo_site_backup: re-opening the setup wizard failed; setup stays done.', [
+                'exception' => $e,
+            ]);
+
+            return false;
+        }
+
+        return true;
     }
 
     /**
