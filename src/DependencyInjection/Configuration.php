@@ -551,7 +551,7 @@ final class Configuration implements ConfigurationInterface
                             ->cannotBeEmpty()
                         ->end()
                         ->booleanNode('reopen_when_detector_requires')
-                            ->info('When true (v1.15+), short_circuit_when_done no longer hides detectors: if setup.done / the durable store says complete but a tagged SetupNeedDetector still requires setup, setup.done and the durable store are cleared and progress is reset so the wizard can run again (SetupWizardReopener). Default false (BC). Costs one detector pass per request (the Doctrine detectors reuse a healthy answer for setup.worker_memo.schema_probe_ttl).')
+                            ->info('When true (v1.15+), short_circuit_when_done no longer hides detectors: if setup.done / the durable store says complete but a tagged SetupNeedDetector still requires setup, setup.done and the durable store are cleared and progress is reset so the wizard can run again (SetupWizardReopener). Default false (BC). Costs one detector pass per request (the Doctrine detectors reuse a healthy answer for setup.worker_memo.schema_probe_ttl). Hazard (IN-L2): no reopen guards, and doctrine_connect reports a need while the DB is unreachable, so a DB blip re-opens a live wizard; prefer reopen: true on a never-fail-true detector (v1.31).')
                             ->defaultFalse()
                         ->end()
                         ->arrayNode('worker_memo')

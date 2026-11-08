@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.31.0](#to-1310)
 - [To 1.30.0](#to-1300)
 - [To 1.29.1](#to-1291)
 - [To 1.29.0](#to-1290)
@@ -118,6 +119,14 @@
   - [Breaking changes](#breaking-changes-1)
 
 ## Unreleased
+
+## To 1.31.0
+
+From **1.30.0**:
+
+```bash
+composer update nowo-tech/site-backup-bundle
+```
 
 Nothing to do: `setup.gate` defaults to `all` and no detector is tagged `reopen` by default, so the gate behaves as in
 1.30. A host that redirected only guests and admins, or re-opened the wizard from its own `kernel.request` subscriber

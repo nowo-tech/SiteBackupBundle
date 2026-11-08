@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.31.0] - 2026-11-08](#1310---2026-11-08)
 - [[1.30.0] - 2026-11-06](#1300---2026-11-06)
 - [[1.29.1] - 2026-11-05](#1291---2026-11-05)
 - [[1.29.0] - 2026-11-04](#1290---2026-11-04)
@@ -70,6 +71,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [1.31.0] - 2026-11-08
+
 ### Added
 
 - **Setup gate audience (SB-1):** `setup.gate: all|guests_and_admins` (default `all`, unchanged) and `setup.gate_admin_role` (default `ROLE_ADMIN`). `guests_and_admins` lets signed-in users without that role keep browsing while setup is required (no detector probe on their requests); the gate then runs after the firewall (priority 7). Without security-bundle everyone counts as a guest. See [SECURITY](SECURITY.md#gate-audience-setupgate-131).
@@ -79,6 +82,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Fixed
 
 - Tests: `RemotePublisherTest` no longer depends on a fixed date (its orphan assertions failed from 2026-11-08).
+
+### Documentation
+
+- **IN-L2:** SECURITY, SETUP-WIZARD and the `setup.reopen_when_detector_requires` config info now warn that the 1.15 global flag has none of the 1.31 reopen guards and that `doctrine_connect` reports a need while the database is unreachable, so a database blip re-opens a live wizard; prefer `reopen: true` on a never-fail-true detector.
 
 ## [1.30.0] - 2026-11-06
 
@@ -1133,7 +1140,7 @@ First stable release of **Site Backup Bundle**.
 - Symfony `^7.0 || ^8.0` (CI / mandatory minors: **7.4**, **8.0**, **8.1**)
 - System `tar` required for archive create/extract
 
-[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.30.0...HEAD
+[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.31.0...HEAD
 [1.23.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.22.2...v1.23.0
 [1.22.2]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.22.1...v1.22.2
 [1.22.1]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.22.0...v1.22.1
