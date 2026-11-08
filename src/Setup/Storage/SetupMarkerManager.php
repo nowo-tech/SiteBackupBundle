@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Setup\Storage;
 
+use Nowo\SiteBackupBundle\Setup\SetupWizardReopener;
 use Psr\Clock\ClockInterface;
 use Symfony\Component\Clock\NativeClock;
 use Symfony\Component\Filesystem\Filesystem;
@@ -15,14 +16,28 @@ use function trim;
 
 use const DATE_ATOM;
 
+/**
+ * File markers of the setup wizard: {@code setup.required}, {@code setup.done} and (1.32+) {@code setup.reopened}.
+ *
+ * {@code setup.reopened} is written only by {@see SetupWizardReopener} when it clears a
+ * done instance, and removed when the wizard completes ({@see markDone()}) or by an operator
+ * ({@code nowo:site-backup:setup-reset --initial}). No HTTP input reaches it, so a request cannot forge or drop the
+ * "this is a reopen" state (audit IN-I1).
+ */
 final class SetupMarkerManager
 {
+    private readonly string $reopenedFile;
+
     public function __construct(
         private readonly string $requiredFile,
         private readonly string $doneFile,
         private readonly Filesystem $filesystem = new Filesystem(),
         private readonly ClockInterface $clock = new NativeClock(),
+        ?string $reopenedFile = null,
     ) {
+        $this->reopenedFile = $reopenedFile !== null && $reopenedFile !== ''
+            ? $reopenedFile
+            : dirname($this->doneFile) . '/setup.reopened';
     }
 
     public function isRequiredMarked(): bool
@@ -62,6 +77,33 @@ final class SetupMarkerManager
         if (is_file($this->requiredFile)) {
             $this->filesystem->remove($this->requiredFile);
         }
+        $this->clearReopened();
+    }
+
+    /**
+     * 1.32+: the wizard was re-opened on an instance that had completed setup.
+     */
+    public function isReopened(): bool
+    {
+        return is_file($this->reopenedFile);
+    }
+
+    public function markReopened(): void
+    {
+        $this->filesystem->mkdir(dirname($this->reopenedFile));
+        $this->filesystem->dumpFile($this->reopenedFile, $this->clock->now()->format(DATE_ATOM) . "\n");
+    }
+
+    public function clearReopened(): void
+    {
+        if (is_file($this->reopenedFile)) {
+            $this->filesystem->remove($this->reopenedFile);
+        }
+    }
+
+    public function getReopenedFile(): string
+    {
+        return $this->reopenedFile;
     }
 
     public function clearDone(): void

@@ -55,7 +55,9 @@ use const JSON_THROW_ON_ERROR;
  *   the progress file says;
  * - every request needs setup.setup_token or a one-time token from `nowo:site-backup:setup-token`
  *   ({@see SetupAccessTokenStore}), unless the host opted out with the debug-only setup.allow_without_token;
- * - a GET never starts or advances a run: advancing is a CSRF-protected POST (the JSON API always needs a token).
+ * - a GET never starts or advances a run: advancing is a CSRF-protected POST (the JSON API always needs a token);
+ * - a wizard re-opened on a configured instance (1.32+, IN-I1) never shows nor runs admin creation, database_url or the
+ *   SQL import: {@see SetupOrchestrator::getSteps()} and {@see SetupOrchestrator::advance()} leave them out.
  */
 final class SetupWizardController
 {
@@ -171,6 +173,9 @@ final class SetupWizardController
             'progressUrl' => rtrim($pathPrefix, '/') . '/api/progress',
             'advanceMode' => $this->orchestrator->getAdvanceMode($progress->getProfile()),
             'wizardForm'  => $wizardView,
+            // 1.32 (IN-I1): re-opened on a configured instance; the steps list already leaves out admin creation,
+            // database_url and the SQL import, and the orchestrator refuses to run them.
+            'reopened' => $this->orchestrator->isReopened(),
         ], $pathPrefix));
     }
 

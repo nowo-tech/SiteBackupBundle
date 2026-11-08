@@ -60,13 +60,25 @@ final class SetupOrchestrator
     }
 
     /**
+     * Steps of the profile. On a re-opened wizard ({@see isReopened()}) the initial-install-only steps are left out.
+     *
      * @return list<SetupStepInterface>
      */
     public function getSteps(?string $profile = null): array
     {
         $profile = $this->resolveProfileName($profile);
 
-        return $this->stepFactory->createAll($this->profileSteps($profile));
+        return $this->buildSteps($profile);
+    }
+
+    /**
+     * 1.32+ (audit IN-I1): the wizard was re-opened on a configured instance ({@see SetupWizardReopener}). Admin
+     * creation, `database_url` and the SQL import ({@see InitialInstallOnlySteps}) then neither show nor run, for
+     * every caller (page, JSON API, CLI). The state is a server-side marker file, never request input.
+     */
+    public function isReopened(): bool
+    {
+        return $this->markers->isReopened();
     }
 
     public function resolveProfileName(?string $requested = null): string
@@ -109,7 +121,7 @@ final class SetupOrchestrator
     public function advance(?string $profile = null, ?SetupStepInput $input = null, bool $forceAutomatic = false): SetupProgress
     {
         $profile = $this->resolveProfileName($profile);
-        $steps   = $this->stepFactory->createAll($this->profileSteps($profile));
+        $steps   = $this->buildSteps($profile);
         if ($steps === []) {
             throw new InvalidArgumentException(sprintf('Setup profile "%s" has no steps.', $profile));
         }
@@ -262,6 +274,16 @@ final class SetupOrchestrator
     {
         $this->logger->warning('SiteBackup: setup progress reset.', ['bundle' => 'site_backup', 'action' => 'setup_reset']);
         $this->progressStorage->save(new SetupProgress());
+    }
+
+    /**
+     * @return list<SetupStepInterface>
+     */
+    private function buildSteps(string $profile): array
+    {
+        $steps = $this->stepFactory->createAll($this->profileSteps($profile));
+
+        return $this->isReopened() ? InitialInstallOnlySteps::withoutInitialInstallOnly($steps) : $steps;
     }
 
     /**

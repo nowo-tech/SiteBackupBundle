@@ -71,6 +71,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Re-opened wizard runs only the missing steps (owner decision IN-I1):** `SetupWizardReopener::reopen()` writes a server-side `setup.reopened` marker (`setup.reopened_marker_file`, default `var/site-backup/setup.reopened`) before it clears `setup.done` / the durable store. While it exists, `SetupOrchestrator::getSteps()` / `advance()` leave out `admin_user`, `database_url`, `bootstrap_mode` and `sql_file` (`InitialInstallOnlySteps`), for the page (GET and POST), the JSON API and the CLI; host steps can opt in with `InitialInstallOnlyStepInterface`. The marker is removed when the wizard completes or by `nowo:site-backup:setup-reset --initial`. The wizard template gets `reopened`. Token model unchanged. Audit status: re-verification pending.
+
 ## [1.31.0] - 2026-11-08
 
 ### Added

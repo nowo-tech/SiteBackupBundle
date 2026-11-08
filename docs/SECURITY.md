@@ -90,11 +90,18 @@ The site gate (`SetupRequestSubscriber`, the redirect to the wizard while setup 
 - `gate_admin_role` is not validated: a typo means admins are not redirected (fail open for the redirect only; no
   privilege is granted). With `guests_and_admins` a lazy firewall's own response (`LazyResponseException`, e.g. a 401
   for bad API credentials) is kept; other authorization failures count as a guest.
-- Reopened wizard on a live instance (audit IN-I1): in 1.31 it still accepts the static `setup.setup_token` for every
-  step (admin creation, `.env.local` rewrite, SQL import), as with `reopen_when_detector_requires`. Decided for 1.32: a
-  wizard re-opened on a configured instance shows only the missing steps, and the `admin`, `database_url` and SQL import
-  steps are refused except on the initial install. Until then keep the static token long and random, or unset it and
-  use the one-time token.
+- Reopened wizard on a live instance (audit IN-I1, owner decision 2026-11-08, **fixed in 1.32**): when
+  `SetupWizardReopener` re-opens a configured instance (`setup.done` existed, or the durable store said done) it first
+  writes `setup.reopened` (`setup.reopened_marker_file`). While that marker exists the wizard shows and runs only the
+  steps still missing: admin creation (`admin_user`), the `.env.local` rewrite (`database_url`) and the SQL import
+  (`bootstrap_mode`, `sql_file`), plus host steps that implement `InitialInstallOnlyStepInterface`, are left out of the
+  steps list and never run, on the page (GET render and POST), the JSON API and the CLI alike; a stale or crafted
+  progress record that points at one of them gets no form and no run. The marker is a server-side file: no request
+  parameter, header or progress answer sets or clears it. It is removed when the wizard completes (the `marker` step)
+  or by an operator with `nowo:site-backup:setup-reset --initial`. The token model is unchanged: a static
+  `setup_token` still opens the re-opened wizard, but it can no longer create an admin, rewrite `DATABASE_URL` or
+  import SQL there. Keep the marker on the same storage as `setup.done` (shared `var/site-backup` on multi-node hosts).
+  Audit status: re-verification pending.
 
 ## Backups never contain secrets (1.28+)
 

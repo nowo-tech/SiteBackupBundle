@@ -29,6 +29,7 @@ final class SetupResetCommand extends Command
     {
         $this
             ->addOption('mark-required', null, InputOption::VALUE_OPTIONAL, 'Also write setup.required with optional profile', false)
+            ->addOption('initial', null, InputOption::VALUE_NONE, 'Also remove setup.reopened, so the next wizard run is an initial install again (admin, database_url and SQL import steps included)')
             ->addOption('yes', 'y', InputOption::VALUE_NONE, 'Skip confirmation');
     }
 
@@ -44,6 +45,12 @@ final class SetupResetCommand extends Command
         // @igor-ignore - Console command; not executed in FrankenPHP worker HTTP requests.
         $this->markers->clearDone();
         $this->orchestrator->resetProgress();
+
+        if ($input->getOption('initial')) {
+            // @igor-ignore - Console command; not executed in FrankenPHP worker HTTP requests.
+            $this->markers->clearReopened();
+            $io->note('Removed setup.reopened: the next run is an initial install.');
+        }
 
         $markRequired = $input->getOption('mark-required');
         if ($markRequired !== false) {

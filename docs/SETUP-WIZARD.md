@@ -81,6 +81,8 @@ Reopen detector contract (audit IN):
 - **A wizard step must clear the condition.** If no step can fix what the detector reports, every navigation after completion reopens the wizard again and resets progress (a loop). Pair each reopen detector with the step that fixes it (e.g. the catalogs seed).
 - The tag attribute must be a boolean; `"true"` / `"false"` (XML) are normalised, any other value fails the container compilation.
 
+**Re-opened wizard: missing steps only (v1.32+, audit IN-I1):** `SetupWizardReopener::reopen()` writes `setup.reopened` (`setup.reopened_marker_file`) before it clears `setup.done` / the durable store. While the marker exists, `SetupOrchestrator::getSteps()` and `advance()` leave out the initial-install-only steps (`InitialInstallOnlySteps`): `admin_user`, `database_url`, `bootstrap_mode` and `sql_file` (also when wrapped by `when_answer` / tab metadata), plus host steps that implement `InitialInstallOnlyStepInterface`. They are neither listed nor run, whatever the page POST, the JSON API or the CLI sends; the wizard template gets `reopened: true`. Other steps (migrations, seeds, cache clear…) run as usual, and the steps already satisfied are skipped by their own `isComplete()`. The marker is removed when the wizard completes, or by `nowo:site-backup:setup-reset --initial` (an operator who really wants a full install again, e.g. a new admin).
+
 **Gate audience (v1.31+):** `setup.gate: guests_and_admins` redirects only guests and holders of `setup.gate_admin_role` (default `ROLE_ADMIN`) while setup is required; other signed-in users keep browsing and their requests skip the detectors. The listener then runs after the firewall (priority 7). Default `all`. See [SECURITY](SECURITY.md#gate-audience-setupgate-131). `gate_admin_role` is any `is_granted()` attribute and is not validated: a typo (`ROLE_ADMN`) or a role your users never get (not in their roles nor reachable through `role_hierarchy`) means admins are never redirected. Check it with `bin/console debug:config security role_hierarchy` and a signed-in admin.
 
 ```php
@@ -532,7 +534,7 @@ See also [USAGE.md](USAGE.md#web-ui-on-the-uikit-page-contract-req-ui-003-121).
 | --- | --- |
 | `nowo:site-backup:setup` | Run profile headless |
 | `nowo:site-backup:setup-status` | Detectors + completed steps |
-| `nowo:site-backup:setup-reset` | Remove `setup.done` (dev only; gated) |
+| `nowo:site-backup:setup-reset` | Remove `setup.done` (dev only; gated). `--initial` (1.32+) also removes `setup.reopened`, so the next run is an initial install |
 | `nowo:site-backup:setup-token` | 1.27+: issue the one-time web wizard token (`--open[=profile]` also writes `setup.required`, `--revoke` deletes it) |
 
 ## Events
