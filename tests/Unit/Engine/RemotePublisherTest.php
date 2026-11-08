@@ -41,8 +41,10 @@ final class RemotePublisherTest extends TestCase
 
     protected function setUp(): void
     {
-        $this->root  = EngineFixtures::tempDir('sbb-remote-');
-        $this->clock = new MockClock('2026-11-04 03:00:00');
+        $this->root = EngineFixtures::tempDir('sbb-remote-');
+        // Relative to the real time: InMemoryRemoteTarget stamps uploads with the wall clock, and orphans() compares
+        // those stamps with this clock (a fixed date turned the orphan assertions into a time bomb on 2026-11-08).
+        $this->clock = new MockClock(new DateTimeImmutable('-1 day'));
         (new Filesystem())->mkdir($this->root . '/project/config');
         file_put_contents($this->root . '/project/config/app.yaml', 'a: b');
         $this->archiver = new BackupArchiver($this->root . '/project', $this->root . '/storage', ['config'], [], null, 60, clock: $this->clock);
