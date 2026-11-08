@@ -1170,7 +1170,8 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$markers', new Reference(SetupMarkerManager::class))
             ->setArgument('$durableDoneStore', new Reference(DurableSetupDoneStoreInterface::class))
             ->setArgument('$reopenWhenDetectorRequires', (bool) ($setup['reopen_when_detector_requires'] ?? false))
-            ->setArgument('$reopener', new Reference(SetupWizardReopener::class));
+            ->setArgument('$reopener', new Reference(SetupWizardReopener::class))
+            ->setArgument('$logger', new Reference('logger', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE));
 
         $container->getDefinition(SetupStepFactory::class)
             ->setArgument('$runner', new Reference(ConsoleProcessRunner::class))

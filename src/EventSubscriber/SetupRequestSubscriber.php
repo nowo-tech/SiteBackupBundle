@@ -11,6 +11,7 @@ use Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
 use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
+use Symfony\Component\Security\Core\Exception\LazyResponseException;
 use Throwable;
 
 use function is_string;
@@ -25,6 +26,9 @@ use function str_starts_with;
  * v1.31 (SB-1), `setup.gate`: `all` (default) sends every visitor; `guests_and_admins` lets signed-in users without
  * `setup.gate_admin_role` keep browsing (checked before the detectors, so their requests cost no probe). Without an
  * authorization checker (no security-bundle) everyone counts as a guest.
+ *
+ * The setup, panel and excluded paths return before the detectors run (IN-M1), and only a main GET / HEAD request lets
+ * the `reopen: true` detectors re-open a done wizard ({@see SetupNeedEvaluator::isSetupRequired()} `$allowReopen`).
  */
 final class SetupRequestSubscriber
 {
@@ -60,10 +64,8 @@ final class SetupRequestSubscriber
             return;
         }
 
-        if (!$this->needEvaluator->isSetupRequired()) {
-            return;
-        }
-
+        // Setup, panel and excluded paths first (IN-M1): they are never redirected, so they never run a detector
+        // and can never re-open a done wizard.
         $request = $event->getRequest();
         $path    = $request->getPathInfo();
 
@@ -76,6 +78,10 @@ final class SetupRequestSubscriber
         }
 
         if ($this->exclusionMatcher->matches($request)) {
+            return;
+        }
+
+        if (!$this->needEvaluator->isSetupRequired($request->isMethod('GET') || $request->isMethod('HEAD'))) {
             return;
         }
 
@@ -102,6 +108,9 @@ final class SetupRequestSubscriber
         try {
             return $this->authorizationChecker->isGranted('IS_AUTHENTICATED_REMEMBERED')
                 && !$this->authorizationChecker->isGranted($this->gateAdminRole);
+        } catch (LazyResponseException $e) {
+            // A lazy firewall's own answer (e.g. a 401 for bad API credentials): keep it (IN-I4).
+            throw $e;
         } catch (Throwable) {
             return false;
         }

@@ -78,6 +78,18 @@ The site gate (`SetupRequestSubscriber`, the redirect to the wizard while setup 
 - Choose it only when the pages a signed-in member reaches still work while setup is required (e.g. platform
   catalogs missing). A detector tagged `reopen: true` re-opens a done wizard when it reports a need; it runs on every
   request after setup, so keep it cheap and side-effect free.
+- Reopen guards (1.31, audit IN-M1 / IN-L1): reopen detectors run only on a main `GET` / `HEAD` request that the gate
+  would redirect (never on the setup, panel or excluded paths, never on `POST` / `PUT` / …); a detector that throws
+  counts as "not required" and is logged. A reopen detector **must return `false` when it cannot decide**: a
+  fail-true detector lets any anonymous request during a database error clear `setup.done` and the durable store.
+- `gate_admin_role` is not validated: a typo means admins are not redirected (fail open for the redirect only; no
+  privilege is granted). With `guests_and_admins` a lazy firewall's own response (`LazyResponseException`, e.g. a 401
+  for bad API credentials) is kept; other authorization failures count as a guest.
+- **TODO (owner decision, audit IN-I1):** a reopened wizard on a live instance accepts the static `setup.setup_token`
+  for every step (admin creation, `.env.local` rewrite, SQL import), as with `reopen_when_detector_requires`. Options
+  under discussion: require a fresh one-time token once a done instance is reopened, or skip the `admin` /
+  `database_url` steps unless the operator ran `nowo:site-backup:setup-token --open`. Until then keep the static token
+  long and random, or unset it and use the one-time token.
 
 ## Backups never contain secrets (1.28+)
 

@@ -4,11 +4,13 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Tests\Unit\Setup;
 
+use InvalidArgumentException;
 use Nowo\SiteBackupBundle\Attribute\AsSetupNeedDetector;
 use Nowo\SiteBackupBundle\DependencyInjection\Compiler\SetupReopenDetectorsPass;
 use Nowo\SiteBackupBundle\DependencyInjection\SiteBackupExtension;
 use Nowo\SiteBackupBundle\EventSubscriber\SetupRequestSubscriber;
 use Nowo\SiteBackupBundle\Exclusion\SiteBackupExclusionMatcher;
+use Nowo\SiteBackupBundle\Model\SetupProgress;
 use Nowo\SiteBackupBundle\NowoSiteBackupBundle;
 use Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator;
 use Nowo\SiteBackupBundle\Setup\SetupNeedDetectorInterface;
@@ -17,8 +19,10 @@ use Nowo\SiteBackupBundle\Setup\Storage\FilesystemSetupProgressStorage;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupMarkerManager;
 use Nowo\SiteBackupBundle\Tests\Unit\CreatesSiteBackupTestHarness;
 use PHPUnit\Framework\TestCase;
+use Psr\Log\AbstractLogger;
 use ReflectionClass;
 use RuntimeException;
+use Stringable;
 use Symfony\Component\DependencyInjection\Argument\IteratorArgument;
 use Symfony\Component\DependencyInjection\ChildDefinition;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
@@ -29,6 +33,8 @@ use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
 use Symfony\Component\HttpKernel\HttpKernelInterface;
 use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
+use Symfony\Component\Security\Core\Exception\LazyResponseException;
+use Throwable;
 
 use function in_array;
 
@@ -98,7 +104,7 @@ final class SetupGateAudienceTest extends TestCase
 
     // --- reopen: true -------------------------------------------------------------------------------------------
 
-    public function testAReopenDetectorReopensTheDoneWizard(): void
+    public function testAReopenDetectorReopensTheDoneWizardOnlyWhenTheCallerAllowsIt(): void
     {
         $markers = $this->markers();
         $markers->markDone();
@@ -106,23 +112,94 @@ final class SetupGateAudienceTest extends TestCase
         $required  = $this->detector(true, 'catalogs empty');
         $evaluator = new SetupNeedEvaluator([$quiet, $required], true, true, $markers, reopener: $this->reopener($markers), reopenDetectors: [$required]);
 
-        self::assertSame(['catalogs empty'], $evaluator->getReasons());
-        self::assertFalse($markers->isDone(), 'reopened');
+        self::assertFalse($evaluator->isSetupRequired(), 'wizard, panel, commands, done guard: never reopen');
+        self::assertSame([], $evaluator->getReasons());
+        self::assertTrue($markers->isDone());
 
-        $markers->markDone();
-        self::assertTrue($evaluator->isSetupRequired());
-        self::assertFalse($markers->isDone());
+        self::assertTrue($evaluator->isSetupRequired(true), 'the site gate');
+        self::assertFalse($markers->isDone(), 'reopened');
+        self::assertSame(['catalogs empty'], $evaluator->getReasons(), 'not done any more: every detector');
 
         $markers->markDone();
         $none = new SetupNeedEvaluator([$required], true, true, $markers, reopener: $this->reopener($markers));
-        self::assertFalse($none->isSetupRequired(), 'without reopen detectors: the 1.30 fast path');
-        self::assertSame([], $none->getReasons());
+        self::assertFalse($none->isSetupRequired(true), 'without reopen detectors: the 1.30 fast path');
         self::assertTrue($markers->isDone());
 
         $calm = new SetupNeedEvaluator([$quiet], true, true, $markers, reopener: $this->reopener($markers), reopenDetectors: [$quiet]);
-        self::assertFalse($calm->isSetupRequired());
-        self::assertSame([], $calm->getReasons());
+        self::assertFalse($calm->isSetupRequired(true));
         self::assertTrue($markers->isDone());
+    }
+
+    /**
+     * Audit IN PoC P1: a reopen detector that reports a need (a fail-true detector during a database blip) must not
+     * clear setup.done, the durable store or progress from an excluded path, the setup / panel paths or a POST.
+     */
+    public function testP1ExcludedPathsAndUnsafeMethodsNeverReopen(): void
+    {
+        $markers = $this->markers();
+        $markers->markDone();
+        $durable  = new FakeDurableSetupDoneStore(true);
+        $progress = new FilesystemSetupProgressStorage($this->harnessProjectDir . '/_setup/progress.json');
+        $progress->save(new SetupProgress(SetupProgress::PHASE_COMPLETED));
+        $detector  = $this->detector(true, 'catalogs empty');
+        $evaluator = new SetupNeedEvaluator([$detector], true, true, $markers, $durable, reopener: new SetupWizardReopener($markers, $progress, $durable), reopenDetectors: [$detector]);
+        $gate      = new SetupRequestSubscriber(true, $evaluator, $this->createManager(), new SiteBackupExclusionMatcher([], ['/health/'], [], [], []), '/_setup', '/_site_backup');
+
+        foreach ([['GET', '/health/live'], ['GET', '/_setup'], ['GET', '/_site_backup/x'], ['POST', '/'], ['PUT', '/api/x']] as [$method, $path]) {
+            self::assertNull($this->dispatch($gate, Request::create($path, $method)), $method . ' ' . $path);
+            self::assertTrue($markers->isDone(), $method . ' ' . $path . ': setup.done kept');
+            self::assertSame(0, $durable->clearCalls, $method . ' ' . $path . ': durable store kept');
+            self::assertSame(SetupProgress::PHASE_COMPLETED, $progress->load()->getPhase(), $method . ' ' . $path . ': progress kept');
+        }
+
+        // A navigational GET / HEAD is what may reopen (the documented behaviour).
+        self::assertInstanceOf(Response::class, $this->dispatch($gate, Request::create('/', 'HEAD')));
+        self::assertFalse($markers->isDone());
+        self::assertSame(1, $durable->clearCalls);
+    }
+
+    /**
+     * Audit IN PoC P2: a reopen detector that throws counts as "not required": logged, no reopen, no 500 on any path.
+     */
+    public function testP2AThrowingReopenDetectorNeitherReopensNorFails(): void
+    {
+        $markers = $this->markers();
+        $markers->markDone();
+        $durable  = new FakeDurableSetupDoneStore(true);
+        $detector = $this->createStub(SetupNeedDetectorInterface::class);
+        $detector->method('isSetupRequired')->willThrowException(new RuntimeException('probe failed'));
+        $logger = new class extends AbstractLogger {
+            /** @var list<string> */
+            public array $records = [];
+
+            public function log($level, string|Stringable $message, array $context = []): void
+            {
+                $exception       = $context['exception'] ?? null;
+                $this->records[] = $level . ':' . ($exception instanceof Throwable ? $exception->getMessage() : '');
+            }
+        };
+        $evaluator = new SetupNeedEvaluator([$detector], true, true, $markers, $durable, reopener: $this->reopener($markers), reopenDetectors: [$detector], logger: $logger);
+        $gate      = new SetupRequestSubscriber(true, $evaluator, $this->createManager(), new SiteBackupExclusionMatcher([], ['/health/'], [], [], []), '/_setup', '/_site_backup');
+
+        foreach (['/', '/health/live', '/_setup', '/_site_backup/x'] as $path) {
+            self::assertNull($this->dispatch($gate, Request::create($path)), $path);
+        }
+        self::assertTrue($markers->isDone());
+        self::assertSame(0, $durable->clearCalls);
+        self::assertSame(['warning:probe failed'], $logger->records, 'only "/" reached the detector');
+
+        // Without a logger the failure is still contained.
+        $quiet = new SetupNeedEvaluator([$detector], true, true, $markers, reopener: $this->reopener($markers), reopenDetectors: [$detector]);
+        self::assertFalse($quiet->isSetupRequired(true));
+    }
+
+    public function testTheFirewallsLazyResponseIsKept(): void
+    {
+        $checker = $this->createStub(AuthorizationCheckerInterface::class);
+        $checker->method('isGranted')->willThrowException(new LazyResponseException(new Response('', 401)));
+
+        $this->expectException(LazyResponseException::class);
+        $this->redirects($this->subscriber('guests_and_admins', $checker));
     }
 
     public function testAttributeTagsReopenOnlyWhenAsked(): void
@@ -153,12 +230,36 @@ final class SetupGateAudienceTest extends TestCase
         $container->register('high')->addTag(SetupReopenDetectorsPass::TAG, ['priority' => 50, 'reopen' => true]);
         $container->register('odd')->addTag(SetupReopenDetectorsPass::TAG, ['priority' => 'x', 'reopen' => true]);
         $container->register('plain')->addTag(SetupReopenDetectorsPass::TAG, ['priority' => 99]);
-        $container->register('loose')->addTag(SetupReopenDetectorsPass::TAG, ['reopen' => 'yes']);
+        $container->register('xml')->addTag(SetupReopenDetectorsPass::TAG, ['reopen' => 'true']);
+        $container->register('xml-off')->addTag(SetupReopenDetectorsPass::TAG, ['reopen' => 'false']);
+        $container->register('int')->addTag(SetupReopenDetectorsPass::TAG, ['reopen' => 1]);
         (new SetupReopenDetectorsPass())->process($container);
 
         $argument = $container->getDefinition(SetupNeedEvaluator::class)->getArgument('$reopenDetectors');
         self::assertInstanceOf(IteratorArgument::class, $argument);
-        self::assertSame(['high', 'low', 'odd'], array_map(static fn (Reference $ref): string => (string) $ref, $argument->getValues()));
+        self::assertSame(['high', 'low', 'odd', 'xml', 'int'], array_map(static fn (Reference $ref): string => (string) $ref, $argument->getValues()));
+    }
+
+    public function testPassRejectsANonBooleanReopen(): void
+    {
+        $container = new ContainerBuilder();
+        $container->setDefinition(SetupNeedEvaluator::class, new Definition(SetupNeedEvaluator::class));
+        $container->register('typo')->addTag(SetupReopenDetectorsPass::TAG, ['reopen' => 'maybe']);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Service "typo": the "reopen" attribute of the "nowo.site_backup.setup_need_detector" tag must be a boolean, string given.');
+        (new SetupReopenDetectorsPass())->process($container);
+    }
+
+    public function testPassRejectsAnArrayReopen(): void
+    {
+        $container = new ContainerBuilder();
+        $container->setDefinition(SetupNeedEvaluator::class, new Definition(SetupNeedEvaluator::class));
+        $container->register('list')->addTag(SetupReopenDetectorsPass::TAG, ['reopen' => [true]]);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('array given');
+        (new SetupReopenDetectorsPass())->process($container);
     }
 
     /**
@@ -215,9 +316,14 @@ final class SetupGateAudienceTest extends TestCase
 
     private function redirects(SetupRequestSubscriber $subscriber): bool
     {
-        $event = new RequestEvent($this->createStub(HttpKernelInterface::class), Request::create('/dashboard'), HttpKernelInterface::MAIN_REQUEST);
+        return $this->dispatch($subscriber, Request::create('/dashboard')) instanceof Response;
+    }
+
+    private function dispatch(SetupRequestSubscriber $subscriber, Request $request): ?Response
+    {
+        $event = new RequestEvent($this->createStub(HttpKernelInterface::class), $request, HttpKernelInterface::MAIN_REQUEST);
         $subscriber->onKernelRequest($event);
 
-        return $event->getResponse() instanceof Response;
+        return $event->getResponse();
     }
 }

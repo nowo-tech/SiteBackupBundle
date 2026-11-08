@@ -74,7 +74,14 @@ Priority (first match wins):
 
 **Per-detector re-open (v1.31+):** `#[AsSetupNeedDetector(priority: 50, reopen: true)]` (or the tag attribute `reopen: true` on `nowo.site_backup.setup_need_detector`) keeps that detector evaluated after setup is done while the others stay behind the fast path. When it reports setup required, the wizard is re-opened exactly as above. The cost is that one detector on every request, not a full pass.
 
-**Gate audience (v1.31+):** `setup.gate: guests_and_admins` redirects only guests and holders of `setup.gate_admin_role` (default `ROLE_ADMIN`) while setup is required; other signed-in users keep browsing and their requests skip the detectors. The listener then runs after the firewall (priority 7). Default `all`. See [SECURITY](SECURITY.md#gate-audience-setupgate-131).
+Reopen detector contract (audit IN):
+
+- **Never fail to `true`.** Return `false` when the detector cannot decide (database down, cold start, timeout). It runs on anonymous traffic of a live site; a fail-true detector turns a transient error into a durable reopen (cleared `setup.done`, cleared durable store, reset progress). A detector that throws is treated as "not required" and logged at warning level, so throwing is safe; returning `true` on error is not.
+- **Only the site gate reopens**, and only on a main `GET` / `HEAD` request outside the setup path, the panel path and the `exclusions`. The wizard, the panel, `SetupDbDoneGuard` and the commands (`nowo:site-backup:setup-status`, `setup-token`) never evaluate reopen detectors.
+- **A wizard step must clear the condition.** If no step can fix what the detector reports, every navigation after completion reopens the wizard again and resets progress (a loop). Pair each reopen detector with the step that fixes it (e.g. the catalogs seed).
+- The tag attribute must be a boolean; `"true"` / `"false"` (XML) are normalised, any other value fails the container compilation.
+
+**Gate audience (v1.31+):** `setup.gate: guests_and_admins` redirects only guests and holders of `setup.gate_admin_role` (default `ROLE_ADMIN`) while setup is required; other signed-in users keep browsing and their requests skip the detectors. The listener then runs after the firewall (priority 7). Default `all`. See [SECURITY](SECURITY.md#gate-audience-setupgate-131). `gate_admin_role` is any `is_granted()` attribute and is not validated: a typo (`ROLE_ADMN`) or a role your users never get (not in their roles nor reachable through `role_hierarchy`) means admins are never redirected. Check it with `bin/console debug:config security role_hierarchy` and a signed-in admin.
 
 ```php
 #[AsSetupNeedDetector(priority: 60, reopen: true)]

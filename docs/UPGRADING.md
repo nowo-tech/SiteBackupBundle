@@ -137,6 +137,15 @@ nowo_site_backup:
 With `guests_and_admins` the gate runs after the firewall (priority 7): `access_control` decisions come first on those
 requests. Review [SECURITY](SECURITY.md#gate-audience-setupgate-131).
 
+**Before you tag a detector `reopen: true`:** it must return `false` when it cannot decide. Do **not** mark a detector
+`reopen: true` while it returns `true` on errors (for example `catch (Throwable) { return true; }` as a "cold start"
+guess): it would let any request during a database error reopen the wizard of a live site. Beacon's
+`PlatformCatalogsSetupNeedDetector` does that today; change its `catch` to `return false` (or let it throw: a throwing
+reopen detector counts as "not required" and is logged) before tagging it. The reopen pass runs only on a main
+`GET` / `HEAD` outside the setup, panel and excluded paths, and a wizard step must clear the condition, or the wizard
+reopens after every completion. Check `gate_admin_role` against the roles your admins really have: it is not
+validated.
+
 ## To 1.30.0
 
 From **1.29.1**:

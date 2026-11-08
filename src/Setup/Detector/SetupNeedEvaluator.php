@@ -5,9 +5,11 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\Setup\Detector;
 
 use Nowo\SiteBackupBundle\Setup\DurableSetupDoneStoreInterface;
+use Nowo\SiteBackupBundle\Setup\SetupDbDoneGuard;
 use Nowo\SiteBackupBundle\Setup\SetupNeedDetectorInterface;
 use Nowo\SiteBackupBundle\Setup\SetupWizardReopener;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupMarkerManager;
+use Psr\Log\LoggerInterface;
 use Throwable;
 
 /**
@@ -23,7 +25,11 @@ use Throwable;
  * wizard can run again (e.g. platform catalogs were wiped). This costs one detector pass per request.
  *
  * {@see $reopenDetectors} (v1.31+, tag attribute `reopen: true`) is the per-detector form: after done, only those
- * detectors are evaluated, and one that requires setup re-opens the wizard the same way.
+ * detectors are evaluated, and one that requires setup re-opens the wizard the same way. That pass runs only when the
+ * caller allows it ($allowReopen: the site gate, on a main GET / HEAD request outside the setup, panel and excluded
+ * paths), never from the wizard, the panel, commands or {@see SetupDbDoneGuard}. A reopen
+ * detector that throws counts as "not required" and is logged (IN-M1 / IN-L1): a probe failure never reopens a done
+ * wizard and never turns into a 500. Contract: a reopen detector returns false when it cannot decide (never fail-true).
  */
 final class SetupNeedEvaluator
 {
@@ -40,10 +46,14 @@ final class SetupNeedEvaluator
         private readonly bool $reopenWhenDetectorRequires = false,
         private readonly ?SetupWizardReopener $reopener = null,
         private readonly iterable $reopenDetectors = [],
+        private readonly ?LoggerInterface $logger = null,
     ) {
     }
 
-    public function isSetupRequired(): bool
+    /**
+     * @param bool $allowReopen v1.31: evaluate the `reopen: true` detectors when setup is done (the site gate only)
+     */
+    public function isSetupRequired(bool $allowReopen = false): bool
     {
         if (!$this->setupEnabled) {
             return false;
@@ -51,8 +61,11 @@ final class SetupNeedEvaluator
 
         $done = $this->isAlreadyDone();
         if ($done && !$this->reopenWhenDetectorRequires) {
+            if (!$allowReopen) {
+                return false;
+            }
             foreach ($this->reopenDetectors as $detector) {
-                if ($detector->isSetupRequired()) {
+                if ($this->reopenDetectorRequires($detector)) {
                     $this->reopener?->reopen();
 
                     return true;
@@ -84,14 +97,13 @@ final class SetupNeedEvaluator
             return [];
         }
 
-        $done      = $this->isAlreadyDone();
-        $detectors = $this->detectors;
+        $done = $this->isAlreadyDone();
         if ($done && !$this->reopenWhenDetectorRequires) {
-            $detectors = $this->reopenDetectors;
+            return [];
         }
 
         $reasons = [];
-        foreach ($detectors as $detector) {
+        foreach ($this->detectors as $detector) {
             if ($detector->isSetupRequired()) {
                 $reasons[] = $detector->getReason();
             }
@@ -102,6 +114,24 @@ final class SetupNeedEvaluator
         }
 
         return $reasons;
+    }
+
+    /**
+     * A `reopen: true` detector: a throw counts as "not required" (logged at warning level), so a failing probe on a
+     * done site neither reopens the wizard nor answers 500.
+     */
+    private function reopenDetectorRequires(SetupNeedDetectorInterface $detector): bool
+    {
+        try {
+            return $detector->isSetupRequired();
+        } catch (Throwable $e) {
+            $this->logger?->warning('nowo_site_backup: reopen detector {detector} failed; treated as "setup not required".', [
+                'detector'  => $detector::class,
+                'exception' => $e,
+            ]);
+
+            return false;
+        }
     }
 
     /**
