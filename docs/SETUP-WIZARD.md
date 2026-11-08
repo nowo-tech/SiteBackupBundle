@@ -72,6 +72,22 @@ Priority (first match wins):
 
 **Re-open after done (v1.15+):** with `setup.reopen_when_detector_requires: true` (default `false`), the fast path no longer hides detectors. When `setup.done` or the durable store says complete **but** a tagged `SetupNeedDetectorInterface` still reports setup required (e.g. platform catalogs were wiped), `SetupNeedEvaluator` calls `SetupWizardReopener::reopen()`: it removes `setup.done`, calls `DurableSetupDoneStoreInterface::clearDone()` and resets persisted progress, then reports setup as required so the wizard can run again (no `/` ↔ `/setup` loop). This trades the fast path for **one detector pass per request**, so keep detectors cheap (the built-in Doctrine detectors reuse a healthy answer for `setup.worker_memo.schema_probe_ttl`, default 60 s; host detectors should do the same or rely on a cheap signal). `SetupWizardReopener` is a public service hosts can inject instead of copying the clear-done / reset-progress logic; host-owned flags outside SiteBackup must still be cleared by the host.
 
+**Per-detector re-open (v1.31+):** `#[AsSetupNeedDetector(priority: 50, reopen: true)]` (or the tag attribute `reopen: true` on `nowo.site_backup.setup_need_detector`) keeps that detector evaluated after setup is done while the others stay behind the fast path. When it reports setup required, the wizard is re-opened exactly as above. The cost is that one detector on every request, not a full pass.
+
+**Gate audience (v1.31+):** `setup.gate: guests_and_admins` redirects only guests and holders of `setup.gate_admin_role` (default `ROLE_ADMIN`) while setup is required; other signed-in users keep browsing and their requests skip the detectors. The listener then runs after the firewall (priority 7). Default `all`. See [SECURITY](SECURITY.md#gate-audience-setupgate-131).
+
+```php
+#[AsSetupNeedDetector(priority: 60, reopen: true)]
+final class PlatformCatalogsSetupNeedDetector implements SetupNeedDetectorInterface { /* cheap check */ }
+```
+
+```yaml
+nowo_site_backup:
+    setup:
+        gate: guests_and_admins
+        gate_admin_role: ROLE_ADMIN
+```
+
 **Per-worker memo (v1.16+):** in FrankenPHP worker mode `kernel.reset` runs between requests, so a per-request flag does not save anything. `setup.worker_memo` keeps two TTL memos per worker that are **not** reset per request:
 
 - `schema_probe_ttl` (default `60`): a *positive* answer from the cold-start checker (`MemoizedSchemaExistenceChecker` wraps `MysqlSchemaExistenceChecker`), `DoctrineConnectDetector` (DB reachable) and `DoctrineSchemaEmptyDetector` (tables present) is reused for the TTL. Negative answers (empty DB, wizard running) are never cached, so the gate reacts as soon as migrations create the schema. After dropping the schema on a running worker, the gate notices within the TTL.

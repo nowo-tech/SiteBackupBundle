@@ -21,11 +21,15 @@ use Throwable;
  * hides detectors: they are still evaluated, and if one reports setup is required the done markers
  * (file + durable store) are cleared and progress is reset via {@see SetupWizardReopener}, so the
  * wizard can run again (e.g. platform catalogs were wiped). This costs one detector pass per request.
+ *
+ * {@see $reopenDetectors} (v1.31+, tag attribute `reopen: true`) is the per-detector form: after done, only those
+ * detectors are evaluated, and one that requires setup re-opens the wizard the same way.
  */
 final class SetupNeedEvaluator
 {
     /**
      * @param iterable<SetupNeedDetectorInterface> $detectors
+     * @param iterable<SetupNeedDetectorInterface> $reopenDetectors Detectors tagged `reopen: true` (also in $detectors)
      */
     public function __construct(
         private readonly iterable $detectors,
@@ -35,6 +39,7 @@ final class SetupNeedEvaluator
         private readonly ?DurableSetupDoneStoreInterface $durableDoneStore = null,
         private readonly bool $reopenWhenDetectorRequires = false,
         private readonly ?SetupWizardReopener $reopener = null,
+        private readonly iterable $reopenDetectors = [],
     ) {
     }
 
@@ -46,6 +51,14 @@ final class SetupNeedEvaluator
 
         $done = $this->isAlreadyDone();
         if ($done && !$this->reopenWhenDetectorRequires) {
+            foreach ($this->reopenDetectors as $detector) {
+                if ($detector->isSetupRequired()) {
+                    $this->reopener?->reopen();
+
+                    return true;
+                }
+            }
+
             return false;
         }
 
@@ -71,13 +84,14 @@ final class SetupNeedEvaluator
             return [];
         }
 
-        $done = $this->isAlreadyDone();
+        $done      = $this->isAlreadyDone();
+        $detectors = $this->detectors;
         if ($done && !$this->reopenWhenDetectorRequires) {
-            return [];
+            $detectors = $this->reopenDetectors;
         }
 
         $reasons = [];
-        foreach ($this->detectors as $detector) {
+        foreach ($detectors as $detector) {
             if ($detector->isSetupRequired()) {
                 $reasons[] = $detector->getReason();
             }

@@ -6,6 +6,7 @@
 - [Attack surface](#attack-surface)
 - [Threat model](#threat-model)
 - [Setup access: default-deny (1.27+)](#setup-access-default-deny-127)
+  - [Gate audience (`setup.gate`, 1.31+)](#gate-audience-setupgate-131)
 - [Backups never contain secrets (1.28+)](#backups-never-contain-secrets-128)
 - [Secrets & cryptography](#secrets--cryptography)
 - [Production secrets guard (opt-in, v1.16+)](#production-secrets-guard-opt-in-v116)
@@ -62,6 +63,21 @@ Since 1.27.0 the wizard is **default-deny**:
 4. `setup.allow_without_token: true` (DEV/DEMO only) reopens the page without a token when no `setup_token` is set; it must be a literal boolean and the container refuses to compile it unless `kernel.debug` is true. It never opens `api/advance`.
 
 On internet-facing hosts still prefer a long random `SITE_SETUP_TOKEN` (or the one-time token) **and** firewall `/_setup`; turn on `security_guard.enabled: true` so an empty or documented static token fails closed.
+
+### Gate audience (`setup.gate`, 1.31+)
+
+The site gate (`SetupRequestSubscriber`, the redirect to the wizard while setup is required) is an access decision:
+
+- `all` (default) is unchanged: every visitor is redirected, at `subscriber_priority - 1`, before the firewall.
+- `guests_and_admins` lets a signed-in user **without** `setup.gate_admin_role` (default `ROLE_ADMIN`) keep using the
+  app while setup is required; guests and admins are still redirected. It needs the user, so the listener moves to
+  priority 7, after the firewall (8): the firewall's own `access_control` decisions (login redirect, 403) now happen
+  first on those requests. Without `security.authorization_checker` (no security-bundle), or when the check throws,
+  everyone counts as a guest (fail closed). Only the redirect changes: the wizard itself stays default-deny (token,
+  CSRF) whatever the audience.
+- Choose it only when the pages a signed-in member reaches still work while setup is required (e.g. platform
+  catalogs missing). A detector tagged `reopen: true` re-opens a done wizard when it reports a need; it runs on every
+  request after setup, so keep it cheap and side-effect free.
 
 ## Backups never contain secrets (1.28+)
 

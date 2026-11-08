@@ -70,6 +70,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- **Setup gate audience (SB-1):** `setup.gate: all|guests_and_admins` (default `all`, unchanged) and `setup.gate_admin_role` (default `ROLE_ADMIN`). `guests_and_admins` lets signed-in users without that role keep browsing while setup is required (no detector probe on their requests); the gate then runs after the firewall (priority 7). Without security-bundle everyone counts as a guest. See [SECURITY](SECURITY.md#gate-audience-setupgate-131).
+- **Per-detector re-open (SB-1):** `#[AsSetupNeedDetector(reopen: true)]` / tag attribute `reopen: true`: that detector is still evaluated after setup is done and, when it requires setup, re-opens the wizard (`SetupWizardReopener`), without turning on `reopen_when_detector_requires` for every detector. Compiler pass `SetupReopenDetectorsPass`.
+
 ## [1.30.0] - 2026-11-06
 
 ### Security

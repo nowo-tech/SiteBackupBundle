@@ -10,6 +10,8 @@ use Nowo\SiteBackupBundle\Service\SiteBackupManager;
 use Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
+use Symfony\Component\Security\Core\Authorization\AuthorizationCheckerInterface;
+use Throwable;
 
 use function is_string;
 use function rawurlencode;
@@ -19,6 +21,10 @@ use function str_starts_with;
 
 /**
  * When setup is required (and restore is not active), redirect visitors to the wizard.
+ *
+ * v1.31 (SB-1), `setup.gate`: `all` (default) sends every visitor; `guests_and_admins` lets signed-in users without
+ * `setup.gate_admin_role` keep browsing (checked before the detectors, so their requests cost no probe). Without an
+ * authorization checker (no security-bundle) everyone counts as a guest.
  */
 final class SetupRequestSubscriber
 {
@@ -34,6 +40,9 @@ final class SetupRequestSubscriber
         private readonly string $panelPathPrefix = '/_site_backup',
         private readonly array $enabledLocales = [],
         private readonly ?SetupPathPrefixResolver $pathPrefixResolver = null,
+        private readonly string $gate = 'all',
+        private readonly ?AuthorizationCheckerInterface $authorizationChecker = null,
+        private readonly string $gateAdminRole = 'ROLE_ADMIN',
     ) {
     }
 
@@ -44,6 +53,10 @@ final class SetupRequestSubscriber
         }
 
         if ($this->backupManager->isRestoreActive()) {
+            return;
+        }
+
+        if ($this->isSignedInNonAdmin()) {
             return;
         }
 
@@ -74,6 +87,24 @@ final class SetupRequestSubscriber
 
         $event->setResponse(new RedirectResponse($target));
         $event->stopPropagation();
+    }
+
+    /**
+     * `guests_and_admins`: a signed-in user without the admin role is not sent to the wizard. An authorization
+     * failure (no token storage yet, a voter error) counts as a guest, so the gate stays closed.
+     */
+    private function isSignedInNonAdmin(): bool
+    {
+        if ($this->gate !== 'guests_and_admins' || !$this->authorizationChecker instanceof AuthorizationCheckerInterface) {
+            return false;
+        }
+
+        try {
+            return $this->authorizationChecker->isGranted('IS_AUTHENTICATED_REMEMBERED')
+                && !$this->authorizationChecker->isGranted($this->gateAdminRole);
+        } catch (Throwable) {
+            return false;
+        }
     }
 
     private function isSetupPath(string $path): bool

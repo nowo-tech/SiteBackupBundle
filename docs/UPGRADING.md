@@ -119,6 +119,24 @@
 
 ## Unreleased
 
+Nothing to do: `setup.gate` defaults to `all` and no detector is tagged `reopen` by default, so the gate behaves as in
+1.30. A host that redirected only guests and admins, or re-opened the wizard from its own `kernel.request` subscriber
+when one signal came back (e.g. wiped catalogs), can drop that subscriber:
+
+```yaml
+nowo_site_backup:
+    setup:
+        gate: guests_and_admins       # signed-in users without gate_admin_role keep browsing
+        gate_admin_role: ROLE_ADMIN
+```
+
+```php
+#[AsSetupNeedDetector(priority: 60, reopen: true)]   // re-opens a done wizard when it reports a need
+```
+
+With `guests_and_admins` the gate runs after the firewall (priority 7): `access_control` decisions come first on those
+requests. Review [SECURITY](SECURITY.md#gate-audience-setupgate-131).
+
 ## To 1.30.0
 
 From **1.29.1**:

@@ -8,6 +8,7 @@ use Nowo\SiteBackupBundle\Attribute\AsSetupNeedDetector;
 use Nowo\SiteBackupBundle\Attribute\AsSetupTabChecker;
 use Nowo\SiteBackupBundle\DependencyInjection\Compiler\CsrfProtectionPass;
 use Nowo\SiteBackupBundle\DependencyInjection\Compiler\LoginThrottleStoragePass;
+use Nowo\SiteBackupBundle\DependencyInjection\Compiler\SetupReopenDetectorsPass;
 use Nowo\SiteBackupBundle\DependencyInjection\Compiler\TwigPathsPass;
 use Nowo\SiteBackupBundle\DependencyInjection\SiteBackupExtension;
 use Nowo\SiteBackupBundle\Model\ArchivePassword;
@@ -25,12 +26,16 @@ final class NowoSiteBackupBundle extends Bundle
         $container->addCompilerPass(new TwigPathsPass());
         $container->addCompilerPass(new LoginThrottleStoragePass());
         $container->addCompilerPass(new CsrfProtectionPass());
+        $container->addCompilerPass(new SetupReopenDetectorsPass());
         // Attribute-only (same pattern as AsSetupTabChecker) — avoids double-tagging
         // if we also autoconfigured SetupNeedDetectorInterface.
         $container->registerAttributeForAutoconfiguration(
             AsSetupNeedDetector::class,
             static function (ChildDefinition $definition, AsSetupNeedDetector $attribute): void {
-                $definition->addTag('nowo.site_backup.setup_need_detector', [
+                $definition->addTag('nowo.site_backup.setup_need_detector', $attribute->reopen ? [
+                    'priority' => $attribute->priority,
+                    'reopen'   => true,
+                ] : [
                     'priority' => $attribute->priority,
                 ]);
             },
