@@ -121,6 +121,9 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
 
     public const LOGIN_LIMITER_STORAGE_ID = 'nowo_site_backup.login_limiter.storage';
 
+    /** kernel.request priority of the setup gate with setup.gate guests_and_admins: after the firewall (8), v1.31. */
+    public const SETUP_GATE_AFTER_FIREWALL_PRIORITY = 7;
+
     public function prepend(ContainerBuilder $container): void
     {
         $this->prependUiKitDefaults($container);
@@ -1167,7 +1170,8 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$markers', new Reference(SetupMarkerManager::class))
             ->setArgument('$durableDoneStore', new Reference(DurableSetupDoneStoreInterface::class))
             ->setArgument('$reopenWhenDetectorRequires', (bool) ($setup['reopen_when_detector_requires'] ?? false))
-            ->setArgument('$reopener', new Reference(SetupWizardReopener::class));
+            ->setArgument('$reopener', new Reference(SetupWizardReopener::class))
+            ->setArgument('$logger', new Reference('logger', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE));
 
         $container->getDefinition(SetupStepFactory::class)
             ->setArgument('$runner', new Reference(ConsoleProcessRunner::class))
@@ -1246,13 +1250,22 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
                 ->setArgument('$panelPathPrefix', $config['panel']['path_prefix'])
                 ->setArgument('$enabledLocales', $localeEnabled)
                 ->setArgument('$pathPrefixResolver', new Reference(SetupPathPrefixResolver::class));
+            // v1.31 (SB-1): setup.gate guests_and_admins checks the signed-in user, so it runs after the firewall
+            // (kernel.request priority 8); `all` keeps the config-driven priority.
+            $gate = ($setup['gate'] ?? 'all') === 'guests_and_admins' ? 'guests_and_admins' : 'all';
+            if ($gate === 'guests_and_admins') {
+                $sub
+                    ->setArgument('$gate', $gate)
+                    ->setArgument('$authorizationChecker', new Reference('security.authorization_checker', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
+                    ->setArgument('$gateAdminRole', (string) ($setup['gate_admin_role'] ?? 'ROLE_ADMIN'));
+            }
             // REQ-SF-003 exception: config-driven priority (subscriber_priority - 1), see configureSubscriber().
             $sub->clearTags();
             if ($setupEnabled) {
                 $sub->addTag('kernel.event_listener', [
                     'event'    => 'kernel.request',
                     'method'   => 'onKernelRequest',
-                    'priority' => (int) $config['subscriber_priority'] - 1,
+                    'priority' => $gate === 'guests_and_admins' ? self::SETUP_GATE_AFTER_FIREWALL_PRIORITY : (int) $config['subscriber_priority'] - 1,
                 ]);
             }
         }
