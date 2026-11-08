@@ -112,7 +112,7 @@ The site gate (`SetupRequestSubscriber`, the redirect to the wizard while setup 
   services, `console` and `sample_data` steps still run on a reopen unless they implement
   `InitialInstallOnlyStepInterface` (IR-I3). If `reopen()` fails (the marker cannot be written), the site gate logs a
   warning and the instance stays done (IR-L2).
-  Audit status: re-verification pending.
+  Audit status: Appendix IR (immediate, 2026-11-08) **Pass-Low**; IR-L1 (a) and IR-L2 fixed before 1.32.0, IR-L1 (b) durable reopened state is a follow-up; IR-I1..I6 Info documented.
 
 ## Backups never contain secrets (1.28+)
 
