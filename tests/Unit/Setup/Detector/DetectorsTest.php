@@ -207,14 +207,17 @@ final class DetectorsTest extends TestCase
             reopener: new SetupWizardReopener($markers, $progress, $durable),
         );
 
-        self::assertTrue($evaluator->isSetupRequired());
+        // 1.32 (IN-L2): only the site gate ($allowReopen) re-opens.
+        self::assertFalse($evaluator->isSetupRequired());
+        self::assertTrue($markers->isDone());
+        self::assertTrue($evaluator->isSetupRequired(true));
         self::assertFalse($markers->isDone());
         self::assertFalse($durable->isDone());
         self::assertSame(1, $durable->clearCalls);
         self::assertSame(SetupProgress::PHASE_IDLE, $progress->load()->getPhase());
     }
 
-    public function testSetupNeedEvaluatorReopenReasonsClearsMarkers(): void
+    public function testSetupNeedEvaluatorReasonsNeverReopenADoneInstance(): void
     {
         $markers = new SetupMarkerManager($this->dir . '/ro2-req', $this->dir . '/ro2-done');
         $markers->markDone();
@@ -227,8 +230,9 @@ final class DetectorsTest extends TestCase
             reopener: new SetupWizardReopener($markers, $progress),
         );
 
-        self::assertSame(['catalogs empty'], $evaluator->getReasons());
-        self::assertFalse($markers->isDone());
+        // 1.32 (IN-L2): getReasons() never re-opens a done instance.
+        self::assertSame([], $evaluator->getReasons());
+        self::assertTrue($markers->isDone());
     }
 
     public function testSetupNeedEvaluatorReopenKeepsDoneWhenDetectorsSatisfied(): void
@@ -277,8 +281,8 @@ final class DetectorsTest extends TestCase
             reopenWhenDetectorRequires: true,
         );
 
-        self::assertTrue($evaluator->isSetupRequired());
-        self::assertSame(['x'], $evaluator->getReasons());
+        self::assertTrue($evaluator->isSetupRequired(true));
+        self::assertSame([], $evaluator->getReasons());
     }
 
     public function testSetupWizardReopenerHandlesNothingToClearAndFailures(): void

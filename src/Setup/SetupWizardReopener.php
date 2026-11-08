@@ -17,6 +17,10 @@ use Throwable;
  * {@see Detector\SetupNeedEvaluator} when {@code setup.reopen_when_detector_requires} is enabled, and
  * available to host code (e.g. catalog-wipe subscribers) instead of copying the logic.
  *
+ * Since 1.32 it also writes the {@code setup.reopened} marker ({@see SetupMarkerManager::markReopened()}): the
+ * re-opened wizard then skips the initial-install-only steps ({@see InitialInstallOnlySteps}: admin creation,
+ * {@code database_url}, SQL import) until it completes.
+ *
  * Host-owned state outside SiteBackup (e.g. an instance-settings "setup completed" flag that is not
  * behind the durable store) must still be cleared by the host.
  */
@@ -35,6 +39,13 @@ final readonly class SetupWizardReopener
     public function reopen(): bool
     {
         $cleared = false;
+
+        // 1.32 (IN-I1): record the reopen before any completion signal is cleared, so a reopened wizard never looks
+        // like an initial install (a failed write throws and leaves setup.done in place).
+        if ($this->markers->isDone() || $this->durableIsDone()) {
+            // @igor-ignore - Persistent I/O (marker file), not in-memory worker state.
+            $this->markers->markReopened();
+        }
 
         if ($this->markers->isDone()) {
             // @igor-ignore - Persistent I/O (marker file), not in-memory worker state.
@@ -59,6 +70,15 @@ final readonly class SetupWizardReopener
         }
 
         return $cleared;
+    }
+
+    private function durableIsDone(): bool
+    {
+        try {
+            return $this->durableDoneStore?->isDone() ?? false;
+        } catch (Throwable) {
+            return false;
+        }
     }
 
     /**

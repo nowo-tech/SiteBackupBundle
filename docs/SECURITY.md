@@ -82,19 +82,37 @@ The site gate (`SetupRequestSubscriber`, the redirect to the wizard while setup 
   would redirect (never on the setup, panel or excluded paths, never on `POST` / `PUT` / …); a detector that throws
   counts as "not required" and is logged. A reopen detector **must return `false` when it cannot decide**: a
   fail-true detector lets any anonymous request during a database error clear `setup.done` and the durable store.
-- Global flag `setup.reopen_when_detector_requires` (1.15, default `false`; audit IN-L2): it has **none** of the
-  guards above. With it on, every tagged detector runs on every caller and method (site gate on `POST` too, the wizard,
-  `SetupDbDoneGuard`, commands), and the built-in `doctrine_connect` detector reports a need while the database is
-  unreachable, so a database blip on a done instance re-opens the wizard; a throwing host detector answers 500. Keep it
-  off and tag a never-fail-true detector `reopen: true` instead. A follow-up will route the flag through the same guards.
+- Global flag `setup.reopen_when_detector_requires` (1.15, default `false`; audit IN-L2, **fixed in 1.32**): it now
+  goes through the same guards as `reopen: true`. After done, detectors run only from the site gate on a main `GET` /
+  `HEAD` outside the setup, panel and excluded paths (never on `POST`, never from the wizard, `SetupDbDoneGuard` or the
+  commands, and `getReasons()` never reopens); a detector that throws counts as "not required" and is logged; and the
+  built-in `doctrine_connect` / `doctrine_schema_empty` detectors are not reopen signals once setup is done (a database
+  blip is not a missing setup). They still open the wizard on a cold start. A fail-true **host** detector still reopens
+  on a navigational `GET`, as with `reopen: true`: the "never fail-true" contract applies to every detector while the
+  flag is on, so prefer `reopen: true` on the one detector that needs it.
 - `gate_admin_role` is not validated: a typo means admins are not redirected (fail open for the redirect only; no
   privilege is granted). With `guests_and_admins` a lazy firewall's own response (`LazyResponseException`, e.g. a 401
   for bad API credentials) is kept; other authorization failures count as a guest.
-- Reopened wizard on a live instance (audit IN-I1): in 1.31 it still accepts the static `setup.setup_token` for every
-  step (admin creation, `.env.local` rewrite, SQL import), as with `reopen_when_detector_requires`. Decided for 1.32: a
-  wizard re-opened on a configured instance shows only the missing steps, and the `admin`, `database_url` and SQL import
-  steps are refused except on the initial install. Until then keep the static token long and random, or unset it and
-  use the one-time token.
+- Reopened wizard on a live instance (audit IN-I1, owner decision 2026-11-08, **fixed in 1.32**): when
+  `SetupWizardReopener` re-opens a configured instance (`setup.done` existed, or the durable store said done) it first
+  writes `setup.reopened` (`setup.reopened_marker_file`). While that marker exists the wizard shows and runs only the
+  steps still missing: admin creation (`admin_user`), the `.env.local` rewrite (`database_url`) and the SQL import
+  (`bootstrap_mode`, `sql_file`), plus host steps that implement `InitialInstallOnlyStepInterface`, are left out of the
+  steps list and never run, on the page (GET render and POST), the JSON API and the CLI alike; a stale or crafted
+  progress record that points at one of them gets no form and no run. The marker is a server-side file: no request
+  parameter, header or progress answer sets or clears it. It is removed when the wizard completes (the `marker` step)
+  or by an operator with `nowo:site-backup:setup-reset --initial`. The token model is unchanged: a static
+  `setup_token` still opens the re-opened wizard, but it can no longer create an admin, rewrite `DATABASE_URL` or
+  import SQL there. Keep the marker on the same storage as `setup.done` (shared `var/site-backup` on multi-node hosts).
+  **Limits (audit IR):** the marker is a local file. A new node, an autoscaled container or a `var/` wipe while a
+  reopen is open sees "not done, not reopened", which is an initial install with every step (IR-L1 b); keep
+  `setup.done` and `setup.reopened` on shared or persistent storage. A durable reopened state is a follow-up. A plain
+  `setup-reset` (without `--initial`) on an instance that was never reopened, or deleting `setup.done` by hand without
+  a durable store, also gives a full install: that is an operator action, not reachable from HTTP (IR-I2). Host step
+  services, `console` and `sample_data` steps still run on a reopen unless they implement
+  `InitialInstallOnlyStepInterface` (IR-I3). If `reopen()` fails (the marker cannot be written), the site gate logs a
+  warning and the instance stays done (IR-L2).
+  Audit status: re-verification pending.
 
 ## Backups never contain secrets (1.28+)
 
