@@ -123,6 +123,7 @@
 Nothing to change for hosts that keep the defaults.
 
 - **Re-opened wizard (IN-I1):** after `SetupWizardReopener::reopen()` (a `reopen: true` detector, `reopen_when_detector_requires`, or a host subscriber that calls it) the wizard no longer offers `admin_user`, `database_url`, `bootstrap_mode` or `sql_file` until it completes. If a reopen relied on one of them (for example to create a new admin), do that from the console, or run `php bin/console nowo:site-backup:setup-reset --initial -y` first to get a full initial install. Mark host steps that create users, rewrite secrets or replace data with `InitialInstallOnlyStepInterface`. On multi-node hosts keep `setup.reopened_marker_file` on the same shared storage as `setup.done`.
+- **`reopen_when_detector_requires: true` (IN-L2):** the flag now re-opens only from the site gate on a main `GET` / `HEAD`; the wizard, `SetupDbDoneGuard`, the commands and `getReasons()` no longer re-open a done instance, a throwing detector is logged instead of answering 500, and `doctrine_connect` / `doctrine_schema_empty` no longer re-open once setup is done (a database outage does not reopen a live wizard). A host that counted on a database error to reopen must use its own detector, which must not fail true.
 
 ## To 1.31.0
 

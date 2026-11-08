@@ -19,10 +19,12 @@ use Throwable;
  * marker or a durable store reporting complete skips all detectors. That avoids
  * repeated Doctrine / host catalog probes on every HTTP request after setup.
  *
- * When {@see $reopenWhenDetectorRequires} is also true (v1.15+, default false), that short-circuit no longer
- * hides detectors: they are still evaluated, and if one reports setup is required the done markers
+ * When {@see $reopenWhenDetectorRequires} is also true (v1.15+, default false), every detector is a reopen detector:
+ * after done they are still evaluated, and if one reports setup is required the done markers
  * (file + durable store) are cleared and progress is reset via {@see SetupWizardReopener}, so the
- * wizard can run again (e.g. platform catalogs were wiped). This costs one detector pass per request.
+ * wizard can run again (e.g. platform catalogs were wiped). Since 1.32 (IN-L2) it goes through the same guards as the
+ * `reopen: true` detectors below, and {@see DoctrineConnectDetector} / {@see DoctrineSchemaEmptyDetector} never count
+ * as reopen signals (a database blip is not a missing setup).
  *
  * {@see $reopenDetectors} (v1.31+, tag attribute `reopen: true`) is the per-detector form: after done, only those
  * detectors are evaluated, and one that requires setup re-opens the wizard the same way. That pass runs only when the
@@ -51,7 +53,8 @@ final class SetupNeedEvaluator
     }
 
     /**
-     * @param bool $allowReopen v1.31: evaluate the `reopen: true` detectors when setup is done (the site gate only)
+     * @param bool $allowReopen v1.31: evaluate the reopen detectors when setup is done (the site gate only). Since 1.32
+     *                          (IN-L2) this also gates `reopen_when_detector_requires`
      */
     public function isSetupRequired(bool $allowReopen = false): bool
     {
@@ -59,15 +62,9 @@ final class SetupNeedEvaluator
             return false;
         }
 
-        $done = $this->isAlreadyDone();
-        if ($done && !$this->reopenWhenDetectorRequires) {
-            if (!$allowReopen) {
-                return false;
-            }
-            foreach ($this->reopenDetectors as $detector) {
-                if ($this->reopenDetectorRequires($detector)) {
-                    $this->reopener?->reopen();
-
+        if (!$this->isAlreadyDone()) {
+            foreach ($this->detectors as $detector) {
+                if ($detector->isSetupRequired()) {
                     return true;
                 }
             }
@@ -75,11 +72,13 @@ final class SetupNeedEvaluator
             return false;
         }
 
-        foreach ($this->detectors as $detector) {
-            if ($detector->isSetupRequired()) {
-                if ($done) {
-                    $this->reopener?->reopen();
-                }
+        if (!$allowReopen) {
+            return false;
+        }
+
+        foreach ($this->reopenWhenDetectorRequires ? $this->detectors : $this->reopenDetectors as $detector) {
+            if ($this->reopenDetectorRequires($detector)) {
+                $this->reopener?->reopen();
 
                 return true;
             }
@@ -97,8 +96,8 @@ final class SetupNeedEvaluator
             return [];
         }
 
-        $done = $this->isAlreadyDone();
-        if ($done && !$this->reopenWhenDetectorRequires) {
+        // Done: no reasons and no reopen from here (only the site gate reopens, IN-M1 / IN-L2).
+        if ($this->isAlreadyDone()) {
             return [];
         }
 
@@ -107,10 +106,6 @@ final class SetupNeedEvaluator
             if ($detector->isSetupRequired()) {
                 $reasons[] = $detector->getReason();
             }
-        }
-
-        if ($done && $reasons !== []) {
-            $this->reopener?->reopen();
         }
 
         return $reasons;
@@ -122,6 +117,12 @@ final class SetupNeedEvaluator
      */
     private function reopenDetectorRequires(SetupNeedDetectorInterface $detector): bool
     {
+        // IN-L2: the built-in Doctrine detectors are cold-start signals (connect fails, no tables). On a done instance
+        // they report a database blip, not a missing setup, so they never re-open the wizard.
+        if ($detector instanceof DoctrineConnectDetector || $detector instanceof DoctrineSchemaEmptyDetector) {
+            return false;
+        }
+
         try {
             return $detector->isSetupRequired();
         } catch (Throwable $e) {

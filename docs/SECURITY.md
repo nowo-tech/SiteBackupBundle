@@ -82,11 +82,14 @@ The site gate (`SetupRequestSubscriber`, the redirect to the wizard while setup 
   would redirect (never on the setup, panel or excluded paths, never on `POST` / `PUT` / …); a detector that throws
   counts as "not required" and is logged. A reopen detector **must return `false` when it cannot decide**: a
   fail-true detector lets any anonymous request during a database error clear `setup.done` and the durable store.
-- Global flag `setup.reopen_when_detector_requires` (1.15, default `false`; audit IN-L2): it has **none** of the
-  guards above. With it on, every tagged detector runs on every caller and method (site gate on `POST` too, the wizard,
-  `SetupDbDoneGuard`, commands), and the built-in `doctrine_connect` detector reports a need while the database is
-  unreachable, so a database blip on a done instance re-opens the wizard; a throwing host detector answers 500. Keep it
-  off and tag a never-fail-true detector `reopen: true` instead. A follow-up will route the flag through the same guards.
+- Global flag `setup.reopen_when_detector_requires` (1.15, default `false`; audit IN-L2, **fixed in 1.32**): it now
+  goes through the same guards as `reopen: true`. After done, detectors run only from the site gate on a main `GET` /
+  `HEAD` outside the setup, panel and excluded paths (never on `POST`, never from the wizard, `SetupDbDoneGuard` or the
+  commands, and `getReasons()` never reopens); a detector that throws counts as "not required" and is logged; and the
+  built-in `doctrine_connect` / `doctrine_schema_empty` detectors are not reopen signals once setup is done (a database
+  blip is not a missing setup). They still open the wizard on a cold start. A fail-true **host** detector still reopens
+  on a navigational `GET`, as with `reopen: true`: the "never fail-true" contract applies to every detector while the
+  flag is on, so prefer `reopen: true` on the one detector that needs it.
 - `gate_admin_role` is not validated: a typo means admins are not redirected (fail open for the redirect only; no
   privilege is granted). With `guests_and_admins` a lazy firewall's own response (`LazyResponseException`, e.g. a 401
   for bad API credentials) is kept; other authorization failures count as a guest.
