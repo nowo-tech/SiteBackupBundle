@@ -20,7 +20,7 @@
     },
     "authors": [
         {
-            "name": "H\u00e9ctor Franco Aceituno",
+            "name": "Héctor Franco Aceituno",
             "email": "hectorfranco@nowo.tech",
             "homepage": "https://github.com/HecFranco",
             "role": "Developer"
@@ -71,7 +71,7 @@
         "symfony/lock": "^7.4 || ^8.0",
         "symfony/twig-bundle": "^7.4 || ^8.0",
         "twig/twig": "^3.12",
-        "vincentlanglet/twig-cs-fixer": "^3.0"
+        "vincentlanglet/twig-cs-fixer": "^3.0 || ^4.0"
     },
     "suggest": {
         "symfony/twig-bundle": "Required to render the restore loading page and form-based admin/setup UI",
