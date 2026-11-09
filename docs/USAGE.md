@@ -21,6 +21,7 @@
   - [Restore drill (1.29+)](#restore-drill-129)
 - [Built-in database dumper](#built-in-database-dumper)
 - [Database import note](#database-import-note)
+- [Using it from a DDD / hexagonal application](#using-it-from-a-ddd--hexagonal-application)
 
 ## Create an integral backup
 
@@ -331,3 +332,61 @@ nowo_site_backup:
 Automatic SQL import during HTTP **restore** is **not** performed by default (it would risk locking/breaking the live connection). The dump is copied to `var/site-backup/last-restore-dump.sql`.
 
 For cold bootstrap (no DB / empty schema / after restore), use the **Setup Wizard** — see [SETUP-WIZARD.md](SETUP-WIZARD.md) — which can import that dump, run migrations, seed roles, create a super-admin, and optionally load sample data through a declarative, idempotent pipeline.
+
+## Using it from a DDD / hexagonal application
+
+**Layer.** SiteBackupBundle is infrastructure: an operational bounded context (backup, restore, setup wizard) with
+its own small model (`BackupArtifact`, `BackupOptions`, `BackupHistoryEntry`, `RestoreProgress`, `SetupProgress`)
+and its own storage (files under `var/site-backup`, optional DBAL tables `nowo_site_backup_setup_progress` and
+`nowo_site_backup_setup_step` that it creates itself). It has no Doctrine ORM mapping and never references your
+entities; the database is backed up physically (`mysqldump` or the built-in dumper on `DATABASE_URL`).
+
+**Keeping the domain free of the bundle.** Nothing in your domain needs to know about it. Put any code that talks to
+it in your infrastructure layer:
+
+- *Triggering backups from your application layer*: define your own port and implement it with `SiteBackupManager`
+  (the service is `final` and has no interface yet):
+
+  ```php
+  // Application layer
+  interface SiteSnapshotter { public function snapshot(string $reason): string; }
+
+  // Infrastructure layer
+  final class SiteBackupSnapshotter implements SiteSnapshotter
+  {
+      public function __construct(private SiteBackupManager $manager) {}
+
+      public function snapshot(string $reason): string
+      {
+          return $this->manager->createBackup($reason, 'app')->getId();
+      }
+  }
+  ```
+
+  For Messenger, send ids/labels in the message and build `BackupOptions` in the handler (`BackupOptions` refuses
+  serialisation on purpose).
+
+- *Reacting to backups*: subscribe to the events in `Nowo\SiteBackupBundle\Event\SiteBackupEvents`
+  (`BackupCreatedEvent`, `BackupFailedEvent`, `RestoreCompletedEvent`, `RestoreFailedEvent`, `RemoteBackupUploadedEvent`,
+  `SetupCompletedEvent`, …) and translate them into your own notifications or audit records.
+
+- *Ports you implement* (alias the interface in your `services.yaml`, or use the config key):
+  - `Setup\AdminUserProvisionerInterface` (`setup.admin_provisioner`) — create your User aggregate here; the bundle
+    only passes `email`, `password` and `roles`.
+  - `Security\SiteBackupAccessCheckerInterface` (`security.access_checker`) — panel authorisation.
+  - `Storage\BackupHistoryStorageInterface`, `Storage\RestoreProgressStorageInterface`,
+    `Setup\Storage\SetupProgressStorageInterface`, `Setup\DurableSetupDoneStoreInterface` — persistence of the
+    bundle's own state.
+  - `Remote\BackupRemoteTargetInterface` (or `backup.remote.flysystem_storage`), `Crypto\ArchiveEncryptorInterface`.
+  - `Setup\SetupNeedDetectorInterface` with `#[AsSetupNeedDetector]`, `Setup\SetupTabCheckerInterface` with
+    `#[AsSetupTabChecker]`.
+- Mark controllers that must stay reachable during a restore with `#[ExcludeFromRestore]`.
+
+**Known limitations.**
+- `SiteBackupManager` has no interface; wrap it behind your own port as shown above.
+- Actions from the web panel are recorded with the actor `panel`, and `SiteBackupAccessCheckerInterface::canAccess()`
+  receives `null`; read the current user from Symfony Security inside your checker or listener.
+- Custom `SetupStepInterface` implementations cannot be registered yet; use the `console` step type to run your own
+  command.
+- DBAL storages always use `doctrine.dbal.default_connection`.
+- Database dump/import supports MySQL/MariaDB only.
