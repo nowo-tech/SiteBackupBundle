@@ -91,8 +91,18 @@ redacted text instead of the raw exception message, and the event gains accessor
 
 - `RestoreFailedEvent::getException()` / `getExceptionClass()`: the original throwable, in memory only. It is
   **sensitive** (unredacted message and trace): never persist, serialize, forward or render it.
-- `Log\SecretRedactor::forStorage()` / `fromThrowable()` (redact + cap) and `STORAGE_MAX_LENGTH`. `redact()` also masks
-  SQL `PASSWORD '…'` and `IDENTIFIED WITH … AS '…'` literals, and keeps MySQL's `(using password: YES)` hint readable.
+- `Log\SecretRedactor::forStorage()` / `fromThrowable()` (UTF-8 scrub + redact + cap) and `STORAGE_MAX_LENGTH`.
+  `forStorage()` replaces invalid UTF-8 bytes first, so a latin1 snippet in a driver error can no longer make the
+  history / progress JSON write throw and leave a failed restore shown as "active" (PHP 8.2–8.4).
+
+### Changed
+
+- `SecretRedactor::redact()` masks more (independent audit KZ): a URL password with a raw `@` up to the last `@` of the
+  token; backslash-escaped quotes in `password='…'` / `"…"` and in SQL `IDENTIFIED BY '…'` / `PASSWORD '…'` (doubled
+  quotes too); `IDENTIFIED WITH … BY|AS '…'`; `--password <value>`; quoted argv (`'-pX'`, `'-p' 'X'`,
+  `'--password=a b'`); env and `=` keys in any case (`database_password=`, `secretKey=`); YAML `*_secret:` /
+  `accessKeyId:`; XML elements (`<SecretAccessKey>`); `passphrase`; ODBC `Pwd={…}`; age identities. Only the exact
+  MySQL hint `(using password: YES|NO)` stays readable (a password starting with `YES)` is masked).
 
 ## [1.33.0] - 2026-11-10
 
