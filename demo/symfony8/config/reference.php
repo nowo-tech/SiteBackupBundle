@@ -1120,6 +1120,7 @@ use Symfony\Component\Config\Loader\ParamConfigurator as Param;
  *     security?: array{ // REQ-UI-002 roles + optional ops password gate. Password gate is additional to access_roles.
  *         access_roles?: list<scalar|Param|null>,
  *         access_checker?: scalar|Param|null, // Optional service id implementing SiteBackupAccessCheckerInterface. null = role-based default (or AllowAll when allow_unauthenticated). // Default: null
+ *         actor_resolver?: scalar|Param|null, // Service id implementing ActorResolverInterface: the actor recorded for panel create / delete / restore (history, events, backup created-by). null = "panel"; Nowo\SiteBackupBundle\Security\SecurityTokenActorResolver = the logged-in user identifier. // Default: null
  *         allow_unauthenticated?: bool|Param, // DEV/DEMO only: skip Symfony Security role check (password gate may still apply). Never true in production. // Default: false
  *         password_protection?: bool|Param, // Default: true
  *         password_hash?: scalar|Param|null, // Default: null

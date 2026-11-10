@@ -57,6 +57,7 @@ Worker demo: `demo/symfony8/docker/frankenphp/Caddyfile` runs `php_server` with 
 | Service | Shared | Mutable state | Scenario A | Scenario B |
 |---------|--------|---------------|------------|------------|
 | `Service\SiteBackupManager` | yes | none (`readonly` collaborators) | ✅ | ✅ |
+| `Security\StaticActorResolver` / `Security\SecurityTokenActorResolver` | yes | none (`final readonly`; the token is read per call) | ✅ | ✅ |
 | `Backup\BackupArchiver` | yes | none (`readonly` config + `Filesystem`) | ✅ | ✅ |
 | `Restore\RestoreOrchestrator` | yes | none; progress lives in storage; raises the worker restart signal after applying files | ✅ (W-01 signal) | ✅ (W-01 signal) |
 | `Storage\FilesystemRestoreProgressStorage`, `Storage\FilesystemBackupHistoryStorage` | yes | none; read/write files per call | ✅ | ✅ |

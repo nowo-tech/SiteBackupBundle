@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+  - [To 1.33.0](#to-1330)
 - [To 1.32.0](#to-1320)
 - [To 1.31.0](#to-1310)
 - [To 1.30.0](#to-1300)
@@ -120,6 +121,18 @@
   - [Breaking changes](#breaking-changes-1)
 
 ## Unreleased
+
+### To 1.33.0
+
+Additive; nothing to change unless one of these applies:
+
+- **Type-hint the interface.** Prefer `Nowo\SiteBackupBundle\Service\SiteBackupManagerInterface` over the `final`
+  `SiteBackupManager` in host services; the class is unchanged and still autowirable.
+- **Custom access checker.** `canAccess()` now receives the user of the security token (it always got `null`). If your
+  checker treated `null` as "deny", or read the user itself, check it still does what you want; anonymous requests and
+  apps without SecurityBundle still pass `null`.
+- **Real actor for panel actions.** Set `security.actor_resolver: Nowo\SiteBackupBundle\Security\SecurityTokenActorResolver`
+  to record the user identifier instead of `panel` (history file, events, backup sidecar `created_by`: personal data).
 
 ## To 1.32.0
 

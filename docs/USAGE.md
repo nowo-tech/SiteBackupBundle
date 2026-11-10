@@ -202,7 +202,7 @@ form types. Override wording with `translations/NowoSiteBackupBundle.<locale>.ya
 
 ## Backup options, formats and table rules (1.28+)
 
-`SiteBackupManager::createBackup()` takes a `BackupOptions` (use named arguments). The 1.27 call
+`SiteBackupManagerInterface::createBackup()` (implemented by `SiteBackupManager`) takes a `BackupOptions` (use named arguments). The 1.27 call
 `createBackup($label, $createdBy)` keeps working and uses `defaultOptions()` (`backup.default_format`,
 `backup.compression_level`, configured paths and dump).
 
@@ -344,8 +344,9 @@ entities; the database is backed up physically (`mysqldump` or the built-in dump
 **Keeping the domain free of the bundle.** Nothing in your domain needs to know about it. Put any code that talks to
 it in your infrastructure layer:
 
-- *Triggering backups from your application layer*: define your own port and implement it with `SiteBackupManager`
-  (the service is `final` and has no interface yet):
+- *Triggering backups from your application layer*: define your own port and implement it with
+  `Service\SiteBackupManagerInterface` (1.33+, autowired to the `final` `SiteBackupManager`); double the interface in
+  your infrastructure tests:
 
   ```php
   // Application layer
@@ -354,7 +355,7 @@ it in your infrastructure layer:
   // Infrastructure layer
   final class SiteBackupSnapshotter implements SiteSnapshotter
   {
-      public function __construct(private SiteBackupManager $manager) {}
+      public function __construct(private SiteBackupManagerInterface $manager) {}
 
       public function snapshot(string $reason): string
       {
@@ -373,7 +374,11 @@ it in your infrastructure layer:
 - *Ports you implement* (alias the interface in your `services.yaml`, or use the config key):
   - `Setup\AdminUserProvisionerInterface` (`setup.admin_provisioner`) — create your User aggregate here; the bundle
     only passes `email`, `password` and `roles`.
-  - `Security\SiteBackupAccessCheckerInterface` (`security.access_checker`) — panel authorisation.
+  - `Security\SiteBackupAccessCheckerInterface` (`security.access_checker`) — panel authorisation; 1.33+ passes it the
+    user of the security token (`null` when anonymous or without SecurityBundle).
+  - `Security\ActorResolverInterface` (`security.actor_resolver`, 1.33+) — the actor recorded for panel create /
+    delete / restore (history, events, backup `createdBy`). Default `panel`; `Security\SecurityTokenActorResolver`
+    records the logged-in user identifier.
   - `Storage\BackupHistoryStorageInterface`, `Storage\RestoreProgressStorageInterface`,
     `Setup\Storage\SetupProgressStorageInterface`, `Setup\DurableSetupDoneStoreInterface` — persistence of the
     bundle's own state.
@@ -383,9 +388,6 @@ it in your infrastructure layer:
 - Mark controllers that must stay reachable during a restore with `#[ExcludeFromRestore]`.
 
 **Known limitations.**
-- `SiteBackupManager` has no interface; wrap it behind your own port as shown above.
-- Actions from the web panel are recorded with the actor `panel`, and `SiteBackupAccessCheckerInterface::canAccess()`
-  receives `null`; read the current user from Symfony Security inside your checker or listener.
 - Custom `SetupStepInterface` implementations cannot be registered yet; use the `console` step type to run your own
   command.
 - DBAL storages always use `doctrine.dbal.default_connection`.

@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\Twig;
 
 use Nowo\SiteBackupBundle\Model\RestoreProgress;
-use Nowo\SiteBackupBundle\Service\SiteBackupManager;
+use Nowo\SiteBackupBundle\Service\SiteBackupManagerInterface;
 use Twig\Extension\AbstractExtension;
 use Twig\Extension\GlobalsInterface;
 use Twig\TwigFunction;
@@ -37,7 +37,7 @@ final class SiteBackupExtension extends AbstractExtension implements GlobalsInte
      * @param array<string, mixed> $panelClasses
      */
     public function __construct(
-        private readonly SiteBackupManager $manager,
+        private readonly SiteBackupManagerInterface $manager,
         private readonly string $setupLayoutTemplate = '@NowoSiteBackupBundle/setup/layout.html.twig',
         private readonly string $panelLayoutTemplate = '@NowoSiteBackupBundle/panel/layout.html.twig',
         private readonly string $cssFramework = 'custom',

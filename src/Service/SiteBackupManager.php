@@ -48,13 +48,13 @@ use function random_bytes;
 use function sprintf;
 
 /**
- * Application facade for creating backups and running safe restores.
+ * Application facade for creating backups and running safe restores (default {@see SiteBackupManagerInterface}).
  *
  * REQ-OBS-001: every destructive operation (create, delete, restore) logs start / success / failure on the
  * `site_backup` channel with the backup id only — no actor, label, paths or credentials; error messages pass
  * through {@see SecretRedactor}.
  */
-final class SiteBackupManager
+final class SiteBackupManager implements SiteBackupManagerInterface
 {
     public function __construct(
         private readonly BackupArchiver $archiver,

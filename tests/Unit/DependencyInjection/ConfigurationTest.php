@@ -55,6 +55,7 @@ final class ConfigurationTest extends TestCase
         self::assertContains('/health/', $config['setup']['cold_start']['safe_path_prefixes']);
         self::assertSame(['ROLE_ADMIN'], $config['security']['access_roles']);
         self::assertNull($config['security']['access_checker']);
+        self::assertNull($config['security']['actor_resolver']);
         self::assertFalse($config['security']['allow_unauthenticated']);
         self::assertNull($config['templates']['setup_layout']);
         self::assertNull($config['templates']['panel_layout']);

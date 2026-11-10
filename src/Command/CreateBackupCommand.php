@@ -10,7 +10,7 @@ use Nowo\SiteBackupBundle\Enum\TableRule;
 use Nowo\SiteBackupBundle\Exception\BackupAlreadyRunningException;
 use Nowo\SiteBackupBundle\Exception\InvalidBackupOptionsException;
 use Nowo\SiteBackupBundle\Model\BackupOptions;
-use Nowo\SiteBackupBundle\Service\SiteBackupManager;
+use Nowo\SiteBackupBundle\Service\SiteBackupManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -38,7 +38,7 @@ final class CreateBackupCommand extends Command
 {
     public const EXIT_LOCKED = 75;
 
-    public function __construct(private readonly SiteBackupManager $manager)
+    public function __construct(private readonly SiteBackupManagerInterface $manager)
     {
         parent::__construct();
     }

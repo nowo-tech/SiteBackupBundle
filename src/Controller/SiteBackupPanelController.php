@@ -8,9 +8,10 @@ use Nowo\SiteBackupBundle\Form\Panel\CreateBackupType;
 use Nowo\SiteBackupBundle\Form\Panel\PanelActionType;
 use Nowo\SiteBackupBundle\Form\Panel\PanelLoginType;
 use Nowo\SiteBackupBundle\Model\BackupArtifact;
+use Nowo\SiteBackupBundle\Security\ActorResolverInterface;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessCheckerInterface;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessGateInterface;
-use Nowo\SiteBackupBundle\Service\SiteBackupManager;
+use Nowo\SiteBackupBundle\Service\SiteBackupManagerInterface;
 use Nowo\SiteBackupBundle\View\PanelPages;
 use Nowo\SiteBackupBundle\View\SiteBackupView;
 use Nowo\UiKitBundle\View\Action;
@@ -24,6 +25,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException;
 use Symfony\Component\Routing\Attribute\Route;
+use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorageInterface;
 use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 use Throwable;
@@ -51,9 +53,11 @@ final class SiteBackupPanelController
 
     /**
      * @param array<string, string> $templates page id => template (web_ui.templates; 1.x templates.* keys accepted)
+     * @param ActorResolverInterface|null $actorResolver Actor recorded for panel writes (1.33+); null = "panel"
+     * @param TokenStorageInterface|null $tokenStorage Source of the user passed to the access checker (1.33+); null = none
      */
     public function __construct(
-        private readonly SiteBackupManager $manager,
+        private readonly SiteBackupManagerInterface $manager,
         private readonly SiteBackupAccessGateInterface $accessGate,
         private readonly FormFactoryInterface $formFactory,
         Environment $twig,
@@ -64,6 +68,8 @@ final class SiteBackupPanelController
         private readonly bool $allowUnauthenticated = true,
         private readonly ?TranslatorInterface $translator = null,
         ?SiteBackupView $view = null,
+        private readonly ?ActorResolverInterface $actorResolver = null,
+        private readonly ?TokenStorageInterface $tokenStorage = null,
     ) {
         $this->view  = $view ?? new SiteBackupView($twig, $pathPrefix, templates: $templates);
         $this->pages = new PanelPages($this->view);
@@ -354,7 +360,7 @@ final class SiteBackupPanelController
     private function handleCreate(Request $request): string
     {
         $label    = $request->request->getString('label');
-        $artifact = $this->manager->createBackup($label !== '' ? $label : null, 'panel');
+        $artifact = $this->manager->createBackup($label !== '' ? $label : null, $this->actor($request));
 
         return $this->message('panel.flash.created', 'Backup created: %id%', ['%id%' => $artifact->getId()]);
     }
@@ -362,7 +368,7 @@ final class SiteBackupPanelController
     private function handleDelete(Request $request): string
     {
         $id = $request->request->getString('backup_id');
-        $this->manager->deleteBackup($id, 'panel');
+        $this->manager->deleteBackup($id, $this->actor($request));
 
         return $this->message('panel.flash.deleted', 'Backup deleted: %id%', ['%id%' => $id]);
     }
@@ -380,7 +386,7 @@ final class SiteBackupPanelController
     private function handleRestore(Request $request): string
     {
         $id = $request->request->getString('backup_id');
-        $this->manager->restore($id, 'panel');
+        $this->manager->restore($id, $this->actor($request));
 
         return $this->message('panel.flash.restored', 'Restore finished for %id%', ['%id%' => $id]);
     }
@@ -393,13 +399,28 @@ final class SiteBackupPanelController
         return $this->message('panel.flash.restore_cleared', 'Restore status cleared.');
     }
 
+    private function actor(Request $request): ?string
+    {
+        return $this->actorResolver instanceof ActorResolverInterface
+            ? $this->actorResolver->resolveActor($request)
+            : ActorResolverInterface::PANEL;
+    }
+
+    /**
+     * The authenticated user from the security token, or null (anonymous, or no SecurityBundle).
+     */
+    private function currentUser(): ?object
+    {
+        return $this->tokenStorage?->getToken()?->getUser();
+    }
+
     private function denyUnlessRoleAccess(): ?Response
     {
         if ($this->allowUnauthenticated) {
             return null;
         }
 
-        if (!$this->accessChecker instanceof SiteBackupAccessCheckerInterface || !$this->accessChecker->canAccess(null)) {
+        if (!$this->accessChecker instanceof SiteBackupAccessCheckerInterface || !$this->accessChecker->canAccess($this->currentUser())) {
             return new Response($this->message('panel.error.access_denied', 'Access denied.'), Response::HTTP_FORBIDDEN);
         }
 

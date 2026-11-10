@@ -7,7 +7,7 @@ namespace Nowo\SiteBackupBundle\EventSubscriber;
 use Nowo\SiteBackupBundle\Attribute\ExcludeFromRestore;
 use Nowo\SiteBackupBundle\Exclusion\SiteBackupExclusionMatcher;
 use Nowo\SiteBackupBundle\Model\RestoreProgress;
-use Nowo\SiteBackupBundle\Service\SiteBackupManager;
+use Nowo\SiteBackupBundle\Service\SiteBackupManagerInterface;
 use ReflectionClass;
 use ReflectionException;
 use ReflectionMethod;
@@ -35,7 +35,7 @@ final class RestoreRequestSubscriber
 {
     public function __construct(
         private readonly bool $enabled,
-        private readonly SiteBackupManager $manager,
+        private readonly SiteBackupManagerInterface $manager,
         private readonly SiteBackupExclusionMatcher $exclusionMatcher,
         private readonly ?Environment $twig,
         private readonly string $template,

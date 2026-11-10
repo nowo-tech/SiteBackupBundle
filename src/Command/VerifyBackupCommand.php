@@ -8,7 +8,7 @@ use InvalidArgumentException;
 use JsonException;
 use Nowo\SiteBackupBundle\Backup\VerifyFileResult;
 use Nowo\SiteBackupBundle\Model\ArchivePassword;
-use Nowo\SiteBackupBundle\Service\SiteBackupManager;
+use Nowo\SiteBackupBundle\Service\SiteBackupManagerInterface;
 use SensitiveParameter;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -40,7 +40,7 @@ use const JSON_THROW_ON_ERROR;
 #[AsCommand(name: 'nowo:site-backup:verify', description: 'Verify a backup (by id, or any archive with --file) and its MANIFEST checksums')]
 final class VerifyBackupCommand extends Command
 {
-    public function __construct(private readonly SiteBackupManager $manager)
+    public function __construct(private readonly SiteBackupManagerInterface $manager)
     {
         parent::__construct();
     }
