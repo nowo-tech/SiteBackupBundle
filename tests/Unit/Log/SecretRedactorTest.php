@@ -103,37 +103,37 @@ final class SecretRedactorTest extends TestCase
     public static function provideAuditLeaks(): iterable
     {
         // KZ-SB-M1 a: raw `@` inside a URL password.
-        yield 'raw @ in url password' => ['Could not connect mysql://app:p@ss:w0rd@db:3306/app', ['ss:w0rd', 'p@ss']];
-        yield 'ftp raw @ in password' => ['ftp://backup:Ftp@S3cret@host/path', ['S3cret', 'Ftp@']];
+        yield 'raw @ in url password' => ['Could not connect mysql://app:REDACTED@TEST:x@db:3306/app', ['REDACTED', 'TEST:x']];
+        yield 'ftp raw @ in password' => ['ftp://backup:REDACTED@TEST@host/path', ['REDACTED', 'TEST@']];
         // KZ-SB-M1 b: backslash-escaped quotes.
-        yield 'single quoted escaped' => ["password='ab\\'cd ef'", ['cd ef', "ab\\'"]];
-        yield 'double quoted escaped' => ['password="ab\\"cd ef"', ['cd ef', 'ab\\"']];
-        yield 'pg conninfo escaped quote' => ["host=pg password='it\\'s secret' dbname=app", ['s secret']];
+        yield 'single quoted escaped' => ["password='REDACTED\\'TEST two'", ['REDACTED', 'TEST two']];
+        yield 'double quoted escaped' => ['password="REDACTED\\"TEST two"', ['REDACTED', 'TEST two']];
+        yield 'pg conninfo escaped quote' => ["host=pg password='REDACTED\\'TEST two' dbname=app", ['REDACTED', 'TEST two']];
         // KZ-SB-M1 c: MySQL `\'` escape in IDENTIFIED BY.
-        yield 'identified by escaped' => ["CREATE USER 'a'@'%' IDENTIFIED BY 'Id\\'S3 cret'", ['S3 cret', 'Id\\\'']];
-        yield 'identified with by' => ["IDENTIFIED WITH caching_sha2_password BY 'Sha2S3cret'", ['Sha2S3cret']];
+        yield 'identified by escaped' => ["CREATE USER 'a'@'%' IDENTIFIED BY 'REDACTED\\'TEST two'", ['REDACTED', 'TEST two']];
+        yield 'identified with by' => ["IDENTIFIED WITH caching_sha2_password BY 'REDACTED-TEST'", ['REDACTED-TEST']];
         // d: ODBC brace quoting.
-        yield 'odbc braces' => ['Uid=app;Pwd={Odbc;S3cret};', ['S3cret', 'Odbc']];
+        yield 'odbc braces' => ['Uid=app;Pwd={REDACTED;TEST};', ['REDACTED', 'TEST}']];
         // KZ-SB-L2: passwords that start like the MySQL hint.
-        yield 'password=YES)' => ['password=YES)RealSecret', ['RealSecret']];
-        yield 'password: NO)' => ['auth failed; password: NO)RealSecret2', ['RealSecret2']];
-        yield 'password: YES)secret' => ['password: YES)secret', [')secret']];
+        yield 'password=YES)' => ['password=YES)REDACTED-TEST', ['REDACTED-TEST']];
+        yield 'password: NO)' => ['auth failed; password: NO)REDACTED-TEST', ['REDACTED-TEST']];
+        yield 'password: YES)secret' => ['password: YES)REDACTED-TEST', ['REDACTED-TEST']];
         // KZ-SB-L3 f: CLI forms.
-        yield '--password space' => ['mysqldump --password RootS3cret app', ['RootS3cret']];
-        yield 'quoted -pX argv' => ["The command \"'mysqldump' '-pProcS3cret' 'app'\" failed.", ['ProcS3cret']];
-        yield 'quoted -p then value argv' => ["The command \"'mysqldump' '-p' 'ProcS3cret' 'app'\" failed.", ['ProcS3cret']];
-        yield 'quoted --password= with space' => ["The command \"'mysql' '--password=Proc S3cret' 'app'\" failed.", ['Proc', 'S3cret']];
-        yield '-p at start' => ['-pStartS3cret mysqldump', ['StartS3cret']];
+        yield '--password space' => ['mysqldump --password REDACTED-TEST app', ['REDACTED-TEST']];
+        yield 'quoted -pX argv' => ["The command \"'mysqldump' '-pREDACTED-TEST' 'app'\" failed.", ['REDACTED-TEST']];
+        yield 'quoted -p then value argv' => ["The command \"'mysqldump' '-p' 'REDACTED-TEST' 'app'\" failed.", ['REDACTED-TEST']];
+        yield 'quoted --password= with space' => ["The command \"'mysql' '--password=REDACTED TEST-TWO' 'app'\" failed.", ['REDACTED', 'TEST-TWO']];
+        yield '-p at start' => ['-pREDACTED-TEST mysqldump', ['REDACTED-TEST']];
         // KZ-SB-L3 g: key coverage.
-        yield 'lower-case env' => ['database_password=lowS3cret aws_secret_access_key=lowAWS', ['lowS3cret', 'lowAWS']];
-        yield 'yaml app_secret' => ['app_secret: YamlS3cret', ['YamlS3cret']];
-        yield 'camelCase secretKey' => ['secretKey=CamelS3cret', ['CamelS3cret']];
-        yield 'camelCase accessKeyId' => ['accessKeyId: CamelAK', ['CamelAK']];
-        yield 'xml element' => ['<SecretAccessKey>XmlS3cret</SecretAccessKey>', ['XmlS3cret']];
-        yield 'passphrase=' => ['encrypt failed passphrase=AgeP4ss', ['AgeP4ss']];
-        yield 'quoted passphrase' => ['age: error: incorrect passphrase "AgeP4ss phrase"', ['AgeP4ss', 'phrase"']];
-        yield 'age identity' => ['AGE-SECRET-KEY-1QYQSZQGPQYQSZQGPQYQSZQGPQ', ['QYQSZQGPQYQSZ']];
-        yield 'multiline password' => ["DSN: mysql:host=db\npassword:\n  TopS3cret\n", ['TopS3cret']];
+        yield 'lower-case env' => ['database_password=REDACTED-TEST aws_secret_access_key=REDACTED-TEST2', ['REDACTED-TEST']];
+        yield 'yaml app_secret' => ['app_secret: REDACTED-TEST', ['REDACTED-TEST']];
+        yield 'camelCase secretKey' => ['secretKey=REDACTED-TEST', ['REDACTED-TEST']];
+        yield 'camelCase accessKeyId' => ['accessKeyId: REDACTED-TEST', ['REDACTED-TEST']];
+        yield 'xml element' => ['<SecretAccessKey>REDACTED-TEST</SecretAccessKey>', ['REDACTED-TEST']];
+        yield 'passphrase=' => ['encrypt failed passphrase=REDACTED-TEST', ['REDACTED-TEST']];
+        yield 'quoted passphrase' => ['age: error: incorrect passphrase "REDACTED TEST-TWO"', ['REDACTED', 'TEST-TWO']];
+        yield 'age identity' => ['AGE-SECRET-KEY-1REDACTEDTEST', ['REDACTEDTEST']];
+        yield 'multiline password' => ["DSN: mysql:host=db\npassword:\n  REDACTED-TEST\n", ['REDACTED-TEST']];
     }
 
     /**
@@ -152,12 +152,12 @@ final class SecretRedactorTest extends TestCase
 
     public function testExactMaskingOfTheAuditCases(): void
     {
-        self::assertSame('Could not connect mysql://app:***@db:3306/app', SecretRedactor::redact('Could not connect mysql://app:p@ss:w0rd@db:3306/app'));
-        self::assertSame("CREATE USER 'a'@'%' IDENTIFIED BY '***'", SecretRedactor::redact("CREATE USER 'a'@'%' IDENTIFIED BY 'Id\\'S3 cret'"));
-        self::assertSame('host=pg password=*** dbname=app', SecretRedactor::redact("host=pg password='it\\'s secret' dbname=app"));
-        self::assertSame("ALTER USER app PASSWORD '***' VALID", SecretRedactor::redact("ALTER USER app PASSWORD 'It''s s3cret' VALID"));
-        self::assertSame("The command \"'mysqldump' '-p' '***' 'app'\" failed.", SecretRedactor::redact("The command \"'mysqldump' '-p' 'ProcS3cret' 'app'\" failed."));
-        self::assertSame('<SecretAccessKey>***</SecretAccessKey>', SecretRedactor::redact('<SecretAccessKey>XmlS3cret</SecretAccessKey>'));
+        self::assertSame('Could not connect mysql://app:***@db:3306/app', SecretRedactor::redact('Could not connect mysql://app:REDACTED@TEST:x@db:3306/app'));
+        self::assertSame("CREATE USER 'a'@'%' IDENTIFIED BY '***'", SecretRedactor::redact("CREATE USER 'a'@'%' IDENTIFIED BY 'REDACTED\\'TEST two'"));
+        self::assertSame('host=pg password=*** dbname=app', SecretRedactor::redact("host=pg password='REDACTED\\'TEST two' dbname=app"));
+        self::assertSame("ALTER USER app PASSWORD '***' VALID", SecretRedactor::redact("ALTER USER app PASSWORD 'REDACTED''TEST two' VALID"));
+        self::assertSame("The command \"'mysqldump' '-p' '***' 'app'\" failed.", SecretRedactor::redact("The command \"'mysqldump' '-p' 'REDACTED-TEST' 'app'\" failed."));
+        self::assertSame('<SecretAccessKey>***</SecretAccessKey>', SecretRedactor::redact('<SecretAccessKey>REDACTED-TEST</SecretAccessKey>'));
     }
 
     public function testOnlyTheExactMysqlHintStaysReadable(): void
@@ -172,10 +172,10 @@ final class SecretRedactorTest extends TestCase
     {
         // A latin1 byte from a driver error (e.g. `near 'caf\xE9'`): json_encode() threw on PHP 8.2 and left the
         // restore progress stuck "active" (audit KZ-SB-L1).
-        $stored = SecretRedactor::forStorage("SQL import: near 'caf\xE9' password=Latin1S3cret");
+        $stored = SecretRedactor::forStorage("SQL import: near 'caf\xE9' password=REDACTED-TEST");
 
         self::assertTrue(mb_check_encoding($stored, 'UTF-8'));
-        self::assertStringNotContainsString('Latin1S3cret', $stored);
+        self::assertStringNotContainsString('REDACTED-TEST', $stored);
         self::assertSame('{"m":"SQL import: near \'caf?\' password=***"}', json_encode(['m' => $stored], JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES));
         self::assertSame(3, mb_strlen(SecretRedactor::forStorage("\xE9\xE9\xE9\xE9", 3)));
     }
