@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## Table of contents
 
 - [[Unreleased]](#unreleased)
+- [[1.34.0] - 2026-11-10](#1340---2026-11-10)
 - [[1.33.0] - 2026-11-10](#1330---2026-11-10)
 - [[1.32.0] - 2026-11-08](#1320---2026-11-08)
 - [[1.31.0] - 2026-11-08](#1310---2026-11-08)
@@ -73,8 +74,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-Target 1.34.0 (minor: `RestoreFailedEvent::getError()`, the history entry and the restore / setup progress now carry a
-redacted text instead of the raw exception message, and the event gains accessors).
+## [1.34.0] - 2026-11-10
+
+Security: restore and setup failure messages are redacted and capped before they reach events, history, progress files, the panel and the console (GHSA). See [UPGRADING](https://github.com/nowo-tech/SiteBackupBundle/blob/v1.34.0/docs/UPGRADING.md#to-1340).
+
 
 ### Security
 
@@ -1201,7 +1204,7 @@ First stable release of **Site Backup Bundle**.
 - Symfony `^7.0 || ^8.0` (CI / mandatory minors: **7.4**, **8.0**, **8.1**)
 - System `tar` required for archive create/extract
 
-[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.33.0...HEAD
+[Unreleased]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.34.0...HEAD
 [1.23.0]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.22.2...v1.23.0
 [1.22.2]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.22.1...v1.22.2
 [1.22.1]: https://github.com/nowo-tech/SiteBackupBundle/compare/v1.22.0...v1.22.1
