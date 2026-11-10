@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Command;
 
+use Nowo\SiteBackupBundle\Log\SecretRedactor;
 use Nowo\SiteBackupBundle\Service\SiteBackupManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -46,7 +47,7 @@ final class RestoreBackupCommand extends Command
         try {
             $progress = $this->manager->restore($id, (string) $input->getOption('actor'));
         } catch (Throwable $e) {
-            $io->error($e->getMessage());
+            $io->error(SecretRedactor::redact($e->getMessage()));
 
             return Command::FAILURE;
         }

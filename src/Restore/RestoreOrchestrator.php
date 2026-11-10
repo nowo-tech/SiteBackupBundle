@@ -8,6 +8,7 @@ use Closure;
 use DateTimeImmutable;
 use Nowo\SiteBackupBundle\Backup\BackupArchiver;
 use Nowo\SiteBackupBundle\Backup\RuntimeStatePaths;
+use Nowo\SiteBackupBundle\Log\SecretRedactor;
 use Nowo\SiteBackupBundle\Model\BackupArtifact;
 use Nowo\SiteBackupBundle\Model\RestoreProgress;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupMarkerManager;
@@ -303,12 +304,14 @@ final class RestoreOrchestrator implements ResetInterface
             $failed   = $this->now();
             $progress = $this->progressStorage->load();
             $log      = $progress->getLog();
-            $log[]    = $this->logLine('ERROR: ' . $e->getMessage());
+            // 1.34+: the progress file is rendered by the panel and progress.json; never store the raw message.
+            $error = SecretRedactor::fromThrowable($e);
+            $log[] = $this->logLine('ERROR: ' . $error);
             $this->save($progress->with(
                 active: false,
                 phase: RestoreProgress::PHASE_FAILED,
                 message: self::MESSAGE_FAILED,
-                error: $e->getMessage(),
+                error: $error,
                 log: array_slice($log, -200),
                 updatedAt: $failed,
                 finishedAt: $failed,

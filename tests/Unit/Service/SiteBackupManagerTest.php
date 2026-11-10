@@ -17,11 +17,21 @@ use Nowo\SiteBackupBundle\Service\SiteBackupManager;
 use Nowo\SiteBackupBundle\Storage\BackupHistoryStorageInterface;
 use Nowo\SiteBackupBundle\Storage\RestoreProgressStorageInterface;
 use Nowo\SiteBackupBundle\Tests\Unit\RecordingEventDispatcher;
+use Nowo\SiteBackupBundle\Tests\Unit\RecordingLogger;
+use Nowo\SiteBackupBundle\Tests\Unit\TestFixtures;
 use PHPUnit\Framework\TestCase;
+use Psr\EventDispatcher\EventDispatcherInterface;
 use RuntimeException;
 use Symfony\Component\Filesystem\Filesystem;
 
+use function array_filter;
 use function array_slice;
+use function array_values;
+use function end;
+use function implode;
+use function json_encode;
+
+use const JSON_THROW_ON_ERROR;
 
 final class SiteBackupManagerTest extends TestCase
 {
@@ -129,6 +139,81 @@ final class SiteBackupManagerTest extends TestCase
         }
     }
 
+    public function testRestoreFailureStoresAndDispatchesOnlyTheRedactedMessage(): void
+    {
+        // A driver error quoting the DSN (PDO / Doctrine), raised while the restore runs.
+        $raw     = 'SQL import: SQLSTATE[HY000] [2002] Connection refused (mysql://app:REDACTED-TEST@db:3306/shop; password=REDACTED-TEST; charset=utf8mb4)';
+        $history = new InMemoryHistoryStorage();
+        /** @var list<class-string> $events */
+        $events   = [];
+        $artifact = $this->manager($history, $events)->createBackup('r3', 'cli');
+
+        $progressStorage = new FailingOnceRestoreProgressStorage(failOnSave: 2, message: $raw);
+        $dispatcher      = new class implements EventDispatcherInterface {
+            /** @var list<object> */
+            public array $dispatched = [];
+
+            public function dispatch(object $event): object
+            {
+                $this->dispatched[] = $event;
+
+                return $event;
+            }
+        };
+        $logger  = new RecordingLogger();
+        $manager = new SiteBackupManager(
+            $this->archiver(),
+            new RestoreOrchestrator(
+                projectDir: $this->projectDir,
+                archiver: $this->archiver(),
+                progressStorage: $progressStorage,
+                protectedRelativePaths: ['.env.local'],
+            ),
+            $history,
+            $dispatcher,
+            logger: $logger,
+        );
+
+        try {
+            $manager->restore($artifact->getId(), 'cli');
+            self::fail('Expected exception');
+        } catch (RuntimeException $e) {
+            // The caller still gets the original exception.
+            self::assertSame($raw, $e->getMessage());
+        }
+
+        $expected = 'SQL import: SQLSTATE[HY000] [2002] Connection refused (mysql://app:***@db:3306/shop; password=***; charset=utf8mb4)';
+
+        $failed = array_values(array_filter($dispatcher->dispatched, static fn (object $ev): bool => $ev instanceof RestoreFailedEvent));
+        self::assertCount(1, $failed);
+        self::assertSame($expected, $failed[0]->getError());
+        self::assertSame('cli', $failed[0]->getActor());
+        // The raw throwable stays available in memory only.
+        self::assertInstanceOf(RuntimeException::class, $failed[0]->getException());
+        self::assertSame($raw, $failed[0]->getException()->getMessage());
+        self::assertSame(RuntimeException::class, $failed[0]->getExceptionClass());
+
+        $entries = $history->entries;
+        $entry   = end($entries);
+        self::assertInstanceOf(BackupHistoryEntry::class, $entry);
+        self::assertSame('restore_failed', $entry->getAction());
+        self::assertSame($expected, $entry->getMessage());
+
+        $progress = $progressStorage->load();
+        self::assertSame(RestoreProgress::PHASE_FAILED, $progress->getPhase());
+        self::assertSame($expected, $progress->getError());
+        self::assertStringNotContainsString('REDACTED-TEST', implode("\n", $progress->getLog()));
+
+        self::assertStringNotContainsString('REDACTED-TEST', json_encode($logger->records, JSON_THROW_ON_ERROR));
+    }
+
+    public function testRestoreFailedEventWithoutThrowable(): void
+    {
+        $event = new RestoreFailedEvent(TestFixtures::artifact(), 'boom');
+        self::assertNull($event->getException());
+        self::assertNull($event->getExceptionClass());
+    }
+
     public function testClearRestoreStatusAndHistory(): void
     {
         /** @var list<class-string> $events */
@@ -207,6 +292,33 @@ final class InMemoryRestoreProgressStorage implements RestoreProgressStorageInte
 
     public function save(RestoreProgress $progress): void
     {
+        $this->progress = $progress;
+    }
+}
+
+/**
+ * Throws `$message` on the n-th save (a failure raised inside the restore try block), then behaves normally.
+ */
+final class FailingOnceRestoreProgressStorage implements RestoreProgressStorageInterface
+{
+    private RestoreProgress $progress;
+    private int $saves = 0;
+
+    public function __construct(private readonly int $failOnSave, private readonly string $message)
+    {
+        $this->progress = new RestoreProgress();
+    }
+
+    public function load(): RestoreProgress
+    {
+        return $this->progress;
+    }
+
+    public function save(RestoreProgress $progress): void
+    {
+        if (++$this->saves === $this->failOnSave) {
+            throw new RuntimeException($this->message);
+        }
         $this->progress = $progress;
     }
 }

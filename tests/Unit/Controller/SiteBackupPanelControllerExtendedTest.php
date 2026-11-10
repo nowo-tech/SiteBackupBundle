@@ -13,10 +13,12 @@ use Nowo\SiteBackupBundle\Security\ActorResolverInterface;
 use Nowo\SiteBackupBundle\Security\PasswordSiteBackupAccessGate;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessCheckerInterface;
 use Nowo\SiteBackupBundle\Service\SiteBackupManager;
+use Nowo\SiteBackupBundle\Service\SiteBackupManagerInterface;
 use Nowo\SiteBackupBundle\Storage\FilesystemBackupHistoryStorage;
 use Nowo\SiteBackupBundle\Storage\FilesystemRestoreProgressStorage;
 use Nowo\SiteBackupBundle\Tests\Unit\CreatesSiteBackupTestHarness;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Session\Session;
 use Symfony\Component\HttpFoundation\Session\Storage\MockArraySessionStorage;
@@ -195,6 +197,40 @@ final class SiteBackupPanelControllerExtendedTest extends TestCase
         $request->setSession($session);
         // A failed create goes back to the create form with the error (422), not to the index.
         self::assertSame(422, $controller->index($request)->getStatusCode());
+    }
+
+    public function testRestoreFailureShowsOnlyTheRedactedMessage(): void
+    {
+        $manager = $this->createMock(SiteBackupManagerInterface::class);
+        $manager->method('restore')->willThrowException(new RuntimeException('SQLSTATE[08006] could not connect to postgresql://app:REDACTED-TEST@pg/app'));
+        $manager->method('listBackups')->willReturn([]);
+        $manager->method('getRestoreProgress')->willReturn(new RestoreProgress());
+        $csrf = $this->createMock(CsrfTokenManagerInterface::class);
+        $csrf->method('getToken')->willReturn(new CsrfToken('id', 'token'));
+        $csrf->method('isTokenValid')->willReturn(true);
+        /** @var list<array<string, mixed>> $contexts */
+        $contexts = [];
+        $twig     = $this->createMock(Environment::class);
+        $twig->method('render')->willReturnCallback(static function (string $template, array $context) use (&$contexts): string {
+            $contexts[] = $context;
+
+            return 'html';
+        });
+        $controller = new SiteBackupPanelController(
+            $manager,
+            new PasswordSiteBackupAccessGate(null, false),
+            $this->createFormFactory($csrf),
+            $twig,
+            ['panel_index' => 'index', 'panel_login' => 'login', 'panel_history' => 'history'],
+            '/_site_backup',
+            $csrf,
+        );
+        $request = Request::create('/', 'POST', ['action' => 'restore', 'backup_id' => 'b1', '_csrf_token' => 'token']);
+        $request->setSession(new Session(new MockArraySessionStorage()));
+
+        self::assertSame(200, $controller->index($request)->getStatusCode());
+        self::assertNotSame([], $contexts);
+        self::assertSame(['error' => ['SQLSTATE[08006] could not connect to postgresql://app:***@pg/app']], $contexts[0]['messages']);
     }
 
     public function testIndexReturnsForbiddenWhenRoleAccessDenied(): void

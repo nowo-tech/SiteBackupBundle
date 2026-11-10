@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\Command;
 
 use Nowo\SiteBackupBundle\Drill\RestoreDrill;
+use Nowo\SiteBackupBundle\Log\SecretRedactor;
 use Nowo\SiteBackupBundle\Model\BackupArtifact;
 use Nowo\SiteBackupBundle\Service\SiteBackupManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -63,7 +64,7 @@ final class RestoreDrillCommand extends Command
             $report   = $this->drill->run($artifact, (string) $input->getOption('schema'), $password, (int) $tolerance);
             $password?->wipe();
         } catch (Throwable $e) {
-            $io->error($e->getMessage());
+            $io->error(SecretRedactor::redact($e->getMessage()));
 
             return 2;
         }

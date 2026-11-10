@@ -22,6 +22,9 @@ use Nowo\SiteBackupBundle\Tests\Unit\RecordingEventDispatcher;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Filesystem\Filesystem;
 
+use function file_get_contents;
+use function implode;
+
 use const PHP_BINARY;
 
 final class SetupOrchestratorExtendedTest extends TestCase
@@ -116,7 +119,7 @@ final class SetupOrchestratorExtendedTest extends TestCase
 
             public function run(SetupContext $ctx, SetupStepInput $input): SetupStepResult
             {
-                return SetupStepResult::fail('boom', ['detail']);
+                return SetupStepResult::fail('boom: SQLSTATE[08006] host=pg user=app password=REDACTED-TEST', ['detail']);
             }
         };
 
@@ -147,6 +150,13 @@ final class SetupOrchestratorExtendedTest extends TestCase
         self::assertSame(SetupProgress::PHASE_FAILED, $result->getPhase());
         self::assertContains(SetupStartedEvent::class, $events);
         self::assertContains(SetupStepFailedEvent::class, $events);
+
+        // 1.34+: the failure text a step quotes (PDO / client error) is redacted in the progress file, the wizard
+        // message and the event.
+        self::assertSame('boom: SQLSTATE[08006] host=pg user=app password=***', $result->getError());
+        self::assertSame('boom: SQLSTATE[08006] host=pg user=app password=***', $result->getMessage());
+        self::assertStringNotContainsString('REDACTED-TEST', implode("\n", $result->getLog()));
+        self::assertStringNotContainsString('REDACTED-TEST', (string) file_get_contents($this->dir . '/progress.json'));
     }
 
     public function testEmptyProfileThrows(): void

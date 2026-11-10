@@ -193,23 +193,26 @@ final class SetupOrchestrator
             }
 
             if (!$result->isSuccess()) {
-                $log      = $this->appendLog($progress->getLog(), $result->getLog(), 'ERROR: ' . $result->getMessage());
+                // 1.34+: a failing step may quote the DSN or a password (PDO / client error); progress, event and log
+                // get the redacted text only.
+                $error    = SecretRedactor::forStorage($result->getMessage());
+                $log      = $this->appendLog($progress->getLog(), $result->getLog(), 'ERROR: ' . $error);
                 $progress = $progress->with(
                     phase: SetupProgress::PHASE_FAILED,
-                    message: $result->getMessage(),
-                    error: $result->getMessage(),
+                    message: $error,
+                    error: $error,
                     log: $log,
                     answers: $ctx->getAnswers(),
                     updatedAt: $this->clock->now(),
                 );
                 $this->progressStorage->save($progress);
-                $this->eventDispatcher?->dispatch(new SetupStepFailedEvent($profile, $step->getId(), $result->getMessage()));
+                $this->eventDispatcher?->dispatch(new SetupStepFailedEvent($profile, $step->getId(), $error));
                 $this->logger->error('SiteBackup: setup step failed.', [
                     'bundle'  => 'site_backup',
                     'action'  => 'setup',
                     'profile' => $profile,
                     'step'    => $step->getId(),
-                    'error'   => SecretRedactor::redact($result->getMessage()),
+                    'error'   => $error,
                 ]);
 
                 return $progress;

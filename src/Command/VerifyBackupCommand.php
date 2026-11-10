@@ -7,6 +7,7 @@ namespace Nowo\SiteBackupBundle\Command;
 use InvalidArgumentException;
 use JsonException;
 use Nowo\SiteBackupBundle\Backup\VerifyFileResult;
+use Nowo\SiteBackupBundle\Log\SecretRedactor;
 use Nowo\SiteBackupBundle\Model\ArchivePassword;
 use Nowo\SiteBackupBundle\Service\SiteBackupManagerInterface;
 use SensitiveParameter;
@@ -63,7 +64,7 @@ final class VerifyBackupCommand extends Command
         try {
             $password = PasswordInput::read($input);
         } catch (InvalidArgumentException $e) {
-            $io->error($e->getMessage());
+            $io->error(SecretRedactor::redact($e->getMessage()));
 
             return Command::INVALID;
         }

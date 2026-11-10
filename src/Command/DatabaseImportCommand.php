@@ -7,6 +7,7 @@ namespace Nowo\SiteBackupBundle\Command;
 use Nowo\SiteBackupBundle\Database\DumpImporter;
 use Nowo\SiteBackupBundle\Exception\BackupAlreadyRunningException;
 use Nowo\SiteBackupBundle\Exception\DumpFailedException;
+use Nowo\SiteBackupBundle\Log\SecretRedactor;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
@@ -46,7 +47,7 @@ final class DatabaseImportCommand extends Command
         try {
             $this->importer->import((string) $input->getArgument('file'));
         } catch (DumpFailedException|BackupAlreadyRunningException $e) {
-            $io->error($e->getMessage());
+            $io->error(SecretRedactor::redact($e->getMessage()));
 
             return Command::FAILURE;
         }
