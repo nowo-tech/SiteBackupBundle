@@ -29,6 +29,7 @@ use Symfony\Contracts\Translation\TranslatorInterface;
 use Twig\Environment;
 
 use function array_map;
+use function str_repeat;
 
 use const PASSWORD_DEFAULT;
 
@@ -287,6 +288,23 @@ final class SiteBackupPanelControllerExtendedTest extends TestCase
         self::assertSame([], $manager->listBackups());
         $actors = array_map(static fn (BackupHistoryEntry $entry): ?string => $entry->getActor(), $manager->history());
         self::assertSame(['user-42', 'user-42'], $actors);
+    }
+
+    public function testHostResolverOutputIsNormalisedIntoAValidCreatedBy(): void
+    {
+        $manager  = $this->createManager();
+        $resolver = new class implements ActorResolverInterface {
+            public function resolveActor(Request $request): string
+            {
+                return "evil\nname" . str_repeat('x', 200);
+            }
+        };
+
+        $this->openController($manager, $resolver)->index($this->post(['action' => 'create', '_csrf_token' => 'token']));
+
+        $backups = $manager->listBackups();
+        self::assertCount(1, $backups);
+        self::assertSame('evilname' . str_repeat('x', 120), $backups[0]->getCreatedBy());
     }
 
     public function testAccessCheckerReceivesTheTokenUser(): void

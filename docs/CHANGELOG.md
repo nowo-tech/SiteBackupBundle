@@ -77,7 +77,7 @@ Target 1.33.0.
 ### Added
 
 - `Service\SiteBackupManagerInterface`: the application API (aliased to `SiteBackupManager`, which stays `final`). The panel, the restore / setup request subscribers, the commands and the Twig extension now depend on the interface, so a host alias or decorator replaces the manager everywhere.
-- `Security\ActorResolverInterface` (`security.actor_resolver`): the actor recorded for panel create / delete / restore (history, events, backup `createdBy`). Default `StaticActorResolver` (`panel`, as before); opt-in `SecurityTokenActorResolver` records the logged-in user identifier.
+- `Security\ActorResolverInterface` (`security.actor_resolver`): the actor recorded for panel create / delete / restore (history, events, backup `createdBy`). Default `StaticActorResolver` (`panel`, as before); opt-in `SecurityTokenActorResolver` records the logged-in user identifier. Every resolved actor (host resolvers too) is normalised before use: controls, tab / newline and format characters dropped, at most 128 characters (a valid `createdBy`), `panel` when nothing is left.
 
 ### Changed
 

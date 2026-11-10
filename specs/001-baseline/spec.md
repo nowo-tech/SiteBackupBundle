@@ -151,7 +151,7 @@ Given `setup.profiles` without the `setup.default_profile` key, When the contain
 | FR-HTTP-001 | Panel + setup controllers use `#[Route]` + CSRF fail-closed |
 | FR-HTTP-002 | Restore/setup request subscribers gate the public site |
 | FR-SEC-001 | Password gate fail-closed when hash missing; `isMisconfigured()`; role checker; login throttle |
-| FR-SEC-003 | Panel create / delete / restore record the actor from `Security\ActorResolverInterface` (`security.actor_resolver`; default `panel`, opt-in `SecurityTokenActorResolver`); the access checker receives the token user (null when anonymous or without SecurityBundle) (1.33) |
+| FR-SEC-003 | Panel create / delete / restore record the actor from `Security\ActorResolverInterface` (`security.actor_resolver`; default `panel`, opt-in `SecurityTokenActorResolver`; every actor normalised to 1-128 printable characters); the access checker receives the token user (null when anonymous or without SecurityBundle) (1.33) |
 | FR-SEC-002 | `CsrfProtectionPass`: the container refuses to compile while the panel or the setup wizard is registered without form CSRF (`form.type_extension.csrf`, token manager, `framework.form.csrf_protection`) |
 | FR-CLI-001 | Console commands for backup/restore/verify/list/setup/hash/db-dump/worker-restart |
 

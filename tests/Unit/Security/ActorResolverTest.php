@@ -41,7 +41,7 @@ final class ActorResolverTest extends TestCase
         self::assertSame('anon', (new SecurityTokenActorResolver(null, 'anon'))->resolveActor(Request::create('/')));
     }
 
-    public function testTokenResolverKeepsTheIdentifierAValidCreatedBy(): void
+    public function testTokenResolverKeepsTheIdentifierBoundedAndPrintable(): void
     {
         $storage = new TokenStorage();
         $storage->setToken(new UsernamePasswordToken(new InMemoryUser("ali\x07ce" . str_repeat('x', 200), null), 'main'));
@@ -52,11 +52,18 @@ final class ActorResolverTest extends TestCase
         self::assertSame(SecurityTokenActorResolver::MAX_LENGTH, mb_strlen($actor));
     }
 
-    public function testTokenResolverFallsBackWhenTheIdentifierIsOnlyControlCharacters(): void
+    public function testTokenResolverFallsBackWhenNothingPrintableIsLeft(): void
     {
         $storage = new TokenStorage();
-        $storage->setToken(new UsernamePasswordToken(new InMemoryUser("\x01\x02", null), 'main'));
+        $storage->setToken(new UsernamePasswordToken(new InMemoryUser("\x01\t\n", null), 'main'));
 
         self::assertSame('panel', (new SecurityTokenActorResolver($storage))->resolveActor(Request::create('/')));
+    }
+
+    public function testNormalizeDropsTabsNewlinesAndFormatCharacters(): void
+    {
+        self::assertSame('alicebob', SecurityTokenActorResolver::normalize("  ali\tce\nbob\u{202E}\u{200B} "));
+        self::assertSame('ok', SecurityTokenActorResolver::normalize("o\xFFk"));
+        self::assertSame('', SecurityTokenActorResolver::normalize("\r\n"));
     }
 }

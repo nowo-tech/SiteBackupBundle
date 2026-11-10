@@ -346,7 +346,8 @@ it in your infrastructure layer:
 
 - *Triggering backups from your application layer*: define your own port and implement it with
   `Service\SiteBackupManagerInterface` (1.33+, autowired to the `final` `SiteBackupManager`); double the interface in
-  your infrastructure tests:
+  your infrastructure tests. A host alias or decorator of the interface also drives the restore lock page and the
+  setup subscriber, so it must delegate `isRestoreActive()` / `getRestoreProgress()` unchanged:
 
   ```php
   // Application layer
@@ -378,7 +379,8 @@ it in your infrastructure layer:
     user of the security token (`null` when anonymous or without SecurityBundle).
   - `Security\ActorResolverInterface` (`security.actor_resolver`, 1.33+) — the actor recorded for panel create /
     delete / restore (history, events, backup `createdBy`). Default `panel`; `Security\SecurityTokenActorResolver`
-    records the logged-in user identifier.
+    records the logged-in user identifier. Return 1-128 printable characters or null: the panel normalises every
+    value (controls, tab / newline and format characters dropped, cut at 128, `panel` when nothing is left).
   - `Storage\BackupHistoryStorageInterface`, `Storage\RestoreProgressStorageInterface`,
     `Setup\Storage\SetupProgressStorageInterface`, `Setup\DurableSetupDoneStoreInterface` — persistence of the
     bundle's own state.

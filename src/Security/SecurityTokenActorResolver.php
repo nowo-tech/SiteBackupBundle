@@ -15,8 +15,8 @@ use function trim;
  * Records the logged-in user identifier (`UserInterface::getUserIdentifier()`), or the fallback ("panel") when the
  * request has no authenticated user (password-gate only, or no SecurityBundle).
  *
- * The identifier is stored as the backup `createdBy` (1-128 printable characters): control characters are dropped and
- * it is cut at {@see self::MAX_LENGTH}.
+ * The identifier goes through {@see self::normalize()}: control and format characters (tab and newline included) are
+ * dropped and it is cut at {@see self::MAX_LENGTH}.
  */
 final readonly class SecurityTokenActorResolver implements ActorResolverInterface
 {
@@ -35,8 +35,23 @@ final readonly class SecurityTokenActorResolver implements ActorResolverInterfac
             return $this->fallback;
         }
 
-        $identifier = trim(mb_substr((string) preg_replace('/[\x00-\x08\x0B-\x1F\x7F]/', '', $identifier), 0, self::MAX_LENGTH));
+        $identifier = self::normalize($identifier);
 
         return $identifier !== '' ? $identifier : $this->fallback;
+    }
+
+    /**
+     * An actor as stored in history / events: no C0 / DEL controls (tab and newline included), no Unicode format
+     * characters (bidi overrides, zero-width), trimmed, at most MAX_LENGTH characters. '' when nothing is left.
+     */
+    public static function normalize(string $actor): string
+    {
+        $clean = preg_replace('/[\x00-\x1F\x7F]|\p{Cf}/u', '', $actor);
+        if ($clean === null) {
+            // Not valid UTF-8: keep the ASCII printable characters only.
+            $clean = (string) preg_replace('/[^\x20-\x7E]/', '', $actor);
+        }
+
+        return trim(mb_substr(trim($clean), 0, self::MAX_LENGTH));
     }
 }

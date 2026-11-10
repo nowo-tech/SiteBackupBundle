@@ -19,5 +19,10 @@ interface ActorResolverInterface
      */
     public const PANEL = 'panel';
 
+    /**
+     * The actor for this request, or null for none. Keep it to 1-128 printable characters: the panel passes every
+     * value through {@see SecurityTokenActorResolver::normalize()} (controls, tab / newline and format characters
+     * dropped, cut at 128) and records "panel" when nothing is left.
+     */
     public function resolveActor(Request $request): ?string;
 }

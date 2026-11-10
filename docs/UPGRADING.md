@@ -128,11 +128,16 @@ Additive; nothing to change unless one of these applies:
 
 - **Type-hint the interface.** Prefer `Nowo\SiteBackupBundle\Service\SiteBackupManagerInterface` over the `final`
   `SiteBackupManager` in host services; the class is unchanged and still autowirable.
-- **Custom access checker.** `canAccess()` now receives the user of the security token (it always got `null`). If your
-  checker treated `null` as "deny", or read the user itself, check it still does what you want; anonymous requests and
-  apps without SecurityBundle still pass `null`.
+- **Custom access checker: review its non-null branch.** `canAccess()` now receives the user of the security token (it
+  always got `null`), so the branch of your checker for a non-null user runs for the first time, for **every** logged-in
+  user, admins or not. The panel can create, delete and **restore** backups (a restore overwrites the database and the
+  files), so make sure that branch checks roles or permissions and does not treat "a user is logged in" as "allowed".
+  Anonymous requests and apps without SecurityBundle still pass `null`.
 - **Real actor for panel actions.** Set `security.actor_resolver: Nowo\SiteBackupBundle\Security\SecurityTokenActorResolver`
-  to record the user identifier instead of `panel` (history file, events, backup sidecar `created_by`: personal data).
+  to record the user identifier instead of `panel`. It becomes personal data in the history file, the events, the
+  restore progress log, the backup sidecar / manifest `created_by` **and the metadata of remote copies** (remote
+  publisher). Every resolved actor, from any resolver, is normalised: control characters (tab and newline included) and
+  format characters are dropped, it is cut at 128 characters, and `panel` is recorded when nothing is left.
 
 ## To 1.32.0
 
