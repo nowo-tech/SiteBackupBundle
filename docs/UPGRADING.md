@@ -4,7 +4,7 @@
 
 - [Unreleased](#unreleased)
 - [To 1.34.0](#to-1340)
-  - [To 1.33.0](#to-1330)
+- [To 1.33.0](#to-1330)
   - [To 1.33.0](#to-1330-1)
 - [To 1.32.0](#to-1320)
 - [To 1.31.0](#to-1310)
@@ -124,7 +124,7 @@
 
 ## Unreleased
 
-### To 1.34.0
+## To 1.34.0
 
 From **1.33.0**: `composer update nowo-tech/site-backup-bundle`. No configuration change.
 
