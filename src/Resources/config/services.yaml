@@ -82,6 +82,9 @@ services:
     Nowo\SiteBackupBundle\Service\SiteBackupManager:
         tags: [{ name: monolog.logger, channel: site_backup }]
 
+    # Application API (type-hint the interface; a host alias or decorator replaces it everywhere).
+    Nowo\SiteBackupBundle\Service\SiteBackupManagerInterface: '@Nowo\SiteBackupBundle\Service\SiteBackupManager'
+
     Nowo\SiteBackupBundle\Twig\SiteBackupExtension: ~
 
     Nowo\SiteBackupBundle\Setup\NullAdminUserProvisioner: ~

@@ -6,8 +6,10 @@ namespace Nowo\SiteBackupBundle\Tests\Unit\Controller;
 
 use DateTimeImmutable;
 use Nowo\SiteBackupBundle\Controller\SiteBackupPanelController;
+use Nowo\SiteBackupBundle\Model\BackupHistoryEntry;
 use Nowo\SiteBackupBundle\Model\RestoreProgress;
 use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
+use Nowo\SiteBackupBundle\Security\ActorResolverInterface;
 use Nowo\SiteBackupBundle\Security\PasswordSiteBackupAccessGate;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessCheckerInterface;
 use Nowo\SiteBackupBundle\Service\SiteBackupManager;
@@ -18,10 +20,16 @@ use PHPUnit\Framework\TestCase;
 use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Session\Session;
 use Symfony\Component\HttpFoundation\Session\Storage\MockArraySessionStorage;
+use Symfony\Component\Security\Core\Authentication\Token\Storage\TokenStorage;
+use Symfony\Component\Security\Core\Authentication\Token\UsernamePasswordToken;
+use Symfony\Component\Security\Core\User\InMemoryUser;
 use Symfony\Component\Security\Csrf\CsrfToken;
 use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
 use Symfony\Contracts\Translation\TranslatorInterface;
 use Twig\Environment;
+
+use function array_map;
+use function str_repeat;
 
 use const PASSWORD_DEFAULT;
 
@@ -247,5 +255,134 @@ final class SiteBackupPanelControllerExtendedTest extends TestCase
         );
 
         self::assertSame(200, $controller->index(Request::create('/'))->getStatusCode());
+    }
+
+    public function testPanelWritesRecordPanelActorByDefault(): void
+    {
+        $manager = $this->createManager();
+        $this->openController($manager)->index($this->post(['action' => 'create', '_csrf_token' => 'token']));
+
+        $backups = $manager->listBackups();
+        self::assertCount(1, $backups);
+        self::assertSame('panel', $backups[0]->getCreatedBy());
+        self::assertSame('panel', $manager->history()[0]->getActor());
+    }
+
+    public function testPanelWritesUseTheActorResolver(): void
+    {
+        $manager  = $this->createManager();
+        $resolver = new class implements ActorResolverInterface {
+            public function resolveActor(Request $request): string
+            {
+                return 'user-42';
+            }
+        };
+        $controller = $this->openController($manager, $resolver);
+
+        $controller->index($this->post(['action' => 'create', '_csrf_token' => 'token']));
+        $id = $manager->listBackups()[0]->getId();
+        self::assertSame('user-42', $manager->listBackups()[0]->getCreatedBy());
+
+        $controller->index($this->post(['action' => 'delete', 'backup_id' => $id, '_csrf_token' => 'token']));
+
+        self::assertSame([], $manager->listBackups());
+        $actors = array_map(static fn (BackupHistoryEntry $entry): ?string => $entry->getActor(), $manager->history());
+        self::assertSame(['user-42', 'user-42'], $actors);
+    }
+
+    public function testHostResolverOutputIsNormalisedIntoAValidCreatedBy(): void
+    {
+        $manager  = $this->createManager();
+        $resolver = new class implements ActorResolverInterface {
+            public function resolveActor(Request $request): string
+            {
+                return "evil\nname" . str_repeat('x', 200);
+            }
+        };
+
+        $this->openController($manager, $resolver)->index($this->post(['action' => 'create', '_csrf_token' => 'token']));
+
+        $backups = $manager->listBackups();
+        self::assertCount(1, $backups);
+        self::assertSame('evilname' . str_repeat('x', 120), $backups[0]->getCreatedBy());
+    }
+
+    public function testAccessCheckerReceivesTheTokenUser(): void
+    {
+        $user    = new InMemoryUser('alice', null, ['ROLE_ADMIN']);
+        $storage = new TokenStorage();
+        $storage->setToken(new UsernamePasswordToken($user, 'main', ['ROLE_ADMIN']));
+        $checker = $this->createMock(SiteBackupAccessCheckerInterface::class);
+        $checker->expects(self::once())->method('canAccess')->with(self::identicalTo($user))->willReturn(false);
+
+        $controller = new SiteBackupPanelController(
+            $this->createManager(),
+            new PasswordSiteBackupAccessGate(null, false),
+            $this->createFormFactory(),
+            $this->createMock(Environment::class),
+            ['panel_index' => 'index', 'panel_login' => 'login', 'panel_history' => 'history'],
+            '/_site_backup',
+            null,
+            $checker,
+            false,
+            tokenStorage: $storage,
+        );
+
+        self::assertSame(403, $controller->index(Request::create('/'))->getStatusCode());
+    }
+
+    public function testAccessCheckerReceivesNullWithoutAToken(): void
+    {
+        $checker = $this->createMock(SiteBackupAccessCheckerInterface::class);
+        $checker->expects(self::once())->method('canAccess')->with(null)->willReturn(false);
+
+        $controller = new SiteBackupPanelController(
+            $this->createManager(),
+            new PasswordSiteBackupAccessGate(null, false),
+            $this->createFormFactory(),
+            $this->createMock(Environment::class),
+            ['panel_index' => 'index', 'panel_login' => 'login', 'panel_history' => 'history'],
+            '/_site_backup',
+            null,
+            $checker,
+            false,
+            tokenStorage: new TokenStorage(),
+        );
+
+        self::assertSame(403, $controller->index(Request::create('/'))->getStatusCode());
+    }
+
+    /**
+     * Panel without password gate, valid CSRF.
+     */
+    private function openController(SiteBackupManager $manager, ?ActorResolverInterface $resolver = null): SiteBackupPanelController
+    {
+        $csrf = $this->createMock(CsrfTokenManagerInterface::class);
+        $csrf->method('getToken')->willReturn(new CsrfToken('id', 'token'));
+        $csrf->method('isTokenValid')->willReturn(true);
+        $twig = $this->createMock(Environment::class);
+        $twig->method('render')->willReturn('html');
+
+        return new SiteBackupPanelController(
+            $manager,
+            new PasswordSiteBackupAccessGate(null, false),
+            $this->createFormFactory($csrf),
+            $twig,
+            ['panel_index' => 'index', 'panel_login' => 'login', 'panel_history' => 'history'],
+            '/_site_backup',
+            $csrf,
+            actorResolver: $resolver,
+        );
+    }
+
+    /**
+     * @param array<string, string> $data
+     */
+    private function post(array $data): Request
+    {
+        $request = Request::create('/', 'POST', $data);
+        $request->setSession(new Session(new MockArraySessionStorage()));
+
+        return $request;
     }
 }

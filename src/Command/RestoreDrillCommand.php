@@ -6,7 +6,7 @@ namespace Nowo\SiteBackupBundle\Command;
 
 use Nowo\SiteBackupBundle\Drill\RestoreDrill;
 use Nowo\SiteBackupBundle\Model\BackupArtifact;
-use Nowo\SiteBackupBundle\Service\SiteBackupManager;
+use Nowo\SiteBackupBundle\Service\SiteBackupManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
@@ -31,7 +31,7 @@ use const JSON_INVALID_UTF8_SUBSTITUTE;
 final class RestoreDrillCommand extends Command
 {
     public function __construct(
-        private readonly SiteBackupManager $manager,
+        private readonly SiteBackupManagerInterface $manager,
         private readonly RestoreDrill $drill,
     ) {
         parent::__construct();

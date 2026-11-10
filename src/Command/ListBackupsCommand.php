@@ -4,7 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Command;
 
-use Nowo\SiteBackupBundle\Service\SiteBackupManager;
+use Nowo\SiteBackupBundle\Service\SiteBackupManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputInterface;
@@ -18,7 +18,7 @@ use const DATE_ATOM;
 #[AsCommand(name: 'nowo:site-backup:list', description: 'List site backup archives')]
 final class ListBackupsCommand extends Command
 {
-    public function __construct(private readonly SiteBackupManager $manager)
+    public function __construct(private readonly SiteBackupManagerInterface $manager)
     {
         parent::__construct();
     }

@@ -7,7 +7,7 @@ namespace Nowo\SiteBackupBundle\Command;
 use InvalidArgumentException;
 use JsonException;
 use Nowo\SiteBackupBundle\Model\ImportOptions;
-use Nowo\SiteBackupBundle\Service\SiteBackupManager;
+use Nowo\SiteBackupBundle\Service\SiteBackupManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
@@ -33,7 +33,7 @@ use const JSON_THROW_ON_ERROR;
 #[AsCommand(name: 'nowo:site-backup:import', description: 'Import a backup archive (zip, tar.gz, sql.gz; zip may be AES-256 encrypted) into storage_dir')]
 final class ImportArchiveCommand extends Command
 {
-    public function __construct(private readonly SiteBackupManager $manager)
+    public function __construct(private readonly SiteBackupManagerInterface $manager)
     {
         parent::__construct();
     }

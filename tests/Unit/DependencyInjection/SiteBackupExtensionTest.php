@@ -25,12 +25,17 @@ use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
 use Nowo\SiteBackupBundle\Routing\PanelRouteLoader;
 use Nowo\SiteBackupBundle\Routing\SetupPathPrefixResolver;
 use Nowo\SiteBackupBundle\Routing\SetupRouteLoader;
+use Nowo\SiteBackupBundle\Security\ActorResolverInterface;
 use Nowo\SiteBackupBundle\Security\AllowAllSiteBackupAccessChecker;
 use Nowo\SiteBackupBundle\Security\ConfigurableSiteBackupAccessChecker;
 use Nowo\SiteBackupBundle\Security\PasswordSiteBackupAccessGate;
+use Nowo\SiteBackupBundle\Security\SecurityTokenActorResolver;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessCheckerInterface;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessGateInterface;
+use Nowo\SiteBackupBundle\Security\StaticActorResolver;
 use Nowo\SiteBackupBundle\Security\ThrottledSiteBackupAccessGate;
+use Nowo\SiteBackupBundle\Service\SiteBackupManager;
+use Nowo\SiteBackupBundle\Service\SiteBackupManagerInterface;
 use Nowo\SiteBackupBundle\Setup\ColdStart\MemoizedSchemaExistenceChecker;
 use Nowo\SiteBackupBundle\Setup\ColdStart\MysqlSchemaExistenceChecker;
 use Nowo\SiteBackupBundle\Setup\ColdStart\SchemaExistenceCheckerInterface;
@@ -503,6 +508,37 @@ final class SiteBackupExtensionTest extends TestCase
         self::assertSame(ConfigurableSiteBackupAccessChecker::class, $def->getClass());
         self::assertSame(['ROLE_ADMIN', 'ROLE_BACKUP'], $def->getArgument('$accessRoles'));
         self::assertFalse($container->getDefinition(SiteBackupPanelController::class)->getArgument('$allowUnauthenticated'));
+    }
+
+    public function testLoadAliasesTheManagerInterfaceAndTheDefaultActorResolver(): void
+    {
+        $container = new ContainerBuilder();
+        $container->setParameter('kernel.project_dir', sys_get_temp_dir());
+
+        (new SiteBackupExtension())->load([[
+            'security' => ['allow_unauthenticated' => true],
+        ]], $container);
+
+        self::assertSame(SiteBackupManager::class, (string) $container->getAlias(SiteBackupManagerInterface::class));
+        self::assertFalse($container->getAlias(SiteBackupManagerInterface::class)->isPublic());
+        self::assertSame(StaticActorResolver::class, (string) $container->getAlias(ActorResolverInterface::class));
+
+        $panel = $container->getDefinition(SiteBackupPanelController::class);
+        self::assertSame(SiteBackupManagerInterface::class, (string) $panel->getArgument('$manager'));
+        self::assertSame(ActorResolverInterface::class, (string) $panel->getArgument('$actorResolver'));
+        self::assertSame('security.token_storage', (string) $panel->getArgument('$tokenStorage'));
+    }
+
+    public function testLoadUsesTheConfiguredActorResolver(): void
+    {
+        $container = new ContainerBuilder();
+        $container->setParameter('kernel.project_dir', sys_get_temp_dir());
+
+        (new SiteBackupExtension())->load([[
+            'security' => ['allow_unauthenticated' => true, 'actor_resolver' => SecurityTokenActorResolver::class],
+        ]], $container);
+
+        self::assertSame(SecurityTokenActorResolver::class, (string) $container->getAlias(ActorResolverInterface::class));
     }
 
     public function testLoadUsesCustomAccessCheckerServiceId(): void

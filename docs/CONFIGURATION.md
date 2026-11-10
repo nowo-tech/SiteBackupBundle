@@ -75,7 +75,8 @@ Root key: `nowo_site_backup`.
 | `panel.row_actions_display` | `null` | **Deprecated (1.21)**: row actions follow `nowo_ui_kit.row_actions_display`. `text` \| `icon` \| `icon_text` still force the display of Verify / Restore / Delete; `kit` / `null` = UiKit |
 | `panel.extra_classes.card` / `.table` / `.button` / `.input` | `''` | **Deprecated (1.21)**: bridged into `nowo_ui_kit.theme.bundles.NowoSiteBackupBundle.classes` (`card` → `card`, `table` → `table`, `input` → `input`, `button` → `btn_primary`, `btn_secondary`, `action`); your own `theme.bundles` config wins |
 | `security.access_roles` | `[ROLE_ADMIN]` | REQ-UI-002: at least one role grants panel access when `allow_unauthenticated` is false |
-| `security.access_checker` | `null` | Optional service id implementing `SiteBackupAccessCheckerInterface` |
+| `security.access_checker` | `null` | Optional service id implementing `SiteBackupAccessCheckerInterface` (1.33+: receives the security token user, `null` when anonymous) |
+| `security.actor_resolver` | `null` | Service id implementing `ActorResolverInterface`: the actor recorded for panel create / delete / restore. `null` = `panel`; `Nowo\SiteBackupBundle\Security\SecurityTokenActorResolver` = the logged-in user identifier (1.33+) |
 | `security.allow_unauthenticated` | `false` | DEV/DEMO only: skip Symfony role check (password gate may still apply). Requires SecurityBundle when `false` and panel is enabled |
 | `security.password_protection` | `true` | Ops password gate (additional to role check). Fail-closed without `password_hash` when true |
 | `security.password_hash` | `null` | Prefer env `SITE_BACKUP_PASSWORD_HASH` |

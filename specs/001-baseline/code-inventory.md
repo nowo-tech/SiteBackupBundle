@@ -52,7 +52,8 @@ Every production source under `src/` is listed exactly once, grouped by domain (
 | `Model/RestoreProgress.php` | FR-MODEL-001 |
 | `Model/SetupProgress.php` | FR-MODEL-001 |
 | `Restore/RestoreOrchestrator.php` | FR-RESTORE-001, FR-DI-003, 007 FR-CG-008 |
-| `Service/SiteBackupManager.php` | FR-SVC-001, FR-OBS-001, FR-DI-003 |
+| `Service/SiteBackupManager.php` | FR-SVC-001, FR-SVC-002, FR-OBS-001, FR-DI-003 |
+| `Service/SiteBackupManagerInterface.php` | FR-SVC-002 |
 | `Storage/BackupHistoryStorageInterface.php` | FR-STORE-001 |
 | `Storage/FilesystemBackupHistoryStorage.php` | FR-STORE-001 |
 | `Storage/FilesystemRestoreProgressStorage.php` | FR-STORE-001 |
@@ -116,11 +117,14 @@ Every production source under `src/` is listed exactly once, grouped by domain (
 
 | Source file | Requirement IDs |
 | --- | --- |
+| `Security/ActorResolverInterface.php` | FR-SEC-003 |
 | `Security/AllowAllSiteBackupAccessChecker.php` | FR-SEC-001 |
 | `Security/ConfigurableSiteBackupAccessChecker.php` | FR-SEC-001 |
 | `Security/PasswordSiteBackupAccessGate.php` | FR-SEC-001 |
+| `Security/SecurityTokenActorResolver.php` | FR-SEC-003 |
 | `Security/SiteBackupAccessCheckerInterface.php` | FR-SEC-001 |
 | `Security/SiteBackupAccessGateInterface.php` | FR-SEC-001 |
+| `Security/StaticActorResolver.php` | FR-SEC-003 |
 | `Security/ThrottledSiteBackupAccessGate.php` | FR-SEC-001, 005 FR-THR-002, FR-OBS-001 |
 
 ## Forms

@@ -6,7 +6,7 @@ namespace Nowo\SiteBackupBundle\EventSubscriber;
 
 use Nowo\SiteBackupBundle\Exclusion\SiteBackupExclusionMatcher;
 use Nowo\SiteBackupBundle\Routing\SetupPathPrefixResolver;
-use Nowo\SiteBackupBundle\Service\SiteBackupManager;
+use Nowo\SiteBackupBundle\Service\SiteBackupManagerInterface;
 use Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator;
 use Symfony\Component\HttpFoundation\RedirectResponse;
 use Symfony\Component\HttpKernel\Event\RequestEvent;
@@ -38,7 +38,7 @@ final class SetupRequestSubscriber
     public function __construct(
         private readonly bool $enabled,
         private readonly SetupNeedEvaluator $needEvaluator,
-        private readonly SiteBackupManager $backupManager,
+        private readonly SiteBackupManagerInterface $backupManager,
         private readonly SiteBackupExclusionMatcher $exclusionMatcher,
         private readonly string $setupPathPrefix = '/_setup',
         private readonly string $panelPathPrefix = '/_site_backup',

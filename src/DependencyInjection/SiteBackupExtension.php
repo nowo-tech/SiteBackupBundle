@@ -42,13 +42,16 @@ use Nowo\SiteBackupBundle\Routing\PanelRouteLoader;
 use Nowo\SiteBackupBundle\Routing\SetupLocales;
 use Nowo\SiteBackupBundle\Routing\SetupPathPrefixResolver;
 use Nowo\SiteBackupBundle\Routing\SetupRouteLoader;
+use Nowo\SiteBackupBundle\Security\ActorResolverInterface;
 use Nowo\SiteBackupBundle\Security\AllowAllSiteBackupAccessChecker;
 use Nowo\SiteBackupBundle\Security\ConfigurableSiteBackupAccessChecker;
 use Nowo\SiteBackupBundle\Security\PasswordSiteBackupAccessGate;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessCheckerInterface;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessGateInterface;
+use Nowo\SiteBackupBundle\Security\StaticActorResolver;
 use Nowo\SiteBackupBundle\Security\ThrottledSiteBackupAccessGate;
 use Nowo\SiteBackupBundle\Service\SiteBackupManager;
+use Nowo\SiteBackupBundle\Service\SiteBackupManagerInterface;
 use Nowo\SiteBackupBundle\Setup\AdminUserProvisionerInterface;
 use Nowo\SiteBackupBundle\Setup\ColdStart\MemoizedSchemaExistenceChecker;
 use Nowo\SiteBackupBundle\Setup\ColdStart\MysqlSchemaExistenceChecker;
@@ -330,6 +333,7 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
         $this->configureExclusions($container, $config);
         $this->configureAccessGate($container, $config['security']);
         $this->registerAccessChecker($container, $config['security']);
+        $this->configureActorResolver($container, $config['security']);
         $this->configureManager($container, $config);
         $this->configureSubscriber($container, $config);
         $this->configureView($container, $config);
@@ -825,6 +829,21 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
         return new Reference(self::LOGIN_LIMITER_ID);
     }
 
+    /**
+     * `security.actor_resolver` (service id) or the static "panel" resolver (1.32 actor).
+     *
+     * @param array<string, mixed> $security
+     */
+    private function configureActorResolver(ContainerBuilder $container, array $security): void
+    {
+        $resolverId = $security['actor_resolver'] ?? null;
+
+        $container->setAlias(
+            ActorResolverInterface::class,
+            is_string($resolverId) && $resolverId !== '' ? $resolverId : StaticActorResolver::class,
+        )->setPublic(false);
+    }
+
     /** @param array<string, mixed> $security */
     private function registerAccessChecker(ContainerBuilder $container, array $security): void
     {
@@ -901,7 +920,7 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
         $definition = $container->getDefinition(RestoreRequestSubscriber::class);
         $definition
             ->setArgument('$enabled', (bool) $config['enabled'])
-            ->setArgument('$manager', new Reference(SiteBackupManager::class))
+            ->setArgument('$manager', new Reference(SiteBackupManagerInterface::class))
             ->setArgument('$exclusionMatcher', new Reference(SiteBackupExclusionMatcher::class))
             ->setArgument('$twig', new Reference('twig', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
             ->setArgument('$template', $config['templates']['restore_page'])
@@ -937,7 +956,7 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
         $display     = $config['panel']['row_actions_display'] ?? null;
 
         $container->getDefinition(SiteBackupTwigExtension::class)
-            ->setArgument('$manager', new Reference(SiteBackupManager::class))
+            ->setArgument('$manager', new Reference(SiteBackupManagerInterface::class))
             ->setArgument('$setupLayoutTemplate', is_string($setupLayout) ? $setupLayout : SiteBackupView::UI_KIT_GUEST_LAYOUT)
             ->setArgument('$panelLayoutTemplate', is_string($panelLayout) ? $panelLayout : '@NowoUiKit/layout/admin.html.twig')
             ->setArgument('$cssFramework', (string) ($config['css_framework'] ?? 'custom'))
@@ -987,7 +1006,7 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
         }
 
         $container->getDefinition(SiteBackupPanelController::class)
-            ->setArgument('$manager', new Reference(SiteBackupManager::class))
+            ->setArgument('$manager', new Reference(SiteBackupManagerInterface::class))
             ->setArgument('$accessGate', new Reference(SiteBackupAccessGateInterface::class))
             ->setArgument('$twig', new Reference('twig'))
             ->setArgument('$templates', $config['templates'])
@@ -997,6 +1016,8 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$allowUnauthenticated', (bool) $config['security']['allow_unauthenticated'])
             ->setArgument('$translator', new Reference('translator', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
             ->setArgument('$view', new Reference(SiteBackupView::class))
+            ->setArgument('$actorResolver', new Reference(ActorResolverInterface::class))
+            ->setArgument('$tokenStorage', new Reference('security.token_storage', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
             ->setPublic(true);
     }
 
@@ -1245,7 +1266,7 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             $sub
                 ->setArgument('$enabled', $setupEnabled)
                 ->setArgument('$needEvaluator', new Reference(SetupNeedEvaluator::class))
-                ->setArgument('$backupManager', new Reference(SiteBackupManager::class))
+                ->setArgument('$backupManager', new Reference(SiteBackupManagerInterface::class))
                 ->setArgument('$exclusionMatcher', new Reference(SiteBackupExclusionMatcher::class))
                 ->setArgument('$setupPathPrefix', $setup['path_prefix'])
                 ->setArgument('$panelPathPrefix', $config['panel']['path_prefix'])

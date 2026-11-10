@@ -136,6 +136,7 @@ Given `setup.profiles` without the `setup.default_profile` key, When the contain
 | FR-RESTORE-001 | Validate → stage → apply with protected paths; heartbeats + stale detection |
 | FR-RUNTIME-001 | `ProcessDeadline`: `process_timeout` is the hard and idle timeout of `tar`, the dump, `db-dump` and console steps; on expiry descendants then the process are killed; dump timeout message without the command; partial archive removed |
 | FR-SVC-001 | `SiteBackupManager` façade |
+| FR-SVC-002 | `Service\SiteBackupManagerInterface` is the application API (aliased to the `final` `SiteBackupManager`); panel, subscribers, commands and Twig extension depend on the interface (1.33) |
 | FR-STORE-001 | Filesystem history + restore progress storage |
 | FR-MODEL-001 | Artifact / progress / history / `SetupProgress` models |
 | FR-ATTR-001 | `#[ExcludeFromRestore]` |
@@ -150,6 +151,7 @@ Given `setup.profiles` without the `setup.default_profile` key, When the contain
 | FR-HTTP-001 | Panel + setup controllers use `#[Route]` + CSRF fail-closed |
 | FR-HTTP-002 | Restore/setup request subscribers gate the public site |
 | FR-SEC-001 | Password gate fail-closed when hash missing; `isMisconfigured()`; role checker; login throttle |
+| FR-SEC-003 | Panel create / delete / restore record the actor from `Security\ActorResolverInterface` (`security.actor_resolver`; default `panel`, opt-in `SecurityTokenActorResolver`; every actor normalised to 1-128 printable characters); the access checker receives the token user (null when anonymous or without SecurityBundle) (1.33) |
 | FR-SEC-002 | `CsrfProtectionPass`: the container refuses to compile while the panel or the setup wizard is registered without form CSRF (`form.type_extension.csrf`, token manager, `framework.form.csrf_protection`) |
 | FR-CLI-001 | Console commands for backup/restore/verify/list/setup/hash/db-dump/worker-restart |
 
