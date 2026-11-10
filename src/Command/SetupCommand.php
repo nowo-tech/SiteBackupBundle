@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Command;
 
+use Nowo\SiteBackupBundle\Log\SecretRedactor;
 use Nowo\SiteBackupBundle\Model\SetupProgress;
 use Nowo\SiteBackupBundle\Setup\SetupOrchestrator;
 use Nowo\SiteBackupBundle\Setup\SetupStepInput;
@@ -78,7 +79,7 @@ final class SetupCommand extends Command
                 $progress = $this->orchestrator->advance($profile, new SetupStepInput($data), true);
             }
         } catch (Throwable $e) {
-            $io->error($e->getMessage());
+            $io->error(SecretRedactor::redact($e->getMessage()));
 
             return Command::FAILURE;
         }

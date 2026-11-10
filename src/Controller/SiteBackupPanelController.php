@@ -7,6 +7,7 @@ namespace Nowo\SiteBackupBundle\Controller;
 use Nowo\SiteBackupBundle\Form\Panel\CreateBackupType;
 use Nowo\SiteBackupBundle\Form\Panel\PanelActionType;
 use Nowo\SiteBackupBundle\Form\Panel\PanelLoginType;
+use Nowo\SiteBackupBundle\Log\SecretRedactor;
 use Nowo\SiteBackupBundle\Model\BackupArtifact;
 use Nowo\SiteBackupBundle\Security\ActorResolverInterface;
 use Nowo\SiteBackupBundle\Security\SecurityTokenActorResolver;
@@ -119,7 +120,8 @@ final class SiteBackupPanelController
                             return new RedirectResponse($this->pathPrefix);
                         }
                     } catch (Throwable $e) {
-                        $error = $e->getMessage();
+                        // 1.34+: a dump / restore error may quote the DSN or a password; the page shows it redacted.
+                        $error = SecretRedactor::fromThrowable($e);
                     }
                 }
             }

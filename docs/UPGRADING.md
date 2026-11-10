@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+  - [To 1.34.0](#to-1340)
 - [To 1.33.0](#to-1330)
   - [To 1.33.0](#to-1330-1)
 - [To 1.32.0](#to-1320)
@@ -122,6 +123,21 @@
   - [Breaking changes](#breaking-changes-1)
 
 ## Unreleased
+
+### To 1.34.0
+
+From **1.33.0**: `composer update nowo-tech/site-backup-bundle`. No configuration change.
+
+- **`RestoreFailedEvent::getError()` is redacted.** It returns the message with credentials masked (`***`) and cut at
+  500 characters, the same text the `restore_failed` history entry, the restore progress and the panel now show. A
+  listener that parsed the raw message can use the new `getException()` (the original throwable) in memory, but must
+  not persist, serialize, forward (chat, e-mail, ticket, error tracker) or render it: it may contain the database
+  password. `getExceptionClass()` is the safe way to branch on the failure type.
+- **`SetupStepFailedEvent::getError()`** and the setup progress `error` / `message` are redacted the same way.
+- **Old entries are not rewritten.** History entries and a restore / setup progress file written by 1.0–1.33 may still
+  hold a raw message. Review the history file (`storage.history_file`, default `var/site-backup/history.jsonl`) for
+  `restore_failed` lines, clear the restore status from the panel (or `SiteBackupManagerInterface::clearRestoreStatus()`)
+  and rotate any credential that appears there.
 
 ## To 1.33.0
 

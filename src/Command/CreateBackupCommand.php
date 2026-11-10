@@ -9,6 +9,7 @@ use Nowo\SiteBackupBundle\Enum\ArchiveFormat;
 use Nowo\SiteBackupBundle\Enum\TableRule;
 use Nowo\SiteBackupBundle\Exception\BackupAlreadyRunningException;
 use Nowo\SiteBackupBundle\Exception\InvalidBackupOptionsException;
+use Nowo\SiteBackupBundle\Log\SecretRedactor;
 use Nowo\SiteBackupBundle\Model\BackupOptions;
 use Nowo\SiteBackupBundle\Service\SiteBackupManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -68,15 +69,15 @@ final class CreateBackupCommand extends Command
             $options  = $this->options($input);
             $artifact = $this->manager->createBackup($options);
         } catch (BackupAlreadyRunningException $e) {
-            $io->warning($e->getMessage());
+            $io->warning(SecretRedactor::redact($e->getMessage()));
 
             return self::EXIT_LOCKED;
         } catch (InvalidBackupOptionsException|InvalidArgumentException $e) {
-            $io->error($e->getMessage());
+            $io->error(SecretRedactor::redact($e->getMessage()));
 
             return Command::INVALID;
         } catch (Throwable $e) {
-            $io->error($e->getMessage());
+            $io->error(SecretRedactor::redact($e->getMessage()));
 
             return Command::FAILURE;
         }

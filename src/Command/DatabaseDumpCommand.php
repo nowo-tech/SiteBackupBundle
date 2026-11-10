@@ -13,6 +13,7 @@ use Nowo\SiteBackupBundle\Enum\TableRule;
 use Nowo\SiteBackupBundle\Exception\DumpFailedException;
 use Nowo\SiteBackupBundle\Exception\InvalidBackupOptionsException;
 use Nowo\SiteBackupBundle\Exception\UnsafeTableRuleException;
+use Nowo\SiteBackupBundle\Log\SecretRedactor;
 use Nowo\SiteBackupBundle\Model\BackupOptions;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
@@ -84,7 +85,7 @@ final class DatabaseDumpCommand extends Command
                 is_array($extra) ? array_values(array_filter($extra, is_string(...))) : [],
             );
         } catch (InvalidArgumentException $e) {
-            $stderr->writeln('nowo:site-backup:db-dump: ' . $e->getMessage());
+            $stderr->writeln('nowo:site-backup:db-dump: ' . SecretRedactor::redact($e->getMessage()));
 
             return Command::INVALID;
         }
@@ -98,7 +99,7 @@ final class DatabaseDumpCommand extends Command
                 }
             }
         } catch (InvalidBackupOptionsException|UnsafeTableRuleException|DumpFailedException $e) {
-            $stderr->writeln('nowo:site-backup:db-dump: ' . $e->getMessage());
+            $stderr->writeln('nowo:site-backup:db-dump: ' . SecretRedactor::redact($e->getMessage()));
 
             return Command::INVALID;
         }

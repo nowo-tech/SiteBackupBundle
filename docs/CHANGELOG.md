@@ -73,6 +73,37 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Target 1.34.0 (minor: `RestoreFailedEvent::getError()`, the history entry and the restore / setup progress now carry a
+redacted text instead of the raw exception message, and the event gains accessors).
+
+### Security
+
+- **Restore and setup failures no longer store or dispatch raw exception messages.** A PDO / Doctrine / `mysql` /
+  `psql` error can quote the DSN, a `password=` pair or a failing `ALTER USER … PASSWORD '…'` statement. Since 1.0.0 the
+  restore failure wrote `$e->getMessage()` verbatim to `RestoreFailedEvent::getError()`, the `restore_failed` history
+  entry (history file, panel history page), the restore progress `error` and log (panel status notice, `progress.json`
+  for authenticated pollers), and the panel error message. All of them now get
+  `SecretRedactor::fromThrowable()` (redacted, ≤ 500 characters), like `BackupFailedEvent` since 1.28. The same applies
+  to a failed setup step (setup progress `error` / `message` / log, wizard page, `SetupStepFailedEvent::getError()`)
+  and to the error lines of the console commands. Logs were already redacted.
+
+### Added
+
+- `RestoreFailedEvent::getException()` / `getExceptionClass()`: the original throwable, in memory only. It is
+  **sensitive** (unredacted message and trace): never persist, serialize, forward or render it.
+- `Log\SecretRedactor::forStorage()` / `fromThrowable()` (UTF-8 scrub + redact + cap) and `STORAGE_MAX_LENGTH`.
+  `forStorage()` replaces invalid UTF-8 bytes first, so a latin1 snippet in a driver error can no longer make the
+  history / progress JSON write throw and leave a failed restore shown as "active" (PHP 8.2–8.4).
+
+### Changed
+
+- `SecretRedactor::redact()` masks more (independent audit KZ): a URL password with a raw `@` up to the last `@` of the
+  token; backslash-escaped quotes in `password='…'` / `"…"` and in SQL `IDENTIFIED BY '…'` / `PASSWORD '…'` (doubled
+  quotes too); `IDENTIFIED WITH … BY|AS '…'`; `--password <value>`; quoted argv (`'-pX'`, `'-p' 'X'`,
+  `'--password=a b'`); env and `=` keys in any case (`database_password=`, `secretKey=`); YAML `*_secret:` /
+  `accessKeyId:`; XML elements (`<SecretAccessKey>`); `passphrase`; ODBC `Pwd={…}`; age identities. Only the exact
+  MySQL hint `(using password: YES|NO)` stays readable (a password starting with `YES)` is masked).
+
 ## [1.33.0] - 2026-11-10
 
 Target 1.33.0.

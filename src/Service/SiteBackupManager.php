@@ -43,7 +43,6 @@ use Symfony\Component\Clock\NativeClock;
 use Throwable;
 
 use function bin2hex;
-use function mb_substr;
 use function random_bytes;
 use function sprintf;
 
@@ -125,7 +124,7 @@ final class SiteBackupManager implements SiteBackupManagerInterface
                 $this->eventDispatcher?->dispatch(new BackupFailedEvent(
                     $operationId,
                     $e::class,
-                    mb_substr(SecretRedactor::redact($e->getMessage()), 0, 500),
+                    SecretRedactor::fromThrowable($e),
                     $options->toLoggableArray(),
                     $actor,
                 ));
@@ -351,15 +350,18 @@ final class SiteBackupManager implements SiteBackupManagerInterface
 
             return $progress;
         } catch (Throwable $e) {
+            // 1.34+: the history file and the event get the redacted, capped message only (a PDO / client error may
+            // quote the DSN or a password); the raw throwable stays in memory on the event and is rethrown.
+            $error = SecretRedactor::fromThrowable($e);
             // @igor-ignore - Service coordinates I/O or request-scoped work; not unsafe worker singleton state.
             $this->historyStorage->append(new BackupHistoryEntry(
                 action: 'restore_failed',
                 occurredAt: $this->clock->now(),
                 actor: $actor,
                 backupId: $backupId,
-                message: $e->getMessage(),
+                message: $error,
             ));
-            $this->eventDispatcher?->dispatch(new RestoreFailedEvent($artifact, $e->getMessage(), $actor));
+            $this->eventDispatcher?->dispatch(new RestoreFailedEvent($artifact, $error, $actor, $e));
             $this->logger->error('SiteBackup: restore failed.', $this->context('restore', $backupId, $e));
 
             throw $e;

@@ -371,6 +371,9 @@ it in your infrastructure layer:
 - *Reacting to backups*: subscribe to the events in `Nowo\SiteBackupBundle\Event\SiteBackupEvents`
   (`BackupCreatedEvent`, `BackupFailedEvent`, `RestoreCompletedEvent`, `RestoreFailedEvent`, `RemoteBackupUploadedEvent`,
   `SetupCompletedEvent`, …) and translate them into your own notifications or audit records.
+  Failure events carry a redacted, capped message (`BackupFailedEvent::getMessage()`, `RestoreFailedEvent::getError()`,
+  `SetupStepFailedEvent::getError()`; 1.34+ for the last two): forward that one. `RestoreFailedEvent::getException()`
+  is the raw throwable for in-memory use only; it may quote the database password, so never persist or forward it.
 
 - *Ports you implement* (alias the interface in your `services.yaml`, or use the config key):
   - `Setup\AdminUserProvisionerInterface` (`setup.admin_provisioner`) — create your User aggregate here; the bundle

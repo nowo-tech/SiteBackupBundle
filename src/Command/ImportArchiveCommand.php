@@ -6,6 +6,7 @@ namespace Nowo\SiteBackupBundle\Command;
 
 use InvalidArgumentException;
 use JsonException;
+use Nowo\SiteBackupBundle\Log\SecretRedactor;
 use Nowo\SiteBackupBundle\Model\ImportOptions;
 use Nowo\SiteBackupBundle\Service\SiteBackupManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -56,7 +57,7 @@ final class ImportArchiveCommand extends Command
         try {
             $password = PasswordInput::read($input);
         } catch (InvalidArgumentException $e) {
-            $io->error($e->getMessage());
+            $io->error(SecretRedactor::redact($e->getMessage()));
 
             return Command::INVALID;
         }
@@ -88,7 +89,7 @@ final class ImportArchiveCommand extends Command
         try {
             $artifact = $this->manager->importArchive((string) $input->getArgument('file'), $password, (string) $input->getOption('actor'), $options);
         } catch (Throwable $e) {
-            $io->error($e->getMessage());
+            $io->error(SecretRedactor::redact($e->getMessage()));
 
             return Command::FAILURE;
         } finally {

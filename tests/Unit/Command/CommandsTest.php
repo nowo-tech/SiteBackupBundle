@@ -12,11 +12,13 @@ use Nowo\SiteBackupBundle\Command\SetupCommand;
 use Nowo\SiteBackupBundle\Command\SetupResetCommand;
 use Nowo\SiteBackupBundle\Command\SetupStatusCommand;
 use Nowo\SiteBackupBundle\Command\VerifyBackupCommand;
+use Nowo\SiteBackupBundle\Service\SiteBackupManagerInterface;
 use Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator;
 use Nowo\SiteBackupBundle\Setup\SetupNeedDetectorInterface;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupMarkerManager;
 use Nowo\SiteBackupBundle\Tests\Unit\CreatesSiteBackupTestHarness;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Tester\CommandTester;
 
@@ -72,6 +74,17 @@ final class CommandsTest extends TestCase
 
         $ok = new CommandTester(new RestoreBackupCommand($manager));
         self::assertSame(Command::SUCCESS, $ok->execute(['id' => $artifact->getId(), '--yes' => true]));
+    }
+
+    public function testRestoreBackupCommandPrintsTheRedactedError(): void
+    {
+        $manager = $this->createMock(SiteBackupManagerInterface::class);
+        $manager->method('restore')->willThrowException(new RuntimeException('SQL import: mysql --user=root -pREDACTED-TEST failed'));
+
+        $tester = new CommandTester(new RestoreBackupCommand($manager));
+        self::assertSame(Command::FAILURE, $tester->execute(['id' => 'b1', '--yes' => true]));
+        self::assertStringContainsString('-p***', $tester->getDisplay());
+        self::assertStringNotContainsString('REDACTED-TEST', $tester->getDisplay());
     }
 
     public function testVerifyBackupCommand(): void
