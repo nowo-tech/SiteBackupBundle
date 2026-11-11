@@ -139,7 +139,9 @@ final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInte
     public function reset(): void
     {
         $this->schemaEnsured = false;
-        $this->stepJournal?->reset();
+        if ($this->stepJournal instanceof DoctrineDbalSetupStepJournal) {
+            $this->stepJournal->reset();
+        }
     }
 
     /**
@@ -198,8 +200,10 @@ final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInte
 
             if ($idleEmpty) {
                 $profile = $progress->getProfile() !== '' ? $progress->getProfile() : null;
-                // @igor-ignore - Deletes journal rows in the database; no in-memory state to reset.
-                $this->stepJournal->clear($profile);
+                // Igor counts clear() on an injected service as state; this deletes database rows, the journal keeps
+                // only its schema flag (reset by reset()).
+                $journal = $this->stepJournal; // @igor-ignore - DB write through the journal service; no in-memory state.
+                $journal->clear($profile); // @igor-ignore - DB write through the journal service; no in-memory state.
 
                 return;
             }

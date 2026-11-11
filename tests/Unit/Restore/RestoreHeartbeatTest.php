@@ -11,6 +11,7 @@ use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
 use Nowo\SiteBackupBundle\Storage\RestoreProgressStorageInterface;
 use PHPUnit\Framework\TestCase;
 use ReflectionProperty;
+use RuntimeException;
 use Symfony\Component\Clock\MockClock;
 use Symfony\Component\Filesystem\Filesystem;
 
@@ -150,7 +151,6 @@ final class RestoreHeartbeatTest extends TestCase
 
     public function testResetForgetsTheHeartbeatThrottle(): void
     {
-        $artifact     = $this->archiver()->create('reset');
         $orchestrator = new RestoreOrchestrator(
             projectDir: $this->projectDir,
             archiver: $this->archiver(),
@@ -159,12 +159,67 @@ final class RestoreHeartbeatTest extends TestCase
             staleAfterSeconds: 0,
         );
         $lastWrite = new ReflectionProperty(RestoreOrchestrator::class, 'lastProgressWriteAt');
-
-        $orchestrator->restore($artifact);
-        self::assertNotNull($lastWrite->getValue($orchestrator));
+        $heartbeat = new ReflectionProperty(RestoreOrchestrator::class, 'onHeartbeat');
+        $lastWrite->setValue($orchestrator, 123);
+        $heartbeat->setValue($orchestrator, static function (): void {
+        });
 
         $orchestrator->reset();
+
         self::assertNull($lastWrite->getValue($orchestrator));
+        self::assertNull($heartbeat->getValue($orchestrator));
+    }
+
+    /**
+     * FrankenPHP worker, kernel kept alive, no services resetter: one orchestrator serves many restores. The caller's
+     * heartbeat closure (it holds the operation lock) and the throttle never outlive the restore that set them, and a
+     * later restore never calls an earlier caller's closure.
+     */
+    public function testKeptAliveOrchestratorKeepsNoHeartbeatBetweenRestores(): void
+    {
+        $time         = 1_000_000;
+        $storage      = new RecordingRestoreProgressStorage();
+        $orchestrator = new RestoreOrchestrator(
+            projectDir: $this->projectDir,
+            archiver: $this->archiver(),
+            progressStorage: $storage,
+            protectedRelativePaths: [],
+            staleAfterSeconds: 30,
+            clock: static function () use (&$time): DateTimeImmutable {
+                $time += 3;
+
+                return new DateTimeImmutable('@' . $time);
+            },
+        );
+        $lastWrite = new ReflectionProperty(RestoreOrchestrator::class, 'lastProgressWriteAt');
+        $heartbeat = new ReflectionProperty(RestoreOrchestrator::class, 'onHeartbeat');
+        $artifact  = $this->archiver()->create('worker');
+        /** @var array<int, int> $beats */
+        $beats = [];
+
+        for ($run = 0; $run < 5; ++$run) {
+            $before      = $beats;
+            $beats[$run] = 0;
+            $orchestrator->restore($artifact, 'cli', static function () use (&$beats, $run): void {
+                ++$beats[$run];
+            });
+            self::assertGreaterThan(0, $beats[$run], 'run ' . $run . ' got its own heartbeats');
+            foreach ($before as $earlier => $count) {
+                self::assertSame($count, $beats[$earlier], 'run ' . $run . ' never called the closure of run ' . $earlier);
+            }
+            self::assertNull($heartbeat->getValue($orchestrator), 'closure dropped after run ' . $run);
+            self::assertNull($lastWrite->getValue($orchestrator), 'throttle dropped after run ' . $run);
+        }
+
+        // Refused (a restore is already running): nothing of the refused caller is kept either.
+        $storage->save(new RestoreProgress(active: true, phase: RestoreProgress::PHASE_APPLYING, updatedAt: new DateTimeImmutable('@4000000000')));
+        try {
+            $orchestrator->restore($artifact, 'cli', static function (): void {
+            });
+            self::fail('A running restore must refuse another one.');
+        } catch (RuntimeException) {
+        }
+        self::assertNull($heartbeat->getValue($orchestrator));
     }
 
     public function testArchiverCallsTheHeartbeatWhileHashingAndExtracting(): void

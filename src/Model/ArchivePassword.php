@@ -70,11 +70,12 @@ final class ArchivePassword
 
     private static function store(self $password, #[SensitiveParameter] string $value): void
     {
-        // @igor-ignore - Object-keyed weak map: each entry dies with its ArchivePassword; nothing outlives a request.
+        // Object-keyed weak map: each entry dies with its ArchivePassword (or on wipe()), so no value outlives the
+        // object that carries it, in a FrankenPHP worker too.
         // @phpstan-ignore-next-line (weak map, see the property)
-        self::$values ??= new WeakMap();
+        self::$values ??= new WeakMap(); // @igor-ignore - Object-keyed weak map; entries die with their password object.
         // @phpstan-ignore-next-line (weak map, see the property)
-        self::$values[$password] = $value;
+        self::$values[$password] = $value; // @igor-ignore - Object-keyed weak map; entries die with their password object.
     }
 
     /**

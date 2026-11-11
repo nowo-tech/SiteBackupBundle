@@ -65,8 +65,8 @@ final class AgeBinaryEncryptor implements ArchiveEncryptorInterface
     /** EO-L5 / EO-R4: the binary, resolved once to an absolute path when the service is built. */
     private readonly ?string $resolvedBinary;
 
-    /** EO-R4: why the configured binary was refused (null when it resolved). */
-    private ?string $refusal = null;
+    /** EO-R4: why the configured binary was refused (null when it resolved); set once, with the binary, when built. */
+    private readonly ?string $refusal;
 
     public function __construct(
         private readonly string $binary = 'age',
@@ -80,7 +80,7 @@ final class AgeBinaryEncryptor implements ArchiveEncryptorInterface
         if ($workFactor < 10 || $workFactor > 22 || $maxWorkFactor < $workFactor || $maxWorkFactor > 22) {
             throw new FormatUnavailableException('age work factors must satisfy 10 <= work_factor <= max_work_factor <= 22.');
         }
-        $this->resolvedBinary = $this->resolveBinary();
+        [$this->resolvedBinary, $this->refusal] = $this->resolveBinary();
     }
 
     public function name(): string
@@ -222,20 +222,22 @@ final class AgeBinaryEncryptor implements ArchiveEncryptorInterface
     /**
      * EO-R4: an absolute path is used as given (after realpath); a bare name is looked up on PHP's PATH once, here,
      * and the result is logged. A relative path, or a binary in a world-writable directory, is refused.
+     *
+     * Configuration-derived and resolved only from the constructor: the service keeps no per-request state.
+     *
+     * @return array{?string, ?string} the resolved binary and, when it was refused, why
      */
-    private function resolveBinary(): ?string
+    private function resolveBinary(): array
     {
         if (str_contains($this->binary, '/')) {
             if (!str_starts_with($this->binary, '/')) {
-                $this->refusal = sprintf('backup.encryption.age.binary "%s" is relative: use an absolute path.', $this->binary);
-
-                return null;
+                return [null, sprintf('backup.encryption.age.binary "%s" is relative: use an absolute path.', $this->binary)];
             }
             $found = $this->binary;
         } else {
             $found = (new ExecutableFinder())->find($this->binary);
             if (!is_string($found) || $found === '') {
-                return null;
+                return [null, null];
             }
         }
 
@@ -243,14 +245,12 @@ final class AgeBinaryEncryptor implements ArchiveEncryptorInterface
         clearstatcache(true);
         $real = realpath($found);
         if ($real === false || !is_file($real) || !is_executable($real)) {
-            return null;
+            return [null, null];
         }
         foreach ([$real, dirname($real)] as $path) {
             $mode = @fileperms($path);
             if ($mode === false || ($mode & 0o002) !== 0) {
-                $this->refusal = sprintf('The age binary "%s" or its directory is world-writable: refused.', $real);
-
-                return null;
+                return [null, sprintf('The age binary "%s" or its directory is world-writable: refused.', $real)];
             }
         }
 
@@ -258,7 +258,7 @@ final class AgeBinaryEncryptor implements ArchiveEncryptorInterface
             $this->logger?->notice('age binary "{configured}" resolved to "{resolved}"; set backup.encryption.age.binary to an absolute path.', ['configured' => $this->binary, 'resolved' => $real]);
         }
 
-        return $real;
+        return [$real, null];
     }
 
     private function findPlugin(string $binary): ?string

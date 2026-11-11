@@ -74,6 +74,22 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Target: 1.34.1 (patch).
+
+### Fixed
+
+- FrankenPHP worker mode (kernel kept alive, no services resetter): `RestoreOrchestrator::restore()` clears the
+  caller's heartbeat closure (it holds the operation lock) and the heartbeat throttle when the restore ends or is
+  refused, instead of keeping them in the shared service until the next restore or `kernel.reset`.
+
+### Changed
+
+- Igor worker-state audit (`composer igor`) clean: 0 KO / 0 WARN. The five findings of 2026-11-11 were false positives
+  (triage in `docs/FRANKENPHP-WORKER-AUDIT.md`, W-07): `AgeBinaryEncryptor` resolves the binary and the refusal reason
+  once into `readonly` properties; `ArchivePassword`, `InMemoryRemoteTarget`, `RestoreOrchestrator` and
+  `DoctrineDbalSetupProgressStorage` are annotated.
+- CI: standalone `igor` job (REQ-CS-008).
+
 ## [1.34.0] - 2026-11-10
 
 Security: restore and setup failure messages are redacted and capped before they reach events, history, progress files, the panel and the console (GHSA). See [UPGRADING](https://github.com/nowo-tech/SiteBackupBundle/blob/v1.34.0/docs/UPGRADING.md#to-1340).
