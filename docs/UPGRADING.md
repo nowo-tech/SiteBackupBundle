@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.35.1](#to-1351)
 - [To 1.35.0](#to-1350)
   - [Deprecations (removed in 2.0)](#deprecations-removed-in-20)
   - [Migration](#migration)
@@ -127,6 +128,14 @@
   - [Breaking changes](#breaking-changes-1)
 
 ## Unreleased
+
+## To 1.35.1
+
+From **1.35.0**:
+
+```bash
+composer update nowo-tech/site-backup-bundle
+```
 
 ## To 1.35.0
 
