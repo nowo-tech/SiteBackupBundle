@@ -40,7 +40,7 @@ final class SetupStepFactory
     public function __construct(
         private readonly ConsoleProcessRunner $runner,
         private readonly SetupMarkerManager $markers,
-        private readonly AdminUserProvisionerInterface $adminProvisioner,
+        private readonly AdminUserProvisionerInterface|AdminAccountProvisionerInterface $adminProvisioner,
         private readonly mixed $dbalConnection = null,
         private readonly array $customSteps = [],
         private readonly ?SetupTabCheckerLocator $checkerLocator = null,

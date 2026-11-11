@@ -4,6 +4,8 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Setup\Step;
 
+use Nowo\SiteBackupBundle\Setup\AdminAccountProvisionerInterface;
+use Nowo\SiteBackupBundle\Setup\AdminUserData;
 use Nowo\SiteBackupBundle\Setup\AdminUserProvisionerInterface;
 use Nowo\SiteBackupBundle\Setup\SetupContext;
 use Nowo\SiteBackupBundle\Setup\SetupStepInput;
@@ -20,7 +22,7 @@ final class AdminUserStep extends AbstractSetupStep
     public function __construct(
         string $id,
         string $label,
-        private readonly AdminUserProvisionerInterface $provisioner,
+        private readonly AdminUserProvisionerInterface|AdminAccountProvisionerInterface $provisioner,
         private readonly array $roles = ['ROLE_SUPER_ADMIN'],
         private readonly bool $skipIfAdminExists = true,
     ) {
@@ -52,11 +54,16 @@ final class AdminUserStep extends AbstractSetupStep
         }
 
         try {
-            $this->provisioner->createAdmin([
-                'email'    => $email,
-                'password' => $password,
-                'roles'    => $this->roles,
-            ]);
+            if ($this->provisioner instanceof AdminAccountProvisionerInterface) {
+                // The typed port wins when the provisioner implements both.
+                $this->provisioner->createAdminAccount(new AdminUserData($email, $password, $this->roles));
+            } else {
+                $this->provisioner->createAdmin([
+                    'email'    => $email,
+                    'password' => $password,
+                    'roles'    => $this->roles,
+                ]);
+            }
             $ctx->setAnswer('admin_email', $email);
 
             return SetupStepResult::ok('Admin user created.');

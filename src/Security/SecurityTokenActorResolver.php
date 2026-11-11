@@ -17,8 +17,10 @@ use function trim;
  *
  * The identifier goes through {@see self::normalize()}: control and format characters (tab and newline included) are
  * dropped and it is cut at {@see self::MAX_LENGTH}.
+ *
+ * With a {@see PanelRequestContext} the identifier is the context's (built from the same token storage).
  */
-final readonly class SecurityTokenActorResolver implements ActorResolverInterface
+final readonly class SecurityTokenActorResolver implements ActorResolverInterface, PanelActorResolverInterface
 {
     public const MAX_LENGTH = 128;
 
@@ -28,9 +30,11 @@ final readonly class SecurityTokenActorResolver implements ActorResolverInterfac
     ) {
     }
 
-    public function resolveActor(Request $request): ?string
+    public function resolveActor(Request|PanelRequestContext $request): ?string
     {
-        $identifier = $this->tokenStorage?->getToken()?->getUserIdentifier();
+        $identifier = $request instanceof PanelRequestContext
+            ? $request->userIdentifier
+            : $this->tokenStorage?->getToken()?->getUserIdentifier();
         if ($identifier === null) {
             return $this->fallback;
         }

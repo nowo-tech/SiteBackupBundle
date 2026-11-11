@@ -292,12 +292,27 @@ Steps registered via:
 | `migrations` | `doctrine:migrations:migrate --no-interaction` | Preferred for apps that ship migrations |
 | `sql_file` | Execute `.sql` paths (glob); honour answer `sql_import_path` | Seed / full dump import |
 | `bootstrap_mode` | Form: `guided` \| `full_database` (+ optional path) | Sets answers for `when_answer` |
-| `admin_user` | Calls `AdminUserProvisionerInterface` | Skipped when admin exists |
+| `admin_user` | Calls `AdminAccountProvisionerInterface::createAdminAccount(AdminUserData)` (1.35+; the deprecated `AdminUserProvisionerInterface::createAdmin(array)` still works) | Skipped when admin exists |
 | `sample_data` | Runs configured console commands | Only if user opted in |
 | `marker` | Write/remove lock files | `setup.done`, clear `setup.required` |
 | `custom` | App Twig + optional `runner` / `checker` | Declared under `profiles.*.tabs` |
 
 Generic **`console`** is the escape hatch: any idempotent app command (`app:load-taxonomy`, `app:seed-roles`, …).
+
+### Host step types (1.35+)
+
+A host service implementing `SetupStepInterface` becomes a step type with `#[AsSetupStep(type: 'seed_tenants')]` (or
+the tag `nowo.site_backup.setup_step` with a `type` attribute) and is used like a built-in:
+`- { type: seed_tenants }`. The `when_answer`, `checker`, `template`, `label_domain` and `description` keys wrap it
+like any other tab.
+
+- The type is lower-case letters, digits and `_`; a built-in type name (the table above, `custom` included) or a type
+  registered twice fails the container build, so a host step never replaces the admin creation, the `.env.local`
+  rewrite or the SQL import.
+- Implement `InitialInstallOnlyStepInterface` on a step that creates users, rewrites secrets or replaces data: a
+  re-opened wizard skips it like the built-in initial-install steps.
+- Steps run inside the wizard, behind the same setup access token and gating as the built-ins. Keep them stateless
+  (FrankenPHP worker mode) and idempotent.
 
 ## Tabs, checkers, and advance mode
 
@@ -398,7 +413,7 @@ nowo_site_backup:
 
 ### App-owned pieces (required for full wizard)
 
-1. **`AdminUserProvisionerInterface`** — knows your User entity / hasher / roles.
+1. **`AdminAccountProvisionerInterface`** (1.35+, typed `AdminUserData`; the array-based `AdminUserProvisionerInterface` is deprecated) — knows your User entity / hasher / roles.
 2. **Idempotent console commands** — e.g. `app:seed-roles` upserts; safe to re-run.
 3. **Optional SQL seeds** under `data/seed/minimal/`.
 4. **Optional fixtures command** for sample data.

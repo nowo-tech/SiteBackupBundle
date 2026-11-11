@@ -4,13 +4,18 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Security;
 
+use SensitiveParameter;
 use Symfony\Component\HttpFoundation\Request;
-use Symfony\Component\HttpFoundation\Session\SessionInterface;
 
 use function is_string;
 use function password_verify;
 
-final class PasswordSiteBackupAccessGate implements SiteBackupAccessGateInterface
+/**
+ * Default ops password gate. Implements the framework-free {@see PanelAccessGateInterface} and, for BC, the deprecated
+ * {@see SiteBackupAccessGateInterface}: both entry points share one decision (the `Request` is only read for its
+ * session).
+ */
+final class PasswordSiteBackupAccessGate implements SiteBackupAccessGateInterface, PanelAccessGateInterface
 {
     private const SESSION_KEY = '_nowo_site_backup_auth';
 
@@ -33,7 +38,7 @@ final class PasswordSiteBackupAccessGate implements SiteBackupAccessGateInterfac
         return $this->enabled && (!is_string($this->passwordHash) || $this->passwordHash === '');
     }
 
-    public function isAuthenticated(Request $request): bool
+    public function isAuthenticated(Request|PanelRequestContext $request): bool
     {
         if (!$this->enabled) {
             return true;
@@ -45,14 +50,14 @@ final class PasswordSiteBackupAccessGate implements SiteBackupAccessGateInterfac
         }
 
         $session = $this->session($request);
-        if (!$session instanceof SessionInterface) {
+        if (!$session instanceof PanelSessionInterface) {
             return false;
         }
 
         return $session->get(self::SESSION_KEY) === true;
     }
 
-    public function authenticate(Request $request, string $password): bool
+    public function authenticate(Request|PanelRequestContext $request, #[SensitiveParameter] string $password): bool
     {
         if (!$this->enabled) {
             return true;
@@ -67,7 +72,7 @@ final class PasswordSiteBackupAccessGate implements SiteBackupAccessGateInterfac
         }
 
         $session = $this->session($request);
-        if (!$session instanceof SessionInterface) {
+        if (!$session instanceof PanelSessionInterface) {
             return false;
         }
 
@@ -77,18 +82,17 @@ final class PasswordSiteBackupAccessGate implements SiteBackupAccessGateInterfac
         return true;
     }
 
-    public function logout(Request $request): void
+    public function logout(Request|PanelRequestContext $request): void
     {
-        $session = $this->session($request);
-        $session?->remove(self::SESSION_KEY);
+        $this->session($request)?->remove(self::SESSION_KEY);
     }
 
-    private function session(Request $request): ?SessionInterface
+    private function session(Request|PanelRequestContext $request): ?PanelSessionInterface
     {
-        if (!$request->hasSession()) {
-            return null;
+        if ($request instanceof PanelRequestContext) {
+            return $request->session;
         }
 
-        return $request->getSession();
+        return $request->hasSession() ? new HttpFoundationPanelSession($request->getSession()) : null;
     }
 }
