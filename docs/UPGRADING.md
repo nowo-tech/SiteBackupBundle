@@ -3,6 +3,9 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.35.0](#to-1350)
+  - [Deprecations (removed in 2.0)](#deprecations-removed-in-20)
+  - [Migration](#migration)
 - [To 1.34.1](#to-1341)
 - [To 1.34.0](#to-1340)
 - [To 1.33.0](#to-1330)
@@ -124,6 +127,14 @@
   - [Breaking changes](#breaking-changes-1)
 
 ## Unreleased
+
+## To 1.35.0
+
+From **1.34.1**:
+
+```bash
+composer update nowo-tech/site-backup-bundle
+```
 
 Target: **1.35.0**. From **1.34.x**: `composer update nowo-tech/site-backup-bundle`. No breaking change: hosts on the
 old ports keep working; the new ports and options are opt-in, and every default is unchanged.
