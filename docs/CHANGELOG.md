@@ -76,6 +76,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Target: **1.35.1** (patch, tests and docs only; no runtime change).
+
+### Changed
+
+- REQ-RUNTIME-002 worker test: `WorkerModeKernelTest` boots one kernel and sends 1,000 panel `progress.json` requests
+  through `http_kernel` (so the services resetter never runs between them), as a logged-in operator and an anonymous
+  poller in alternation; each response holds only that client's view and memory stays within 2 MiB. A second test
+  proves the `ArchivePassword` weak map keeps no entry once its password objects are gone.
+- `docs/FRANKENPHP-WORKER-AUDIT.md` refreshed from v1.14.0 to v1.35.1: the 1.35 services, the precise worker
+  precondition (the stock kernel still runs the services resetter; state that only it clears leaks when a host
+  bypasses it, in Messenger consumers with `--no-reset` and in long console commands), why the object-keyed static
+  weak maps of `ArchivePassword` and `AdminUserData` are worker-safe (W-08), the worker test, and the host rule for
+  Doctrine entity managers. The `RestoreOrchestrator` heartbeat fix and the `igor` CI job shipped in 1.34.1.
+
 ## [1.35.0] - 2026-11-11
 
 Target: **1.35.0** (minor, no breaking change). See [UPGRADING](UPGRADING.md#unreleased).
