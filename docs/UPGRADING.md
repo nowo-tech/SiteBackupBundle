@@ -125,6 +125,55 @@
 
 ## Unreleased
 
+Target: **1.35.0**. From **1.34.x**: `composer update nowo-tech/site-backup-bundle`. No breaking change: hosts on the
+old ports keep working; the new ports and options are opt-in, and every default is unchanged.
+
+### Deprecations (removed in 2.0)
+
+| Deprecated (1.35.0) | Replacement |
+|---------------------|-------------|
+| `Security\SiteBackupAccessGateInterface` (`isAuthenticated(Request)`, `authenticate(Request, string)`, `logout(Request)`) | `Security\PanelAccessGateInterface` (same methods with `PanelRequestContext`) |
+| `Security\ActorResolverInterface::resolveActor(Request)` | `Security\PanelActorResolverInterface::resolveActor(PanelRequestContext)` |
+| `Security\ActorResolverInterface::PANEL` | `Security\PanelActorResolverInterface::DEFAULT_ACTOR` (same value, `panel`) |
+| `Setup\AdminUserProvisionerInterface::createAdmin(array $data)` | `Setup\AdminAccountProvisionerInterface::createAdminAccount(AdminUserData $admin)` |
+
+Each configured host service (`security.access_gate`, `security.actor_resolver`, `setup.admin_provisioner`) that
+implements only an old port triggers one deprecation when the container is built.
+
+### Migration
+
+1. **Custom access gate** (`security.access_gate`). Implement `PanelAccessGateInterface` and read the session from the
+   context instead of the request; keep denying when there is no session or no credentials:
+
+   ```php
+   // before
+   public function isAuthenticated(Request $request): bool
+   {
+       return $request->hasSession() && $request->getSession()->get('ops_ok') === true;
+   }
+
+   // after
+   public function isAuthenticated(PanelRequestContext $context): bool
+   {
+       return $context->session?->get('ops_ok') === true;
+   }
+   ```
+
+   `$context->clientIp` and `$context->userIdentifier` replace `$request->getClientIp()` and the token storage. The
+   bundle still wraps your gate with the login throttle and rotates the session id after a successful login
+   (`PanelSessionInterface::regenerateId()`). During the migration a class may implement both interfaces with a
+   `Request|PanelRequestContext` parameter: the new port is called.
+2. **Custom actor resolver** (`security.actor_resolver`). Implement `PanelActorResolverInterface` and read
+   `$context->userIdentifier`. The panel still normalises the returned actor.
+3. **Admin provisioner** (`setup.admin_provisioner`). Implement `AdminAccountProvisionerInterface`:
+   `$data['email']` → `$admin->email`, `$data['password']` → `$admin->plainPassword()`, `$data['roles']` →
+   `$admin->roles`. `adminExists()` is unchanged.
+4. **Optional:** register your own step types with `#[AsSetupStep(type: '…')]` instead of wrapping commands in
+   `console` steps; implement `InitialInstallOnlyStepInterface` on steps that create users, rewrite secrets or
+   replace data. The built-in type names are reserved.
+5. **Optional:** `setup.dbal_connection: doctrine.dbal.ops_connection` moves the setup tables and probes to another
+   connection.
+
 ## To 1.34.1
 
 From **1.34.0**:

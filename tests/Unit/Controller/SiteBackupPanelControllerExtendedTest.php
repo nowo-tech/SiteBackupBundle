@@ -10,6 +10,8 @@ use Nowo\SiteBackupBundle\Model\BackupHistoryEntry;
 use Nowo\SiteBackupBundle\Model\RestoreProgress;
 use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
 use Nowo\SiteBackupBundle\Security\ActorResolverInterface;
+use Nowo\SiteBackupBundle\Security\PanelActorResolverInterface;
+use Nowo\SiteBackupBundle\Security\PanelRequestContext;
 use Nowo\SiteBackupBundle\Security\PasswordSiteBackupAccessGate;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessCheckerInterface;
 use Nowo\SiteBackupBundle\Service\SiteBackupManager;
@@ -343,6 +345,57 @@ final class SiteBackupPanelControllerExtendedTest extends TestCase
         self::assertSame('evilname' . str_repeat('x', 120), $backups[0]->getCreatedBy());
     }
 
+    /**
+     * The framework-free resolver port records the same actors as the deprecated one (history, created-by), from the
+     * token user identifier.
+     */
+    public function testFrameworkFreeResolverRecordsTheSameActors(): void
+    {
+        $storage = new TokenStorage();
+        $storage->setToken(new UsernamePasswordToken(new InMemoryUser("ops\nlead", null, ['ROLE_ADMIN']), 'main', ['ROLE_ADMIN']));
+        $legacy = new class($storage) implements ActorResolverInterface {
+            public function __construct(private readonly TokenStorage $storage)
+            {
+            }
+
+            public function resolveActor(Request $request): ?string
+            {
+                return $this->storage->getToken()?->getUserIdentifier();
+            }
+        };
+        $port = new class implements PanelActorResolverInterface {
+            public function resolveActor(PanelRequestContext $context): ?string
+            {
+                return $context->userIdentifier;
+            }
+        };
+
+        $actors = [];
+        foreach ([$legacy, $port] as $resolver) {
+            $manager = $this->createManager();
+            $this->openController($manager, $resolver, $storage)->index($this->post(['action' => 'create', '_csrf_token' => 'token']));
+            $actors[] = [$manager->listBackups()[0]->getCreatedBy(), $manager->history()[0]->getActor()];
+        }
+
+        self::assertSame($actors[0], $actors[1]);
+        self::assertSame(['opslead', 'opslead'], $actors[1]);
+    }
+
+    public function testResolverReturningNullRecordsNoActor(): void
+    {
+        $manager = $this->createManager();
+        $port    = new class implements PanelActorResolverInterface {
+            public function resolveActor(PanelRequestContext $context): ?string
+            {
+                return null;
+            }
+        };
+
+        $this->openController($manager, $port)->index($this->post(['action' => 'create', '_csrf_token' => 'token']));
+
+        self::assertNull($manager->history()[0]->getActor());
+    }
+
     public function testAccessCheckerReceivesTheTokenUser(): void
     {
         $user    = new InMemoryUser('alice', null, ['ROLE_ADMIN']);
@@ -391,7 +444,7 @@ final class SiteBackupPanelControllerExtendedTest extends TestCase
     /**
      * Panel without password gate, valid CSRF.
      */
-    private function openController(SiteBackupManager $manager, ?ActorResolverInterface $resolver = null): SiteBackupPanelController
+    private function openController(SiteBackupManager $manager, ActorResolverInterface|PanelActorResolverInterface|null $resolver = null, ?TokenStorage $tokenStorage = null): SiteBackupPanelController
     {
         $csrf = $this->createMock(CsrfTokenManagerInterface::class);
         $csrf->method('getToken')->willReturn(new CsrfToken('id', 'token'));
@@ -408,6 +461,7 @@ final class SiteBackupPanelControllerExtendedTest extends TestCase
             '/_site_backup',
             $csrf,
             actorResolver: $resolver,
+            tokenStorage: $tokenStorage,
         );
     }
 

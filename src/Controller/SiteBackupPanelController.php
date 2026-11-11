@@ -10,6 +10,8 @@ use Nowo\SiteBackupBundle\Form\Panel\PanelLoginType;
 use Nowo\SiteBackupBundle\Log\SecretRedactor;
 use Nowo\SiteBackupBundle\Model\BackupArtifact;
 use Nowo\SiteBackupBundle\Security\ActorResolverInterface;
+use Nowo\SiteBackupBundle\Security\PanelActorResolverInterface;
+use Nowo\SiteBackupBundle\Security\PanelRequestContextFactory;
 use Nowo\SiteBackupBundle\Security\SecurityTokenActorResolver;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessCheckerInterface;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessGateInterface;
@@ -55,7 +57,7 @@ final class SiteBackupPanelController
 
     /**
      * @param array<string, string> $templates page id => template (web_ui.templates; 1.x templates.* keys accepted)
-     * @param ActorResolverInterface|null $actorResolver Actor recorded for panel writes (1.33+); null = "panel"
+     * @param ActorResolverInterface|PanelActorResolverInterface|null $actorResolver Actor recorded for panel writes (1.33+; the framework-free port 1.35+); null = "panel"
      * @param TokenStorageInterface|null $tokenStorage Source of the user passed to the access checker (1.33+); null = none
      */
     public function __construct(
@@ -70,7 +72,7 @@ final class SiteBackupPanelController
         private readonly bool $allowUnauthenticated = true,
         private readonly ?TranslatorInterface $translator = null,
         ?SiteBackupView $view = null,
-        private readonly ?ActorResolverInterface $actorResolver = null,
+        private readonly ActorResolverInterface|PanelActorResolverInterface|null $actorResolver = null,
         private readonly ?TokenStorageInterface $tokenStorage = null,
     ) {
         $this->view  = $view ?? new SiteBackupView($twig, $pathPrefix, templates: $templates);
@@ -404,11 +406,15 @@ final class SiteBackupPanelController
 
     private function actor(Request $request): ?string
     {
-        if (!$this->actorResolver instanceof ActorResolverInterface) {
+        if ($this->actorResolver instanceof PanelActorResolverInterface) {
+            // The framework-free port wins when the resolver implements both.
+            $actor = $this->actorResolver->resolveActor(PanelRequestContextFactory::fromRequest($request, $this->tokenStorage));
+        } elseif ($this->actorResolver instanceof ActorResolverInterface) {
+            $actor = $this->actorResolver->resolveActor($request);
+        } else {
             return ActorResolverInterface::PANEL;
         }
 
-        $actor = $this->actorResolver->resolveActor($request);
         if ($actor === null) {
             return null;
         }

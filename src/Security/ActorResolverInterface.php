@@ -11,6 +11,9 @@ use Symfony\Component\HttpFoundation\Request;
  *
  * Default: {@see StaticActorResolver} ("panel", the 1.32 value). {@see SecurityTokenActorResolver} records the
  * logged-in user identifier instead; set `security.actor_resolver` to it or to your own service.
+ *
+ * @deprecated since 1.35.0, implement {@see PanelActorResolverInterface} (takes a framework-free
+ *             {@see PanelRequestContext}); removed in 2.0
  */
 interface ActorResolverInterface
 {

@@ -75,6 +75,48 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Target: **1.35.0** (minor, no breaking change). See [UPGRADING](UPGRADING.md#unreleased).
+
+### Added
+
+- **Framework-free panel ports (REQ-ARCH-001 rule 3):** `Security\PanelAccessGateInterface` and
+  `Security\PanelActorResolverInterface` take a bundle-owned `Security\PanelRequestContext` (client IP, user identifier,
+  `Security\PanelSessionInterface` session) instead of a Symfony `Request`; `PanelRequestContextFactory` and
+  `HttpFoundationPanelSession` adapt the request. `security.access_gate` / `security.actor_resolver` accept a service
+  on either port; new aliases `PanelAccessGateInterface` (the throttled gate) and `PanelActorResolverInterface`.
+  `PasswordSiteBackupAccessGate`, `ThrottledSiteBackupAccessGate`, `StaticActorResolver` and
+  `SecurityTokenActorResolver` implement both ports with one shared decision. The throttled gate calls an inner gate
+  through the new port when it implements it, passes it the token user identifier, and denies a context call that
+  could only reach an inner gate on the deprecated port (fail closed).
+- **Typed admin provisioner (rule 1):** `Setup\AdminAccountProvisionerInterface::createAdminAccount(AdminUserData)`
+  with the `Setup\AdminUserData` value object (email, roles, and the plain password behind `plainPassword()`: kept in a weak map like `ArchivePassword`, masked in `json_encode()`, `var_export()`, `var_dump()` and VarDumper / the profiler, not serialisable).
+  `setup.admin_provisioner` accepts either port; the typed one wins when both are implemented.
+- **Host setup step types (rule 5):** `#[AsSetupStep(type: '…')]` / tag `nowo.site_backup.setup_step` registers a
+  `SetupStepInterface` service as a profile step type (`SetupStepsPass`). Built-in type names and duplicates fail the
+  build, and so does a host type used twice in one profile; `SetupStepFactory` also refuses a reserved key and a repeated
+  host type at runtime. `InitialInstallOnlyStepInterface` keeps a host step out of a re-opened wizard.
+- **`setup.dbal_connection` (rule 8):** the DBAL connection of the setup progress storages, database detectors, the
+  `sql_file` import (seeds go into that connection's database) and the cold-start gate. Default unchanged (`doctrine.dbal.default_connection`, ignored without
+  DoctrineBundle); another id must exist.
+- Tests: old-vs-new equivalence (password gate, throttled gate with a legacy vs a port host gate, actor resolvers,
+  admin provisioning) and a DDD-host kernel wired only with the new ports.
+
+### Deprecated
+
+- `Security\SiteBackupAccessGateInterface`, `Security\ActorResolverInterface` (take a Symfony `Request`) and
+  `Setup\AdminUserProvisionerInterface` (array shape with the plain password): use the ports above. They keep working
+  until 2.0; the container build reports a deprecation for each configured host service that implements one without
+  its replacement.
+
+### Changed
+
+- Docs: USAGE section "Standard host and DDD host" (replaces "Using it from a DDD / hexagonal application"), host step
+  types in SETUP-WIZARD, new keys in CONFIGURATION.
+- `composer.json` requires `symfony/deprecation-contracts` explicitly (already installed through Symfony).
+- `SetupStepFactory` refuses a `$customSteps` key that is a built-in type (`SetupStepFactory::RESERVED_TYPES`), so a
+  host step can never replace a built-in one (audit MJ-S-L2). Before 1.35 the bundle always passed `[]`; only code
+  that built the factory by hand with such a key is affected.
+
 ## [1.34.1] - 2026-11-11
 
 Target: 1.34.1 (patch).

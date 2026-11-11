@@ -45,6 +45,8 @@ use Nowo\SiteBackupBundle\Routing\SetupRouteLoader;
 use Nowo\SiteBackupBundle\Security\ActorResolverInterface;
 use Nowo\SiteBackupBundle\Security\AllowAllSiteBackupAccessChecker;
 use Nowo\SiteBackupBundle\Security\ConfigurableSiteBackupAccessChecker;
+use Nowo\SiteBackupBundle\Security\PanelAccessGateInterface;
+use Nowo\SiteBackupBundle\Security\PanelActorResolverInterface;
 use Nowo\SiteBackupBundle\Security\PasswordSiteBackupAccessGate;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessCheckerInterface;
 use Nowo\SiteBackupBundle\Security\SiteBackupAccessGateInterface;
@@ -52,6 +54,7 @@ use Nowo\SiteBackupBundle\Security\StaticActorResolver;
 use Nowo\SiteBackupBundle\Security\ThrottledSiteBackupAccessGate;
 use Nowo\SiteBackupBundle\Service\SiteBackupManager;
 use Nowo\SiteBackupBundle\Service\SiteBackupManagerInterface;
+use Nowo\SiteBackupBundle\Setup\AdminAccountProvisionerInterface;
 use Nowo\SiteBackupBundle\Setup\AdminUserProvisionerInterface;
 use Nowo\SiteBackupBundle\Setup\ColdStart\MemoizedSchemaExistenceChecker;
 use Nowo\SiteBackupBundle\Setup\ColdStart\MysqlSchemaExistenceChecker;
@@ -116,6 +119,8 @@ use function trim;
 
 final class SiteBackupExtension extends Extension implements PrependExtensionInterface
 {
+    public const DEFAULT_DBAL_CONNECTION = 'doctrine.dbal.default_connection';
+
     /** Service the SiteBackupAccessGateInterface alias points to (throttling + session rotation wrapper). */
     public const ACCESS_GATE_ID = 'nowo_site_backup.access_gate';
 
@@ -793,9 +798,12 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$limiterFactory', $this->loginLimiterReference($container, $security['login_throttle'] ?? []))
             // REQ-OBS-001: login attempts on the site_backup channel (no logger service = no logging).
             ->setArgument('$logger', new Reference('logger', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
+            // 1.35+: the user identifier of the PanelRequestContext handed to a framework-free inner gate.
+            ->setArgument('$tokenStorage', new Reference('security.token_storage', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
             ->addTag('monolog.logger', ['channel' => 'site_backup']);
 
         $container->setAlias(SiteBackupAccessGateInterface::class, self::ACCESS_GATE_ID)->setPublic(false);
+        $container->setAlias(PanelAccessGateInterface::class, self::ACCESS_GATE_ID)->setPublic(false);
     }
 
     /**
@@ -837,11 +845,11 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
     private function configureActorResolver(ContainerBuilder $container, array $security): void
     {
         $resolverId = $security['actor_resolver'] ?? null;
+        $resolverId = is_string($resolverId) && $resolverId !== '' ? $resolverId : StaticActorResolver::class;
 
-        $container->setAlias(
-            ActorResolverInterface::class,
-            is_string($resolverId) && $resolverId !== '' ? $resolverId : StaticActorResolver::class,
-        )->setPublic(false);
+        // The service may implement either port (1.35+: PanelActorResolverInterface, or the deprecated one).
+        $container->setAlias(ActorResolverInterface::class, $resolverId)->setPublic(false);
+        $container->setAlias(PanelActorResolverInterface::class, $resolverId)->setPublic(false);
     }
 
     /** @param array<string, mixed> $security */
@@ -1078,7 +1086,7 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
                 ->setArgument('$pathPrefix', $setup['path_prefix']);
         }
 
-        $dbalRef = new Reference('doctrine.dbal.default_connection', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE);
+        $dbalRef = $this->dbalConnectionReference($setup);
 
         $container->getDefinition(FilesystemSetupProgressStorage::class)
             ->setArgument('$filePath', $setup['progress_file']);
@@ -1146,12 +1154,11 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$phpBinary', $setup['php_binary'])
             ->setArgument('$timeoutSeconds', (int) $config['process_timeout']);
 
+        // The service may implement either port (1.35+: AdminAccountProvisionerInterface, or the deprecated one).
         $adminProvisioner = $setup['admin_provisioner'] ?? null;
-        if (is_string($adminProvisioner) && $adminProvisioner !== '') {
-            $container->setAlias(AdminUserProvisionerInterface::class, $adminProvisioner)->setPublic(false);
-        } else {
-            $container->setAlias(AdminUserProvisionerInterface::class, NullAdminUserProvisioner::class)->setPublic(false);
-        }
+        $adminProvisioner = is_string($adminProvisioner) && $adminProvisioner !== '' ? $adminProvisioner : NullAdminUserProvisioner::class;
+        $container->setAlias(AdminUserProvisionerInterface::class, $adminProvisioner)->setPublic(false);
+        $container->setAlias(AdminAccountProvisionerInterface::class, $adminProvisioner)->setPublic(false);
 
         $container->getDefinition(MarkerFileDetector::class)
             ->setArgument('$markers', new Reference(SetupMarkerManager::class))
@@ -1200,6 +1207,7 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$markers', new Reference(SetupMarkerManager::class))
             ->setArgument('$adminProvisioner', new Reference(AdminUserProvisionerInterface::class))
             ->setArgument('$dbalConnection', $dbalRef)
+            // Host steps (#[AsSetupStep]) are set by SetupStepsPass.
             ->setArgument('$customSteps', [])
             ->setArgument('$checkerLocator', new Reference(SetupTabCheckerLocator::class))
             ->setArgument('$dumpImporter', new Reference(DumpImporter::class));
@@ -1394,7 +1402,7 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             return;
         }
 
-        $dbalRef = new Reference('doctrine.dbal.default_connection', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE);
+        $dbalRef = $this->dbalConnectionReference($setup);
 
         $mysqlHost = $coldStart['mysql_host'] ?? null;
         $mysqlPort = $coldStart['mysql_port'] ?? 3306;
@@ -1431,5 +1439,22 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$safePathPrefixes', $safePrefixes)
             ->setArgument('$enabledLocales', $localeEnabled)
             ->setArgument('$stopPropagation', (bool) ($coldStart['stop_propagation'] ?? true));
+    }
+
+    /**
+     * The DBAL connection of the setup storages, detectors, SQL import and cold-start gate (`setup.dbal_connection`,
+     * 1.35+). The default stays `doctrine.dbal.default_connection`, ignored when DoctrineBundle is absent; an explicit
+     * service id must exist (a typo fails the build instead of silently disabling the database detectors).
+     *
+     * @param array<string, mixed> $setup
+     */
+    private function dbalConnectionReference(array $setup): Reference
+    {
+        $connection = $setup['dbal_connection'] ?? null;
+        if (is_string($connection) && $connection !== '' && $connection !== self::DEFAULT_DBAL_CONNECTION) {
+            return new Reference($connection);
+        }
+
+        return new Reference(self::DEFAULT_DBAL_CONNECTION, ContainerBuilder::IGNORE_ON_INVALID_REFERENCE);
     }
 }

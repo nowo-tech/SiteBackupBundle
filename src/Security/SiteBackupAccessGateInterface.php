@@ -6,6 +6,9 @@ namespace Nowo\SiteBackupBundle\Security;
 
 use Symfony\Component\HttpFoundation\Request;
 
+/**
+ * @deprecated since 1.35.0, implement {@see PanelAccessGateInterface} (takes a framework-free {@see PanelRequestContext}); removed in 2.0
+ */
 interface SiteBackupAccessGateInterface
 {
     public function isAuthenticated(Request $request): bool;

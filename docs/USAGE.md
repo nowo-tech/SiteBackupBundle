@@ -21,7 +21,9 @@
   - [Restore drill (1.29+)](#restore-drill-129)
 - [Built-in database dumper](#built-in-database-dumper)
 - [Database import note](#database-import-note)
-- [Using it from a DDD / hexagonal application](#using-it-from-a-ddd--hexagonal-application)
+- [Standard host and DDD host](#standard-host-and-ddd-host)
+  - [Standard host](#standard-host)
+  - [DDD host](#ddd-host)
 
 ## Create an integral backup
 
@@ -118,13 +120,38 @@ php bin/console nowo:site-backup:setup --profile=fresh_install \
 php bin/console nowo:site-backup:setup-status
 ```
 
-Bind your app’s admin provisioner:
+Bind your app’s admin provisioner (a service implementing `Setup\AdminAccountProvisionerInterface`, 1.35+):
 
 ```yaml
 nowo_site_backup:
     setup:
         admin_provisioner: App\Setup\AdminUserProvisioner
 ```
+
+```php
+use Nowo\SiteBackupBundle\Setup\AdminAccountProvisionerInterface;
+use Nowo\SiteBackupBundle\Setup\AdminUserData;
+
+final readonly class AdminUserProvisioner implements AdminAccountProvisionerInterface
+{
+    public function __construct(private UserRepository $users, private UserPasswordHasherInterface $hasher) {}
+
+    public function adminExists(): bool
+    {
+        return $this->users->count([]) > 0;
+    }
+
+    public function createAdminAccount(AdminUserData $admin): void
+    {
+        $user = new User($admin->email, $admin->roles);
+        $user->setPassword($this->hasher->hashPassword($user, $admin->plainPassword()));
+        $this->users->save($user);
+    }
+}
+```
+
+Host step types: `#[AsSetupStep(type: '…')]` on a `SetupStepInterface` service (1.35+, see
+[SETUP-WIZARD.md](SETUP-WIZARD.md#host-step-types-135)).
 
 See [SETUP-WIZARD.md](SETUP-WIZARD.md) for profiles, step types, and security.
 
@@ -333,21 +360,73 @@ Automatic SQL import during HTTP **restore** is **not** performed by default (it
 
 For cold bootstrap (no DB / empty schema / after restore), use the **Setup Wizard** — see [SETUP-WIZARD.md](SETUP-WIZARD.md) — which can import that dump, run migrations, seed roles, create a super-admin, and optionally load sample data through a declarative, idempotent pipeline.
 
-## Using it from a DDD / hexagonal application
+## Standard host and DDD host
 
-**Layer.** SiteBackupBundle is infrastructure: an operational bounded context (backup, restore, setup wizard) with
-its own small model (`BackupArtifact`, `BackupOptions`, `BackupHistoryEntry`, `RestoreProgress`, `SetupProgress`)
-and its own storage (files under `var/site-backup`, optional DBAL tables `nowo_site_backup_setup_progress` and
+SiteBackupBundle is infrastructure: an operational bounded context (backup, restore, setup wizard) with its own small
+model (`BackupArtifact`, `BackupOptions`, `BackupHistoryEntry`, `RestoreProgress`, `SetupProgress`) and its own storage
+(files under `var/site-backup`, optional DBAL tables `nowo_site_backup_setup_progress` and
 `nowo_site_backup_setup_step` that it creates itself). It has no Doctrine ORM mapping and never references your
 entities; the database is backed up physically (`mysqldump` or the built-in dumper on `DATABASE_URL`).
 
-**Keeping the domain free of the bundle.** Nothing in your domain needs to know about it. Put any code that talks to
-it in your infrastructure layer:
+### Standard host
+
+Zero config beyond what the sections above describe: install, import the routes, set `security.password_hash` and
+`security.access_roles`, bind `setup.admin_provisioner`. Inject `Service\SiteBackupManagerInterface` in a controller
+or command to create backups. Hosts written before 1.35 on `SiteBackupAccessGateInterface`, `ActorResolverInterface`
+or `AdminUserProvisionerInterface` keep working unchanged; the container build reports one deprecation per such
+service (see [UPGRADING](UPGRADING.md#unreleased)).
+
+### DDD host
+
+Nothing in your domain needs to know about the bundle. Put the code that talks to it in your infrastructure layer and
+implement only the framework-free ports; none of their signatures carries a Symfony or Doctrine type:
+
+| Port (config key) | Use it to |
+|---|---|
+| `Security\PanelAccessGateInterface` (`security.access_gate`) | the ops gate of the panel: `isAuthenticated()`, `authenticate()`, `logout()` take a `Security\PanelRequestContext` (client IP, user identifier, `PanelSessionInterface` session); always wrapped by the login throttle and the session id rotation |
+| `Security\PanelActorResolverInterface` (`security.actor_resolver`) | the actor recorded for panel create / delete / restore, from a `PanelRequestContext` |
+| `Setup\AdminAccountProvisionerInterface` (`setup.admin_provisioner`) | create your User aggregate from a typed `Setup\AdminUserData` (email, sensitive plain password, roles) |
+| `Setup\SetupStepInterface` + `#[AsSetupStep(type: …)]` | your own setup step types |
+| `setup.dbal_connection` | a separate connection for the bundle's setup tables and probes |
+
+```php
+use Nowo\SiteBackupBundle\Security\PanelAccessGateInterface;
+use Nowo\SiteBackupBundle\Security\PanelRequestContext;
+
+final readonly class OpsVaultGate implements PanelAccessGateInterface
+{
+    public function __construct(private OpsSecretVerifier $verifier) {} // your application port
+
+    public function isAuthenticated(PanelRequestContext $context): bool
+    {
+        return $context->session?->get('ops_ok') === true;
+    }
+
+    public function authenticate(PanelRequestContext $context, #[\SensitiveParameter] string $password): bool
+    {
+        if ($context->session === null || !$this->verifier->verify($password)) {
+            return false; // deny by default
+        }
+        $context->session->set('ops_ok', true);
+
+        return true;
+    }
+
+    public function logout(PanelRequestContext $context): void
+    {
+        $context->session?->remove('ops_ok');
+    }
+
+    public function isProtectionEnabled(): bool { return true; }
+
+    public function isMisconfigured(): bool { return !$this->verifier->isConfigured(); }
+}
+```
 
 - *Triggering backups from your application layer*: define your own port and implement it with
-  `Service\SiteBackupManagerInterface` (1.33+, autowired to the `final` `SiteBackupManager`); double the interface in
-  your infrastructure tests. A host alias or decorator of the interface also drives the restore lock page and the
-  setup subscriber, so it must delegate `isRestoreActive()` / `getRestoreProgress()` unchanged:
+  `Service\SiteBackupManagerInterface` (autowired to the `final` `SiteBackupManager`); double the interface in your
+  infrastructure tests. A host alias or decorator of the interface also drives the restore lock page and the setup
+  subscriber, so it must delegate `isRestoreActive()` / `getRestoreProgress()` unchanged:
 
   ```php
   // Application layer
@@ -372,28 +451,19 @@ it in your infrastructure layer:
   (`BackupCreatedEvent`, `BackupFailedEvent`, `RestoreCompletedEvent`, `RestoreFailedEvent`, `RemoteBackupUploadedEvent`,
   `SetupCompletedEvent`, …) and translate them into your own notifications or audit records.
   Failure events carry a redacted, capped message (`BackupFailedEvent::getMessage()`, `RestoreFailedEvent::getError()`,
-  `SetupStepFailedEvent::getError()`; 1.34+ for the last two): forward that one. `RestoreFailedEvent::getException()`
-  is the raw throwable for in-memory use only; it may quote the database password, so never persist or forward it.
+  `SetupStepFailedEvent::getError()`): forward that one. `RestoreFailedEvent::getException()` is the raw throwable for
+  in-memory use only; it may quote the database password, so never persist or forward it.
 
-- *Ports you implement* (alias the interface in your `services.yaml`, or use the config key):
-  - `Setup\AdminUserProvisionerInterface` (`setup.admin_provisioner`) — create your User aggregate here; the bundle
-    only passes `email`, `password` and `roles`.
-  - `Security\SiteBackupAccessCheckerInterface` (`security.access_checker`) — panel authorisation; 1.33+ passes it the
-    user of the security token (`null` when anonymous or without SecurityBundle).
-  - `Security\ActorResolverInterface` (`security.actor_resolver`, 1.33+) — the actor recorded for panel create /
-    delete / restore (history, events, backup `createdBy`). Default `panel`; `Security\SecurityTokenActorResolver`
-    records the logged-in user identifier. Return 1-128 printable characters or null: the panel normalises every
-    value (controls, tab / newline and format characters dropped, cut at 128, `panel` when nothing is left).
-  - `Storage\BackupHistoryStorageInterface`, `Storage\RestoreProgressStorageInterface`,
-    `Setup\Storage\SetupProgressStorageInterface`, `Setup\DurableSetupDoneStoreInterface` — persistence of the
-    bundle's own state.
-  - `Remote\BackupRemoteTargetInterface` (or `backup.remote.flysystem_storage`), `Crypto\ArchiveEncryptorInterface`.
-  - `Setup\SetupNeedDetectorInterface` with `#[AsSetupNeedDetector]`, `Setup\SetupTabCheckerInterface` with
-    `#[AsSetupTabChecker]`.
+- *Other ports*: `Security\SiteBackupAccessCheckerInterface` (`security.access_checker`, panel authorisation, receives
+  the token user or `null`); `Storage\BackupHistoryStorageInterface`, `Storage\RestoreProgressStorageInterface`,
+  `Setup\Storage\SetupProgressStorageInterface`, `Setup\DurableSetupDoneStoreInterface` (the bundle's own state);
+  `Remote\BackupRemoteTargetInterface` (or `backup.remote.flysystem_storage`), `Crypto\ArchiveEncryptorInterface`;
+  `Setup\SetupNeedDetectorInterface` with `#[AsSetupNeedDetector]`, `Setup\SetupTabCheckerInterface` with
+  `#[AsSetupTabChecker]`.
 - Mark controllers that must stay reachable during a restore with `#[ExcludeFromRestore]`.
+- Gates, resolvers, provisioners and steps must be stateless (FrankenPHP worker mode, kernel reset false): keep the
+  authenticated flag in the session, never in a property.
+- The test suite boots such a host (`tests/Integration/Kernel/DddHostKernel.php`, adapters under
+  `tests/Support/Ports/` with no Symfony import) and checks its gate answers exactly like a standard host's.
 
-**Known limitations.**
-- Custom `SetupStepInterface` implementations cannot be registered yet; use the `console` step type to run your own
-  command.
-- DBAL storages always use `doctrine.dbal.default_connection`.
-- Database dump/import supports MySQL/MariaDB only.
+**Known limitations.** Database dump/import supports MySQL/MariaDB only.

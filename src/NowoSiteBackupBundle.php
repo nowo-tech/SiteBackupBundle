@@ -5,13 +5,17 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle;
 
 use Nowo\SiteBackupBundle\Attribute\AsSetupNeedDetector;
+use Nowo\SiteBackupBundle\Attribute\AsSetupStep;
 use Nowo\SiteBackupBundle\Attribute\AsSetupTabChecker;
 use Nowo\SiteBackupBundle\DependencyInjection\Compiler\CsrfProtectionPass;
+use Nowo\SiteBackupBundle\DependencyInjection\Compiler\LegacyPortDeprecationPass;
 use Nowo\SiteBackupBundle\DependencyInjection\Compiler\LoginThrottleStoragePass;
 use Nowo\SiteBackupBundle\DependencyInjection\Compiler\SetupReopenDetectorsPass;
+use Nowo\SiteBackupBundle\DependencyInjection\Compiler\SetupStepsPass;
 use Nowo\SiteBackupBundle\DependencyInjection\Compiler\TwigPathsPass;
 use Nowo\SiteBackupBundle\DependencyInjection\SiteBackupExtension;
 use Nowo\SiteBackupBundle\Model\ArchivePassword;
+use Nowo\SiteBackupBundle\Setup\AdminUserData;
 use Symfony\Component\DependencyInjection\ChildDefinition;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Extension\ExtensionInterface;
@@ -27,6 +31,8 @@ final class NowoSiteBackupBundle extends Bundle
         $container->addCompilerPass(new LoginThrottleStoragePass());
         $container->addCompilerPass(new CsrfProtectionPass());
         $container->addCompilerPass(new SetupReopenDetectorsPass());
+        $container->addCompilerPass(new SetupStepsPass());
+        $container->addCompilerPass(new LegacyPortDeprecationPass());
         // Attribute-only (same pattern as AsSetupTabChecker) — avoids double-tagging
         // if we also autoconfigured SetupNeedDetectorInterface.
         $container->registerAttributeForAutoconfiguration(
@@ -46,10 +52,16 @@ final class NowoSiteBackupBundle extends Bundle
                 $definition->addTag('nowo.site_backup.setup_tab_checker');
             },
         );
+        $container->registerAttributeForAutoconfiguration(
+            AsSetupStep::class,
+            static function (ChildDefinition $definition, AsSetupStep $attribute): void {
+                $definition->addTag(SetupStepsPass::TAG, ['type' => $attribute->type]);
+            },
+        );
     }
 
     /**
-     * EO-L1: VarDumper (dump(), the profiler) prints archive passwords as "***".
+     * EO-L1 / MJ-S-L1: VarDumper (dump(), the profiler) prints archive and admin passwords as "***".
      */
     public function boot(): void
     {
@@ -63,6 +75,9 @@ final class NowoSiteBackupBundle extends Bundle
             // @igor-ignore - Process-wide, idempotent caster registration (same value on every boot).
             // @phpstan-ignore-next-line (idempotent, same value for every request)
             AbstractCloner::$defaultCasters[ArchivePassword::class] = [ArchivePassword::class, 'castForVarDumper'];
+            // @igor-ignore - Process-wide, idempotent caster registration (same value on every boot).
+            // @phpstan-ignore-next-line (idempotent, same value for every request)
+            AbstractCloner::$defaultCasters[AdminUserData::class] = [AdminUserData::class, 'castForVarDumper'];
         }
     }
 

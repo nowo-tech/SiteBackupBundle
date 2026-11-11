@@ -76,11 +76,11 @@ Root key: `nowo_site_backup`.
 | `panel.extra_classes.card` / `.table` / `.button` / `.input` | `''` | **Deprecated (1.21)**: bridged into `nowo_ui_kit.theme.bundles.NowoSiteBackupBundle.classes` (`card` → `card`, `table` → `table`, `input` → `input`, `button` → `btn_primary`, `btn_secondary`, `action`); your own `theme.bundles` config wins |
 | `security.access_roles` | `[ROLE_ADMIN]` | REQ-UI-002: at least one role grants panel access when `allow_unauthenticated` is false |
 | `security.access_checker` | `null` | Optional service id implementing `SiteBackupAccessCheckerInterface` (1.33+: receives the security token user, `null` when anonymous) |
-| `security.actor_resolver` | `null` | Service id implementing `ActorResolverInterface`: the actor recorded for panel create / delete / restore. `null` = `panel`; `Nowo\SiteBackupBundle\Security\SecurityTokenActorResolver` = the logged-in user identifier (1.33+) |
+| `security.actor_resolver` | `null` | Service id implementing `PanelActorResolverInterface` (1.35+) or the deprecated `ActorResolverInterface`: the actor recorded for panel create / delete / restore. `null` = `panel`; `Nowo\SiteBackupBundle\Security\SecurityTokenActorResolver` = the logged-in user identifier (1.33+) |
 | `security.allow_unauthenticated` | `false` | DEV/DEMO only: skip Symfony role check (password gate may still apply). Requires SecurityBundle when `false` and panel is enabled |
 | `security.password_protection` | `true` | Ops password gate (additional to role check). Fail-closed without `password_hash` when true |
 | `security.password_hash` | `null` | Prefer env `SITE_BACKUP_PASSWORD_HASH` |
-| `security.access_gate` | `null` | Custom `SiteBackupAccessGateInterface` service (still wrapped by the login throttle / session rotation below) |
+| `security.access_gate` | `null` | Custom `PanelAccessGateInterface` (1.35+) or deprecated `SiteBackupAccessGateInterface` service (still wrapped by the login throttle / session rotation below) |
 | `security.login_throttle.enabled` | `true` | (v1.17+) Per-client-IP rate limit of panel password attempts. Only while the gate reports `isProtectionEnabled()`. Exceeded → login page re-rendered with HTTP **429** + `Retry-After` and translated `panel.login.too_many_attempts`. Reset on a successful login. The session id is always rotated (`migrate(true)`) after a successful login, even when `enabled: false` |
 | `security.login_throttle.limit` | `5` | Attempts per client IP per window (min `1`) |
 | `security.login_throttle.interval` | `15 minutes` | Window, relative date format; validated at config time |
@@ -132,7 +132,8 @@ Root key: `nowo_site_backup`.
 | `setup.detectors.doctrine_connect` | `false` | Require setup while the DBAL connection cannot connect |
 | `setup.detectors.doctrine_schema_empty` | `false` | Require setup while the database has no application tables |
 | `setup.php_binary` | `php` | PHP CLI used by console-based steps (`database_create`, `migrations`, `cache_clear`, `console`, `sample_data`). Use a real CLI binary next to a static FrankenPHP build |
-| `setup.admin_provisioner` | `null` | Service id implementing `AdminUserProvisionerInterface` (`admin_user` step); `null` = `NullAdminUserProvisioner` |
+| `setup.admin_provisioner` | `null` | Service id implementing `AdminAccountProvisionerInterface` (1.35+) or the deprecated `AdminUserProvisionerInterface` (`admin_user` step); `null` = `NullAdminUserProvisioner` |
+| `setup.dbal_connection` | `doctrine.dbal.default_connection` | DBAL connection service id of the setup progress storages and step journal, the `doctrine_connect` / `doctrine_schema_empty` detectors, the `sql_file` import (the seeds go into this connection's database) and the cold-start gate (1.35+); `console` steps keep the host's own Doctrine setup. The default is ignored without DoctrineBundle; another id must exist (the build fails otherwise) |
 | `setup.trigger_after_restore` | `true` | After a successful restore write `setup.required` with `post_restore_profile` so the wizard finishes the DB bootstrap |
 | `setup.post_restore_profile` | `post_restore` | Profile used after a restore |
 | `setup.default_profile` | `fresh_install` | Profile used when none is requested / stored. Must be a key of `setup.profiles` (container compile fails otherwise) — see [Profiles](#profiles-req-cfg-001) |
