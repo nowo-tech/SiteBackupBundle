@@ -3,11 +3,12 @@
 | Field | Value |
 |-------|-------|
 | Package | `nowo-tech/site-backup-bundle` (`symfony-bundle`) |
-| Audited revision | `v1.14.0` (worker restart signal + DBAL schema self-heal) |
-| Audit date | 2026-09-25 |
+| Audited revision | `v1.35.1` (refreshed from `v1.14.0`: framework-free panel ports, typed admin provisioner, host setup step types, `setup.dbal_connection`) |
+| Audit date | 2026-09-25, refreshed 2026-11-12 (REQ-RUNTIME-002) |
 | Method | Manual review of every file under `src/` (services, subscribers, controllers, setup steps, storages, DI extension, compiler pass, `Resources/config/services.yaml`) |
 | Remediation (2026-09-23 / 2026-09-25) | W-02 fixed (self-healing schema memo + `ResetInterface`); W-01 mitigated with a shared "restart workers" signal (`WorkerRestartSignal`, `WorkerRestartRequiredEvent`, `nowo:site-backup:worker-restart`); W-04 PDO connect timeout added; regression tests simulate two requests on the same instances without `reset()` |
 | Igor re-audit (2026-11-11) | `composer igor` (igor-php 0.10.1) on `main`: 3 KO / 2 WARN, all triaged in [W-07](#w-07--igor-findings-2026-11-11-info); no cross-request leak. Since then igor reports 0 KO / 0 WARN and runs in CI (`igor` job) |
+| Worker test | [`WorkerModeKernelTest`](#worker-test-req-runtime-002): one kernel, 1,000 requests through `http_kernel` (no services resetter), operator and guest in alternation, memory margin 2 MiB |
 | **Verdict** | ✅ **Viable under scenario B** — no cross-request state leak; the only remaining condition is operational: restart workers when the bundle raises the restart signal after a restore / `cache_clear` / `database_url` (W-01, cannot be fixed in-process) |
 
 ## Table of contents
@@ -23,6 +24,9 @@
   - [W-05 — File markers are read with `is_file()` (Info)](#w-05--file-markers-are-read-with-is_file-info)
   - [W-06 — `SetupRouteLoader::$loaded` guard (Info)](#w-06--setuprouteloaderloaded-guard-info)
   - [W-07 — Igor findings 2026-11-11 (Info)](#w-07--igor-findings-2026-11-11-info)
+  - [W-08 — Object-keyed static weak maps for secrets (Info)](#w-08--object-keyed-static-weak-maps-for-secrets-info)
+- [Worker test (REQ-RUNTIME-002)](#worker-test-req-runtime-002)
+- [Host Doctrine entity managers](#host-doctrine-entity-managers)
 - [Usage recommendations in worker mode](#usage-recommendations-in-worker-mode)
 - [Re-audit triggers](#re-audit-triggers)
 
@@ -35,12 +39,17 @@ FrankenPHP worker mode boots the Symfony kernel once per worker and serves many 
 
 A bundle that is safe under **B** is safe under **A** and under classic mode / PHP-FPM.
 
+Precondition, precisely: with the stock Symfony kernel, `FRANKENPHP_RESET_KERNEL=false` only stops the kernel from being
+cloned; `Kernel::handle()` still calls `services_resetter->reset()` before every request after the first (scenario A).
+Scenario B happens when a host removes, replaces or bypasses `services_resetter` (or drives `http_kernel` directly),
+in Messenger consumers started with `--no-reset`, and in long-running console commands. The bundle is correct in both.
+
 ## Summary
 
 | Area | Status | Notes |
 |------|--------|-------|
 | Mutable state in shared services | ✅ | Only `DoctrineDbalSetupProgressStorage::$schemaEnsured` and `DoctrineDbalSetupStepJournal::$schemaEnsured`, now re-validated on query failure and reset by `kernel.reset` (W-02, resolved); every other service holds `readonly` config only |
-| Static properties / `static` locals | ✅ | None; only static factory methods on models (`fromArray()`, `ok()`, …) and static closures in DI / form options |
+| Static properties / `static` locals | ✅ | Two object-keyed `WeakMap`s for secrets (`ArchivePassword::$values`, `AdminUserData::$passwords`, W-08); otherwise only static factory methods on models (`fromArray()`, `ok()`, …) and static closures in DI / form options |
 | `ResetInterface` / `kernel.reset` coverage | ✅ | The two DBAL setup storages implement `ResetInterface` (autoconfigured `kernel.reset`); correctness no longer depends on it (W-02) |
 | Request / user / locale captured in services | ✅ | `SetupPathPrefixResolver` reads `RequestStack` at call time; session and `isGranted()` are read per call |
 | Superglobals, `$_ENV`, `putenv`, `ini_set`, `setlocale`, timezone | ✅ | None used at runtime. `DatabaseUrlStep` writes `.env.local` on disk, which a running worker does not re-read (W-01) |
@@ -60,6 +69,9 @@ Worker demo: `demo/symfony8/docker/frankenphp/Caddyfile` runs `php_server` with 
 |---------|--------|---------------|------------|------------|
 | `Service\SiteBackupManager` | yes | none (`readonly` collaborators) | ✅ | ✅ |
 | `Security\StaticActorResolver` / `Security\SecurityTokenActorResolver` | yes | none (`final readonly`; the token is read per call) | ✅ | ✅ |
+| `Security\ThrottledSiteBackupAccessGate` | yes | none in memory; failed attempts per client IP live in the rate limiter storage (`security.login_throttle`) | ✅ | ✅ |
+| `Security\PanelRequestContextFactory` (static factory, no state), `Security\HttpFoundationPanelSession` (1.35) | no — a context and a session adapter are built per call from the `Request` | per-call only | ✅ | ✅ |
+| `DependencyInjection\Compiler\SetupStepsPass` (1.35) | build time only | n/a | ✅ | ✅ |
 | `Backup\BackupArchiver` | yes | none (`readonly` config + `Filesystem`) | ✅ | ✅ |
 | `Restore\RestoreOrchestrator` | yes | none; progress lives in storage; raises the worker restart signal after applying files | ✅ (W-01 signal) | ✅ (W-01 signal) |
 | `Storage\FilesystemRestoreProgressStorage`, `Storage\FilesystemBackupHistoryStorage` | yes | none; read/write files per call | ✅ | ✅ |
@@ -148,6 +160,46 @@ Igor (igor-php 0.10.1) flagged five services. None keeps request, user or tenant
 - **Status:** Closed — Igor 0 KO / 0 WARN; `igor` CI job added.
 
 No other findings. Panel authentication is stored in the request session (`PasswordSiteBackupAccessGate.php:47-52`, `74`), and role checks call `isGranted()` per request (`ConfigurableSiteBackupAccessChecker.php:21-34`), so no user or auth decision is kept across requests.
+
+### W-08 — Object-keyed static weak maps for secrets (Info)
+
+- **Where:** `src/Model/ArchivePassword.php` (`private static ?WeakMap $values`) and `src/Setup/AdminUserData.php`
+  (`private static ?WeakMap $passwords`, 1.35).
+- **Why a static:** the plain secret must never sit in an object property, so `var_export()`, an `(array)` cast,
+  `var_dump()`, VarDumper / the profiler and serialisation cannot print it (audit EO-L1). The value lives in a map
+  owned by the class and keyed by the value object itself.
+- **Why it is worker-safe:** a `WeakMap` holds its keys weakly. An entry exists exactly as long as its password object
+  (a per-call value object, never stored in a service) and is removed earlier by `wipe()`; a clone gets no entry. The
+  map can never serve one request's secret to another request: a lookup needs the very object that carries it, and a
+  new request has no reference to an old request's objects. It is not request state, so it needs no boundary clear
+  and no `ResetInterface` (there would be nothing to reset once the objects are gone).
+- **Proof:** `WorkerModeKernelTest::testArchivePasswordWeakMapKeepsNoEntryAfterItsObjects` creates 2,000 passwords
+  for two users in alternation, checks each reveals only its own value, and asserts the map is empty once the objects
+  are released.
+- **Status:** Accepted by design; same-line `@igor-ignore` (W-07).
+
+## Worker test (REQ-RUNTIME-002)
+
+`tests/Integration/Kernel/WorkerModeKernelTest.php` (runs in `make test` / CI):
+
+- **Kernel:** one `DddHostKernel` (standard host, deprecated gate port, every default) booted once; requests go
+  through the `http_kernel` service and `terminate()`, so `services_resetter` never runs between them.
+- **Path and N:** `GET` panel `progress.json`, 500 rounds × 2 clients = **1,000 requests**.
+- **Clients:** an operator logged in through the host gate (IP `10.9.0.1`) and an anonymous restore-page poller
+  (`10.9.0.2`), in alternation. The operator always gets the full progress (log, error, backup id); the guest always
+  gets only `active`, `phase`, `percent`, `message`.
+- **Memory:** `memory_get_usage()` after the last round stays within **2 MiB** of the value after round 10.
+- **Secrets:** the weak-map test of W-08.
+
+Igor: `composer igor` 0 KO / 0 WARN (CI job `igor`). PHPStan FrankenPHP worker ruleset: included in
+`phpstan.neon.dist`.
+
+## Host Doctrine entity managers
+
+The bundle uses no ORM and no EntityManager of its own (DBAL queries only). A host that disables or bypasses the
+services resetter must clear its own entity managers at every boundary (main request start or end, Messenger message,
+console command); otherwise the identity map serves stale rows across requests. This is a host requirement
+(REQ-RUNTIME-002 rule 7); the bundle does not keep or return managed entities.
 
 ## Usage recommendations in worker mode
 
