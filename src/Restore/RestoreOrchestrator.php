@@ -210,6 +210,8 @@ final class RestoreOrchestrator implements ResetInterface
         $this->onHeartbeat = $onHeartbeat;
 
         if ($this->isRestoreActive()) {
+            $this->reset();
+
             throw new RuntimeException('A restore is already in progress.');
         }
 
@@ -319,8 +321,14 @@ final class RestoreOrchestrator implements ResetInterface
 
             throw $e;
         } finally {
+            // Worker mode (kernel kept alive, no services resetter): the caller's heartbeat closure (it holds the
+            // operation lock) and the throttle never outlive the restore that set them.
+            $this->reset();
             if (is_dir($staging)) {
-                $this->filesystem->remove($staging);
+                // Igor counts any remove() on an injected service as state; Symfony's Filesystem is stateless and
+                // this deletes the restore's own staging directory.
+                $filesystem = $this->filesystem; // @igor-ignore - Stateless Symfony Filesystem.
+                $filesystem->remove($staging); // @igor-ignore - Stateless Symfony Filesystem; per-call staging directory.
             }
             if ($filesTouched) {
                 $this->workerRestartSignal?->request('restore:' . $artifact->getId());

@@ -7,6 +7,7 @@
 | Audit date | 2026-09-25 |
 | Method | Manual review of every file under `src/` (services, subscribers, controllers, setup steps, storages, DI extension, compiler pass, `Resources/config/services.yaml`) |
 | Remediation (2026-09-23 / 2026-09-25) | W-02 fixed (self-healing schema memo + `ResetInterface`); W-01 mitigated with a shared "restart workers" signal (`WorkerRestartSignal`, `WorkerRestartRequiredEvent`, `nowo:site-backup:worker-restart`); W-04 PDO connect timeout added; regression tests simulate two requests on the same instances without `reset()` |
+| Igor re-audit (2026-11-11) | `composer igor` (igor-php 0.10.1) on `main`: 3 KO / 2 WARN, all triaged in [W-07](#w-07--igor-findings-2026-11-11-info); no cross-request leak. Since then igor reports 0 KO / 0 WARN and runs in CI (`igor` job) |
 | **Verdict** | ✅ **Viable under scenario B** — no cross-request state leak; the only remaining condition is operational: restart workers when the bundle raises the restart signal after a restore / `cache_clear` / `database_url` (W-01, cannot be fixed in-process) |
 
 ## Table of contents
@@ -21,6 +22,7 @@
   - [W-04 — Cold-start schema probe runs on every main request (Low)](#w-04--cold-start-schema-probe-runs-on-every-main-request-low)
   - [W-05 — File markers are read with `is_file()` (Info)](#w-05--file-markers-are-read-with-is_file-info)
   - [W-06 — `SetupRouteLoader::$loaded` guard (Info)](#w-06--setuprouteloaderloaded-guard-info)
+  - [W-07 — Igor findings 2026-11-11 (Info)](#w-07--igor-findings-2026-11-11-info)
 - [Usage recommendations in worker mode](#usage-recommendations-in-worker-mode)
 - [Re-audit triggers](#re-audit-triggers)
 
@@ -130,6 +132,20 @@ Models (`BackupArtifact`, `BackupHistoryEntry`, `RestoreProgress`, `SetupProgres
 - **Worker impact:** this is the standard Symfony custom-loader guard. It only runs while the router cache is built (warmup), not per request, so it does not affect normal worker traffic. In debug mode with a route resource change and no worker restart, a second load in the same process would throw "already loaded"; the demo `watch` directive restarts workers on change, which avoids this.
 - **Recommendation:** none.
 - **Status:** Accepted — standard Symfony loader guard, only used during router cache warmup.
+
+### W-07 — Igor findings 2026-11-11 (Info)
+
+Igor (igor-php 0.10.1) flagged five services. None keeps request, user or tenant data across requests:
+
+| Igor finding | Verdict | Change |
+|--------------|---------|--------|
+| `AgeBinaryEncryptor::$refusal` mutated in `resolveBinary()` (KO) | False positive: configuration-derived, written only while the service is built | `resolveBinary()` now returns the binary and the refusal; both are `readonly`, set in the constructor |
+| `ArchivePassword::$values` static (KO, INFO) | False positive: a `WeakMap` keyed by the password object (a value object, not a service); each entry dies with its object or on `wipe()` | Same-line `@igor-ignore` (the previous-line annotation sat above a PHPStan comment, so Igor never saw it) |
+| `InMemoryRemoteTarget::$objects` (KO) | False positive: test / demo double, never registered as a service | `@igor-ignore` |
+| `RestoreOrchestrator::$filesystem` "not reset in reset()" (WARN) | False positive: Symfony's `Filesystem` is stateless; the call deletes the restore's own staging directory | `@igor-ignore` on a local reference (Igor's reset rule ignores annotations). Hardening: `restore()` now also clears the caller's heartbeat closure (it holds the operation lock) and the throttle when it ends or refuses to start, instead of keeping them until the next restore / `kernel.reset` (`RestoreHeartbeatTest::testKeptAliveOrchestratorKeepsNoHeartbeatBetweenRestores`, five restores on one instance without `reset()`) |
+| `DoctrineDbalSetupProgressStorage::$stepJournal` "not reset in reset()" (WARN) | False positive: `clear()` deletes journal rows in the database; the journal's only in-memory state (schema flag) is reset by `reset()` | `@igor-ignore`; `reset()` calls the journal without the nullsafe operator |
+
+- **Status:** Closed — Igor 0 KO / 0 WARN; `igor` CI job added.
 
 No other findings. Panel authentication is stored in the request session (`PasswordSiteBackupAccessGate.php:47-52`, `74`), and role checks call `isGranted()` per request (`ConfigurableSiteBackupAccessChecker.php:21-34`), so no user or auth decision is kept across requests.
 

@@ -33,6 +33,7 @@ final class InMemoryRemoteTarget implements BackupRemoteTargetInterface
         if ($data === false) {
             throw new RemoteTargetException('Unable to read the upload stream.');
         }
+        // @igor-ignore - Test / demo double, never registered as a service: holding the uploads is its purpose.
         $this->objects[$key] = ['data' => $data, 'metadata' => $this->keepsMetadata ? $metadata : [], 'at' => new DateTimeImmutable()];
 
         return $this->object($key);
@@ -79,6 +80,7 @@ final class InMemoryRemoteTarget implements BackupRemoteTargetInterface
     public function overwrite(string $key, string $data): void
     {
         if (isset($this->objects[$key])) {
+            // @igor-ignore - Test / demo double, never registered as a service (simulated tampering).
             $this->objects[$key]['data'] = $data;
         }
     }
