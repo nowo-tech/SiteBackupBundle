@@ -166,7 +166,7 @@ implements only an old port triggers one deprecation when the container is built
 2. **Custom actor resolver** (`security.actor_resolver`). Implement `PanelActorResolverInterface` and read
    `$context->userIdentifier`. The panel still normalises the returned actor.
 3. **Admin provisioner** (`setup.admin_provisioner`). Implement `AdminAccountProvisionerInterface`:
-   `$data['email']` → `$admin->email`, `$data['password']` → `$admin->plainPassword`, `$data['roles']` →
+   `$data['email']` → `$admin->email`, `$data['password']` → `$admin->plainPassword()`, `$data['roles']` →
    `$admin->roles`. `adminExists()` is unchanged.
 4. **Optional:** register your own step types with `#[AsSetupStep(type: '…')]` instead of wrapping commands in
    `console` steps; implement `InitialInstallOnlyStepInterface` on steps that create users, rewrite secrets or

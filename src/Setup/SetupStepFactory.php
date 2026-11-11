@@ -24,7 +24,9 @@ use Nowo\SiteBackupBundle\Setup\Step\TabStep;
 use Nowo\SiteBackupBundle\Setup\Storage\SetupMarkerManager;
 
 use function array_filter;
+use function array_keys;
 use function array_values;
+use function in_array;
 use function is_array;
 use function is_string;
 use function sprintf;
@@ -35,7 +37,18 @@ use function sprintf;
 final class SetupStepFactory
 {
     /**
-     * @param array<string, SetupStepInterface> $customSteps keyed by type id
+     * Step types built by this factory ({@see buildBuiltIn()} arms) plus `custom`: a host step can never use one
+     * (MJ-S-L2), so it can never replace the admin creation, the `.env.local` rewrite or the SQL import.
+     */
+    public const RESERVED_TYPES = [
+        'requirements', 'bootstrap_mode', 'database_url', 'database_create', 'cache_clear', 'schema_update',
+        'migrations', 'sql_file', 'console', 'admin_user', 'sample_data', 'marker', 'custom',
+    ];
+
+    /**
+     * @param array<string, SetupStepInterface> $customSteps keyed by type id; a reserved type is refused
+     *
+     * @throws InvalidArgumentException when a host step uses a reserved (built-in) type
      */
     public function __construct(
         private readonly ConsoleProcessRunner $runner,
@@ -46,6 +59,11 @@ final class SetupStepFactory
         private readonly ?SetupTabCheckerLocator $checkerLocator = null,
         private readonly ?DumpImporter $dumpImporter = null,
     ) {
+        foreach (array_keys($this->customSteps) as $type) {
+            if (in_array($type, self::RESERVED_TYPES, true)) {
+                throw new InvalidArgumentException(sprintf('Host setup step type "%s" is reserved for a built-in step.', $type));
+            }
+        }
     }
 
     /**
@@ -196,8 +214,17 @@ final class SetupStepFactory
      */
     public function createAll(array $stepConfigs): array
     {
-        $steps = [];
+        $steps     = [];
+        $hostTypes = [];
         foreach ($stepConfigs as $i => $config) {
+            $type = is_string($config['type'] ?? null) ? $config['type'] : '';
+            if (isset($this->customSteps[$type])) {
+                // One shared service, one step id: a second use would share its progress (MJ-S-I2).
+                if (isset($hostTypes[$type])) {
+                    throw new InvalidArgumentException(sprintf('Host setup step type "%s" is used twice in one profile.', $type));
+                }
+                $hostTypes[$type] = true;
+            }
             $steps[] = $this->create($config, $i);
         }
 

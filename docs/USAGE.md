@@ -144,7 +144,7 @@ final readonly class AdminUserProvisioner implements AdminAccountProvisionerInte
     public function createAdminAccount(AdminUserData $admin): void
     {
         $user = new User($admin->email, $admin->roles);
-        $user->setPassword($this->hasher->hashPassword($user, $admin->plainPassword));
+        $user->setPassword($this->hasher->hashPassword($user, $admin->plainPassword()));
         $this->users->save($user);
     }
 }

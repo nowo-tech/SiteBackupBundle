@@ -133,7 +133,7 @@ Root key: `nowo_site_backup`.
 | `setup.detectors.doctrine_schema_empty` | `false` | Require setup while the database has no application tables |
 | `setup.php_binary` | `php` | PHP CLI used by console-based steps (`database_create`, `migrations`, `cache_clear`, `console`, `sample_data`). Use a real CLI binary next to a static FrankenPHP build |
 | `setup.admin_provisioner` | `null` | Service id implementing `AdminAccountProvisionerInterface` (1.35+) or the deprecated `AdminUserProvisionerInterface` (`admin_user` step); `null` = `NullAdminUserProvisioner` |
-| `setup.dbal_connection` | `doctrine.dbal.default_connection` | DBAL connection service id of the setup progress storages, the database detectors, the `sql_file` import and the cold-start gate (1.35+). The default is ignored without DoctrineBundle; another id must exist (the build fails otherwise) |
+| `setup.dbal_connection` | `doctrine.dbal.default_connection` | DBAL connection service id of the setup progress storages and step journal, the `doctrine_connect` / `doctrine_schema_empty` detectors, the `sql_file` import (the seeds go into this connection's database) and the cold-start gate (1.35+); `console` steps keep the host's own Doctrine setup. The default is ignored without DoctrineBundle; another id must exist (the build fails otherwise) |
 | `setup.trigger_after_restore` | `true` | After a successful restore write `setup.required` with `post_restore_profile` so the wizard finishes the DB bootstrap |
 | `setup.post_restore_profile` | `post_restore` | Profile used after a restore |
 | `setup.default_profile` | `fresh_install` | Profile used when none is requested / stored. Must be a key of `setup.profiles` (container compile fails otherwise) — see [Profiles](#profiles-req-cfg-001) |

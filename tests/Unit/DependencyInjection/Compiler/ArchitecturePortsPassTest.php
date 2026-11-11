@@ -19,6 +19,7 @@ use Nowo\SiteBackupBundle\Setup\ConsoleProcessRunner;
 use Nowo\SiteBackupBundle\Setup\Detector\DoctrineConnectDetector;
 use Nowo\SiteBackupBundle\Setup\Detector\DoctrineSchemaEmptyDetector;
 use Nowo\SiteBackupBundle\Setup\NullAdminUserProvisioner;
+use Nowo\SiteBackupBundle\Setup\SetupOrchestrator;
 use Nowo\SiteBackupBundle\Setup\SetupStepFactory;
 use Nowo\SiteBackupBundle\Setup\Storage\DoctrineDbalSetupProgressStorage;
 use Nowo\SiteBackupBundle\Setup\Storage\DoctrineDbalSetupStepJournal;
@@ -118,6 +119,74 @@ final class ArchitecturePortsPassTest extends TestCase
             self::assertNotSame('', $factory->create($config, 0)->getId(), $type);
         }
         self::assertSame('x', (new AsSetupStep('x'))->type);
+    }
+
+    /**
+     * MJ-S-L2 reverse check: every built-in arm of SetupStepFactory::buildBuiltIn() is reserved.
+     */
+    public function testEveryBuiltInArmIsReserved(): void
+    {
+        $source = (string) file_get_contents(__DIR__ . '/../../../../src/Setup/SetupStepFactory.php');
+        $start  = strpos($source, 'private function buildBuiltIn(');
+        self::assertIsInt($start);
+        $body = substr($source, $start, (int) strpos($source, 'default  => throw', $start) - $start);
+        preg_match_all("/^\\s+'([a-z_]+)'\\s*=>\\s*new /m", $body, $arms);
+
+        self::assertCount(12, $arms[1]);
+        foreach ($arms[1] as $type) {
+            self::assertContains($type, SetupStepsPass::RESERVED_TYPES, $type);
+        }
+        self::assertContains('custom', SetupStepsPass::RESERVED_TYPES);
+        self::assertSame(SetupStepFactory::RESERVED_TYPES, SetupStepsPass::RESERVED_TYPES);
+    }
+
+    public function testFactoryRefusesAReservedHostKey(): void
+    {
+        $dir = sys_get_temp_dir();
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('reserved');
+        new SetupStepFactory(new ConsoleProcessRunner($dir, PHP_BINARY, 30), new SetupMarkerManager($dir . '/r', $dir . '/d'), new NullAdminUserProvisioner(), null, ['admin_user' => new HostSeedStep()]);
+    }
+
+    public function testFactoryRefusesAHostTypeUsedTwiceInOneProfile(): void
+    {
+        $dir     = sys_get_temp_dir();
+        $factory = new SetupStepFactory(new ConsoleProcessRunner($dir, PHP_BINARY, 30), new SetupMarkerManager($dir . '/r', $dir . '/d'), new NullAdminUserProvisioner(), null, ['host_seed' => new HostSeedStep()]);
+        self::assertCount(2, $factory->createAll([['type' => 'host_seed'], ['type' => 'marker']]));
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('used twice');
+        $factory->createAll([['type' => 'host_seed'], ['type' => 'marker'], ['type' => 'host_seed']]);
+    }
+
+    public function testRepeatedHostTypeInAProfileFailsTheBuild(): void
+    {
+        $container = $this->factoryContainer();
+        $container->register(SetupOrchestrator::class)->setArgument('$profiles', [
+            'ok'  => ['steps' => [['type' => 'host_seed'], ['type' => 'marker'], 'not-a-step', ['type' => 3]]],
+            'bad' => ['steps' => [['type' => 'host_seed'], ['type' => 'host_seed']]],
+        ]);
+        $container->register('app.seed', HostSeedStep::class)->addTag(SetupStepsPass::TAG, ['type' => 'host_seed']);
+
+        $this->expectException(InvalidArgumentException::class);
+        $this->expectExceptionMessage('Setup profile "bad" uses the host step type "host_seed" twice.');
+        (new SetupStepsPass())->process($container);
+    }
+
+    public function testDistinctHostTypesPerProfilePass(): void
+    {
+        $container = $this->factoryContainer();
+        $container->register(SetupOrchestrator::class)->setArgument('$profiles', [
+            'a' => ['steps' => [['type' => 'host_seed'], ['type' => 'marker']]],
+            'b' => ['steps' => [['type' => 'host_seed']]],
+            'c' => 'broken',
+        ]);
+        $container->register('app.seed', HostSeedStep::class)->addTag(SetupStepsPass::TAG, ['type' => 'host_seed']);
+
+        (new SetupStepsPass())->process($container);
+
+        self::assertEquals(['host_seed' => new Reference('app.seed')], $container->getDefinition(SetupStepFactory::class)->getArgument('$customSteps'));
     }
 
     public function testDbalConnectionDefaultsToTheDoctrineDefaultAndIgnoresItsAbsence(): void

@@ -17,7 +17,6 @@ use PHPUnit\Framework\TestCase;
 use RuntimeException;
 
 use function print_r;
-use function var_export;
 
 final class AdminAccountProvisionerTest extends TestCase
 {
@@ -68,7 +67,7 @@ final class AdminAccountProvisionerTest extends TestCase
 
             public function createAdminAccount(AdminUserData $admin): void
             {
-                $this->data[] = ['email' => $admin->email, 'password' => $admin->plainPassword, 'roles' => $admin->roles];
+                $this->data[] = ['email' => $admin->email, 'password' => $admin->plainPassword(), 'roles' => $admin->roles];
             }
         };
         foreach ([[['email' => 'a@example.test', 'password' => $this->password()], true], [['email' => '', 'password' => $this->password()], false], [['email' => 'a@example.test'], false]] as [$input, $created]) {
@@ -125,7 +124,7 @@ final class AdminAccountProvisionerTest extends TestCase
         self::assertStringNotContainsString($this->password(), print_r($admin, true));
         self::assertSame(['email' => 'a@example.test', 'plainPassword' => '***', 'roles' => ['ROLE_ADMIN']], $admin->__debugInfo());
         self::assertSame(['ROLE_SUPER_ADMIN'], (new AdminUserData('a@example.test', $this->password()))->roles);
-        self::assertStringContainsString('a@example.test', var_export($admin->email, true));
+        self::assertSame(['email' => 'a@example.test', 'plainPassword' => '***', 'roles' => ['ROLE_ADMIN']], AdminUserData::castForVarDumper($admin, []));
     }
 
     public function testValueObjectRejectsEmptyCredentials(): void

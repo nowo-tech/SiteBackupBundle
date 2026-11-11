@@ -15,6 +15,7 @@ use Nowo\SiteBackupBundle\DependencyInjection\Compiler\SetupStepsPass;
 use Nowo\SiteBackupBundle\DependencyInjection\Compiler\TwigPathsPass;
 use Nowo\SiteBackupBundle\DependencyInjection\SiteBackupExtension;
 use Nowo\SiteBackupBundle\Model\ArchivePassword;
+use Nowo\SiteBackupBundle\Setup\AdminUserData;
 use Symfony\Component\DependencyInjection\ChildDefinition;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Extension\ExtensionInterface;
@@ -60,7 +61,7 @@ final class NowoSiteBackupBundle extends Bundle
     }
 
     /**
-     * EO-L1: VarDumper (dump(), the profiler) prints archive passwords as "***".
+     * EO-L1 / MJ-S-L1: VarDumper (dump(), the profiler) prints archive and admin passwords as "***".
      */
     public function boot(): void
     {
@@ -74,6 +75,9 @@ final class NowoSiteBackupBundle extends Bundle
             // @igor-ignore - Process-wide, idempotent caster registration (same value on every boot).
             // @phpstan-ignore-next-line (idempotent, same value for every request)
             AbstractCloner::$defaultCasters[ArchivePassword::class] = [ArchivePassword::class, 'castForVarDumper'];
+            // @igor-ignore - Process-wide, idempotent caster registration (same value on every boot).
+            // @phpstan-ignore-next-line (idempotent, same value for every request)
+            AbstractCloner::$defaultCasters[AdminUserData::class] = [AdminUserData::class, 'castForVarDumper'];
         }
     }
 

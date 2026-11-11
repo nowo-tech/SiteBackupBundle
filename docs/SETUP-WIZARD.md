@@ -297,6 +297,13 @@ Steps registered via:
 | `marker` | Write/remove lock files | `setup.done`, clear `setup.required` |
 | `custom` | App Twig + optional `runner` / `checker` | Declared under `profiles.*.tabs` |
 
+**Database connection (1.35+).** `setup.dbal_connection` (default `doctrine.dbal.default_connection`) is the
+connection of every DBAL use of the wizard: the progress storages (`doctrine`, `chain`, `cache_doctrine`), the
+per-step journal, the `doctrine_connect` / `doctrine_schema_empty` detectors, the `sql_file` import (PDO importer)
+and the cold-start schema gate. Pointing it at another connection moves all of them, so the SQL seeds are imported
+into that connection's database. The `console` steps (`migrations`, `schema_update`, …) run the host's own commands
+and keep the host's Doctrine configuration.
+
 Generic **`console`** is the escape hatch: any idempotent app command (`app:load-taxonomy`, `app:seed-roles`, …).
 
 ### Host step types (1.35+)
@@ -309,6 +316,8 @@ like any other tab.
 - The type is lower-case letters, digits and `_`; a built-in type name (the table above, `custom` included) or a type
   registered twice fails the container build, so a host step never replaces the admin creation, the `.env.local`
   rewrite or the SQL import.
+- A host step is one shared service with one step id: use its type at most once per profile (twice fails the build,
+  and `SetupStepFactory::createAll()` refuses it at runtime).
 - Implement `InitialInstallOnlyStepInterface` on a step that creates users, rewrites secrets or replaces data: a
   re-opened wizard skips it like the built-in initial-install steps.
 - Steps run inside the wizard, behind the same setup access token and gating as the built-ins. Keep them stateless

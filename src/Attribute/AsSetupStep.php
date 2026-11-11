@@ -13,7 +13,7 @@ use Nowo\SiteBackupBundle\Setup\SetupStepInterface;
  * `nowo.site_backup.setup_step` with a `type` attribute). Use it in a profile with `- { type: <type> }`.
  *
  * Built-in type names (`admin_user`, `database_url`, `sql_file`, …) and `custom` are reserved: the container build
- * fails. Implement {@see InitialInstallOnlyStepInterface} on steps that create users,
+ * fails, and so does a type used twice in one profile (one shared service, one step id). Implement {@see InitialInstallOnlyStepInterface} on steps that create users,
  * rewrite secrets or replace data, so a re-opened wizard skips them.
  */
 #[Attribute(Attribute::TARGET_CLASS)]

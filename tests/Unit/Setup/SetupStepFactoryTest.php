@@ -118,9 +118,17 @@ final class SetupStepFactoryTest extends TestCase
             new ConsoleProcessRunner($this->dir, PHP_BINARY, 30),
             $markers,
             new NullAdminUserProvisioner(),
+            customSteps: ['host_marker' => $custom],
+        );
+        self::assertSame('custom', $factory->create(['type' => 'host_marker'], 0)->getId());
+
+        // 1.35 (audit MJ-S-L2): a host step can no longer take a built-in type.
+        $this->expectException(InvalidArgumentException::class);
+        new SetupStepFactory(
+            new ConsoleProcessRunner($this->dir, PHP_BINARY, 30),
+            $markers,
+            new NullAdminUserProvisioner(),
             customSteps: ['marker' => $custom],
         );
-
-        self::assertSame('custom', $factory->create(['type' => 'marker'], 0)->getId());
     }
 }

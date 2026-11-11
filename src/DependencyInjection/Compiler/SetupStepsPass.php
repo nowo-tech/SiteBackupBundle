@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\DependencyInjection\Compiler;
 
 use InvalidArgumentException;
+use Nowo\SiteBackupBundle\Setup\SetupOrchestrator;
 use Nowo\SiteBackupBundle\Setup\SetupStepFactory;
 use Symfony\Component\DependencyInjection\Compiler\CompilerPassInterface;
 use Symfony\Component\DependencyInjection\ContainerBuilder;
 use Symfony\Component\DependencyInjection\Reference;
 
 use function in_array;
+use function is_array;
 use function is_string;
 use function preg_match;
 use function sprintf;
@@ -27,10 +29,7 @@ final class SetupStepsPass implements CompilerPassInterface
     public const TAG = 'nowo.site_backup.setup_step';
 
     /** Built-in step types of {@see SetupStepFactory} plus `custom`. */
-    public const RESERVED_TYPES = [
-        'requirements', 'bootstrap_mode', 'database_url', 'database_create', 'cache_clear', 'schema_update',
-        'migrations', 'sql_file', 'console', 'admin_user', 'sample_data', 'marker', 'custom',
-    ];
+    public const RESERVED_TYPES = SetupStepFactory::RESERVED_TYPES;
 
     public function process(ContainerBuilder $container): void
     {
@@ -56,5 +55,34 @@ final class SetupStepsPass implements CompilerPassInterface
         }
 
         $container->getDefinition(SetupStepFactory::class)->setArgument('$customSteps', $steps);
+        $this->rejectRepeatedHostSteps($container, $steps);
+    }
+
+    /**
+     * A host step is one shared service with one step id: using its type twice in one profile would share the
+     * progress of both tabs (MJ-S-I2). Fails the build.
+     *
+     * @param array<string, Reference> $steps
+     */
+    private function rejectRepeatedHostSteps(ContainerBuilder $container, array $steps): void
+    {
+        if ($steps === [] || !$container->hasDefinition(SetupOrchestrator::class)) {
+            return;
+        }
+
+        $profiles = $container->getDefinition(SetupOrchestrator::class)->getArguments()['$profiles'] ?? [];
+        foreach (is_array($profiles) ? $profiles : [] as $name => $profile) {
+            $seen = [];
+            foreach (is_array($profile) && is_array($profile['steps'] ?? null) ? $profile['steps'] : [] as $step) {
+                $type = is_array($step) ? ($step['type'] ?? null) : null;
+                if (!is_string($type) || !isset($steps[$type])) {
+                    continue;
+                }
+                if (isset($seen[$type])) {
+                    throw new InvalidArgumentException(sprintf('Setup profile "%s" uses the host step type "%s" twice.', (string) $name, $type));
+                }
+                $seen[$type] = true;
+            }
+        }
     }
 }
