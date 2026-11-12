@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.35.2](#to-1352)
 - [To 1.35.1](#to-1351)
 - [To 1.35.0](#to-1350)
   - [Deprecations (removed in 2.0)](#deprecations-removed-in-20)
@@ -128,6 +129,14 @@
   - [Breaking changes](#breaking-changes-1)
 
 ## Unreleased
+
+## To 1.35.2
+
+From **1.35.1**:
+
+```bash
+composer update nowo-tech/site-backup-bundle
+```
 
 Target: **1.35.2**. From **1.35.0** or **1.35.1**: `composer update nowo-tech/site-backup-bundle`. No configuration
 change.
