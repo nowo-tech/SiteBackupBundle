@@ -525,7 +525,7 @@ final class SiteBackupExtensionTest extends TestCase
 
         $panel = $container->getDefinition(SiteBackupPanelController::class);
         self::assertSame(SiteBackupManagerInterface::class, (string) $panel->getArgument('$manager'));
-        self::assertSame(ActorResolverInterface::class, (string) $panel->getArgument('$actorResolver'));
+        self::assertSame(StaticActorResolver::class, (string) $panel->getArgument('$actorResolver'));
         self::assertSame('security.token_storage', (string) $panel->getArgument('$tokenStorage'));
     }
 

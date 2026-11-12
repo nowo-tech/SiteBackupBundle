@@ -844,12 +844,20 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
      */
     private function configureActorResolver(ContainerBuilder $container, array $security): void
     {
-        $resolverId = $security['actor_resolver'] ?? null;
-        $resolverId = is_string($resolverId) && $resolverId !== '' ? $resolverId : StaticActorResolver::class;
+        $resolverId = $this->actorResolverId($security);
 
-        // The service may implement either port (1.35+: PanelActorResolverInterface, or the deprecated one).
+        // The service may implement either port (1.35+: PanelActorResolverInterface, or the deprecated one);
+        // PortAliasValidityPass removes the alias of the port it does not implement (1.35.2+).
         $container->setAlias(ActorResolverInterface::class, $resolverId)->setPublic(false);
         $container->setAlias(PanelActorResolverInterface::class, $resolverId)->setPublic(false);
+    }
+
+    /** @param array<string, mixed> $security */
+    private function actorResolverId(array $security): string
+    {
+        $resolverId = $security['actor_resolver'] ?? null;
+
+        return is_string($resolverId) && $resolverId !== '' ? $resolverId : StaticActorResolver::class;
     }
 
     /** @param array<string, mixed> $security */
@@ -1024,7 +1032,8 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$allowUnauthenticated', (bool) $config['security']['allow_unauthenticated'])
             ->setArgument('$translator', new Reference('translator', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
             ->setArgument('$view', new Reference(SiteBackupView::class))
-            ->setArgument('$actorResolver', new Reference(ActorResolverInterface::class))
+            // 1.35.2+: the configured service itself; PortAliasValidityPass drops the port alias it does not implement.
+            ->setArgument('$actorResolver', new Reference($this->actorResolverId($config['security'])))
             ->setArgument('$tokenStorage', new Reference('security.token_storage', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
             ->setPublic(true);
     }
@@ -1154,7 +1163,8 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$phpBinary', $setup['php_binary'])
             ->setArgument('$timeoutSeconds', (int) $config['process_timeout']);
 
-        // The service may implement either port (1.35+: AdminAccountProvisionerInterface, or the deprecated one).
+        // The service may implement either port (1.35+: AdminAccountProvisionerInterface, or the deprecated one);
+        // PortAliasValidityPass removes the alias of the port it does not implement (1.35.2+).
         $adminProvisioner = $setup['admin_provisioner'] ?? null;
         $adminProvisioner = is_string($adminProvisioner) && $adminProvisioner !== '' ? $adminProvisioner : NullAdminUserProvisioner::class;
         $container->setAlias(AdminUserProvisionerInterface::class, $adminProvisioner)->setPublic(false);
@@ -1205,7 +1215,8 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
         $container->getDefinition(SetupStepFactory::class)
             ->setArgument('$runner', new Reference(ConsoleProcessRunner::class))
             ->setArgument('$markers', new Reference(SetupMarkerManager::class))
-            ->setArgument('$adminProvisioner', new Reference(AdminUserProvisionerInterface::class))
+            // 1.35.2+: the configured service itself; PortAliasValidityPass drops the port alias it does not implement.
+            ->setArgument('$adminProvisioner', new Reference($adminProvisioner))
             ->setArgument('$dbalConnection', $dbalRef)
             // Host steps (#[AsSetupStep]) are set by SetupStepsPass.
             ->setArgument('$customSteps', [])

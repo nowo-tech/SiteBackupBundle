@@ -129,6 +129,15 @@
 
 ## Unreleased
 
+Target: **1.35.2**. From **1.35.0** or **1.35.1**: `composer update nowo-tech/site-backup-bundle`. No configuration
+change.
+
+`bin/console lint:container` now passes when `security.actor_resolver` or `setup.admin_provisioner` implements only
+one port. The alias of the port the service does not implement is no longer registered: a host on the 1.35 port only
+has no `ActorResolverInterface` / `AdminUserProvisionerInterface` alias, and a host still on the deprecated port has no
+`PanelActorResolverInterface` / `AdminAccountProvisionerInterface` alias. Inject the port your service implements, or
+the configured service id. A configured service that implements neither port now fails the container build.
+
 ## To 1.35.1
 
 From **1.35.0**:
