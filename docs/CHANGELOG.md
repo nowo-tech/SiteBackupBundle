@@ -77,6 +77,30 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Target: **1.35.2** (patch).
+
+### Fixed
+
+- `lint:container` failed on 1.35.0 and 1.35.1 for a host that configures `security.actor_resolver` or
+  `setup.admin_provisioner` with a service implementing only one of the two ports: "Invalid alias definition: alias
+  `AdminUserProvisionerInterface` is referencing class ... but this class does not implement
+  `AdminUserProvisionerInterface`" (and the same for `ActorResolverInterface`, or for the new port with a host still on
+  the deprecated one). This is a 1.35.0 bug, not a 1.35.1 regression: 1.35.0 aliased both the deprecated port and its
+  replacement to the configured service, and Symfony's `CheckAliasValidityPass` only runs in `lint:container`, so
+  `cache:clear` and runtime did not show it. Affected: `>= 1.35.0, < 1.35.2`.
+  A new `PortAliasValidityPass` now keeps each port alias only when the configured service implements that port
+  (`AdminUserProvisionerInterface` / `AdminAccountProvisionerInterface`, `ActorResolverInterface` /
+  `PanelActorResolverInterface`, `SiteBackupAccessGateInterface` / `PanelAccessGateInterface`), and the panel
+  controller and the setup step factory get the configured service directly. The gate aliases keep pointing at the
+  throttling wrapper, which implements both ports; an inner gate on the deprecated port only still denies a
+  `PanelRequestContext` call (fail closed, audit MJ). A configured service that implements neither port now fails the
+  container build with a clear message instead of a type error at runtime.
+
+### Tests
+
+- `PortAliasValidityKernelTest` boots a host kernel and runs `lint:container` for a gate, actor resolver and admin
+  provisioner on the new port only, the deprecated port only, and both; `PortAliasValidityPassTest` covers the pass.
+
 ## [1.35.1] - 2026-11-12
 
 Target: **1.35.1** (patch, tests and docs only; no runtime change).

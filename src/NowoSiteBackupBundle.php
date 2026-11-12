@@ -10,6 +10,7 @@ use Nowo\SiteBackupBundle\Attribute\AsSetupTabChecker;
 use Nowo\SiteBackupBundle\DependencyInjection\Compiler\CsrfProtectionPass;
 use Nowo\SiteBackupBundle\DependencyInjection\Compiler\LegacyPortDeprecationPass;
 use Nowo\SiteBackupBundle\DependencyInjection\Compiler\LoginThrottleStoragePass;
+use Nowo\SiteBackupBundle\DependencyInjection\Compiler\PortAliasValidityPass;
 use Nowo\SiteBackupBundle\DependencyInjection\Compiler\SetupReopenDetectorsPass;
 use Nowo\SiteBackupBundle\DependencyInjection\Compiler\SetupStepsPass;
 use Nowo\SiteBackupBundle\DependencyInjection\Compiler\TwigPathsPass;
@@ -33,6 +34,7 @@ final class NowoSiteBackupBundle extends Bundle
         $container->addCompilerPass(new SetupReopenDetectorsPass());
         $container->addCompilerPass(new SetupStepsPass());
         $container->addCompilerPass(new LegacyPortDeprecationPass());
+        $container->addCompilerPass(new PortAliasValidityPass());
         // Attribute-only (same pattern as AsSetupTabChecker) — avoids double-tagging
         // if we also autoconfigured SetupNeedDetectorInterface.
         $container->registerAttributeForAutoconfiguration(
