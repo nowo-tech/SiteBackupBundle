@@ -78,6 +78,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- `docs/SECURITY.md`: replace the "re-audit pending" checklist cell with the recorded audits (Appendices CG, IR, KH, KZ, LX, MJ) and their dates (REQ-SEC-004).
+
 ## [1.35.2] - 2026-11-12
 
 Target: **1.35.2** (patch).
