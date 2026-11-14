@@ -213,14 +213,21 @@ jobs:
         run: |
           set -eu
           command -v bsdtar || { sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends libarchive-tools; }
-          PW="ci-$(openssl rand -hex 12)"
-          echo "::add-mask::$PW"
+          # Three throwaway passwords (masked): the app's account, the backup account, the restore account (PP-M4).
+          PWA="ci-$(openssl rand -hex 12)"; PWB="ci-$(openssl rand -hex 12)"; PWR="ci-$(openssl rand -hex 12)"
+          echo "::add-mask::$PWA"; echo "::add-mask::$PWB"; echo "::add-mask::$PWR"
           docker run -d --name sbb-mysql9 -p 127.0.0.1:3306:3306 -e MYSQL_ALLOW_EMPTY_PASSWORD=1 -e MYSQL_DATABASE=app mysql:9.7.2 \
             --gtid-mode=ON --enforce-gtid-consistency=ON --binlog-format=ROW --binlog-row-image=FULL
           # Over TCP: the entrypoint's init server is socket-only, the real one listens once init is done.
           for i in $(seq 1 120); do docker exec sbb-mysql9 mysql -uroot -h127.0.0.1 --protocol=TCP -e "SELECT 1" >/dev/null 2>&1 && break; sleep 2; done
           docker exec sbb-mysql9 mysql -uroot -h127.0.0.1 --protocol=TCP -e "SELECT VERSION()"
-          docker exec sbb-mysql9 mysql -uroot -e "CREATE USER 'bk'@'%' IDENTIFIED BY '$PW'; GRANT ALL ON app.* TO 'bk'@'%'; GRANT RELOAD, REPLICATION CLIENT, REPLICATION SLAVE ON *.* TO 'bk'@'%'; GRANT REPLICATION_APPLIER, SESSION_VARIABLES_ADMIN, SYSTEM_VARIABLES_ADMIN ON *.* TO 'bk'@'%';"
+          # Least privilege (docs/USAGE.md "MySQL grants"): no SYSTEM_VARIABLES_ADMIN anywhere.
+          docker exec sbb-mysql9 mysql -uroot -e "
+            CREATE USER 'app'@'%' IDENTIFIED BY '$PWA'; GRANT ALL ON app.* TO 'app'@'%';
+            CREATE USER 'bk'@'%' IDENTIFIED BY '$PWB'; GRANT RELOAD, REPLICATION CLIENT, REPLICATION SLAVE ON *.* TO 'bk'@'%';
+            GRANT SELECT, SHOW VIEW, TRIGGER, LOCK TABLES, EVENT ON app.* TO 'bk'@'%';
+            CREATE USER 'rs'@'%' IDENTIFIED BY '$PWR'; GRANT ALL ON app.* TO 'rs'@'%';
+            GRANT REPLICATION_APPLIER, SESSION_VARIABLES_ADMIN ON *.* TO 'rs'@'%';"
           # The server image ships mysql and mysqldump but not mysqlbinlog: take it from the matching Oracle client RPM
           # (sha256 = repo.mysql.com digest) and run it in the same image (same glibc and libraries).
           curl -fsSL -o "$RUNNER_TEMP/client.rpm" https://repo.mysql.com/yum/mysql-9.7-community/el/9/x86_64/mysql-community-client-9.7.2-1.el9.x86_64.rpm
@@ -236,7 +243,9 @@ jobs:
             "$RUNNER_TEMP/bin/$tool" --version
           done
           {
-            echo "SBB_BINLOG_DATABASE_URL=mysql://bk:$PW@127.0.0.1:3306/app"
+            echo "SBB_BINLOG_DATABASE_URL=mysql://app:$PWA@127.0.0.1:3306/app"
+            echo "SBB_BINLOG_BACKUP_URL=mysql://bk:$PWB@127.0.0.1:3306/app"
+            echo "SBB_BINLOG_RESTORE_URL=mysql://rs:$PWR@127.0.0.1:3306/app"
             echo "SBB_BINLOG_ADMIN_URL=mysql://root@127.0.0.1:3306/app"
             echo "SBB_BINLOG_SHARED_DIR=$SHARED"
             echo "SBB_BINLOG_MYSQL=$RUNNER_TEMP/bin/mysql"
@@ -244,7 +253,7 @@ jobs:
             echo "SBB_BINLOG_MYSQLBINLOG=$RUNNER_TEMP/bin/mysqlbinlog"
           } >> "$GITHUB_ENV"
 
-      - name: Full, writes, incrementals, point-in-time restore and gap detection
+      - name: Shared server, filtered and raw captures, DDL after the full, point-in-time restore, gaps
         run: vendor/bin/phpunit --no-coverage --display-skipped --fail-on-skipped tests/Integration/Binlog
 
       - name: Server log on failure
