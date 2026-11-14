@@ -152,7 +152,17 @@ final class RealBinlogChainTest extends TestCase
         self::assertSame($before, $this->app('SELECT COUNT(*) FROM pitr'), 'the refused restore changed the database');
 
         // Point in time T, with --recreate-database: rows and columns as of T, files as of the full backup.
-        $report = $manager->restoreChain($i2->getId(), $until, 'ci', null, true);
+        try {
+            $report = $manager->restoreChain($i2->getId(), $until, 'ci', null, true);
+        } catch (\Nowo\SiteBackupBundle\Exception\ChainRestoreException $e) {
+            // Diagnostics for CI: the schema-only events (test data only), numbered like the replay file.
+            $lines = explode("\n", $this->extract($i1, ChainPaths::EVENTS));
+            foreach ($lines as $n => $line) {
+                fwrite(STDERR, sprintf("%4d %s\n", $n + 1, mb_substr($line, 0, 160)));
+            }
+
+            throw $e;
+        }
         self::assertTrue($report->complete, (string) json_encode($report));
         self::assertSame("1\t00FF275C0D0A\t7\n2\t62\t7", trim($this->app('SELECT id, HEX(v), w FROM pitr ORDER BY id')));
         self::assertSame('', trim($this->app("SHOW TABLES LIKE 'newt'")));
