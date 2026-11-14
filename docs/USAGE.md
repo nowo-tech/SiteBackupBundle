@@ -356,7 +356,9 @@ event that is not the schema's.
 
 GTID is optional: chains use file + position coordinates only; the chain's dump asks for the GTID set
 (`--set-gtid-purged=COMMENTED`) only when `gtid_mode` is ON, and a dump that reports an error or holds no table is
-refused even when `mysqldump` exits 0 (`gtid_mode=OFF` is tested in CI, together with small
+refused even when `mysqldump` exits 0 (one exception: MySQL 9.x mysqldump reports "Error … when trying to dump
+masking policies" when the account cannot read `mysql.column_masking_policy`; the dump is otherwise whole and the
+backup gets a warning — grant `SELECT ON mysql.column_masking_policy` if the schema uses masking policies) (`gtid_mode=OFF` is tested in CI, together with small
 `max_binlog_size` values so that one incremental spans several rotated logs).
 
 - **MySQL 8.0.26+** (8.4 LTS, 9.x) with `log_bin` on and **`binlog_format=ROW`** (required: MIXED / STATEMENT are

@@ -28,6 +28,7 @@ use function in_array;
 use function mb_substr;
 use function min;
 use function preg_match;
+use function preg_replace;
 use function sprintf;
 use function str_contains;
 use function str_replace;
@@ -144,7 +145,9 @@ final class BuiltinMysqlDumper
                     $this->filesystem->touch($file);
                     $this->filesystem->chmod($file, 0o600);
                 }
-                $this->run(MysqlDumpCommandFactory::withOptions($command, ['--result-file=' . $file]), $spec['env'], $tick);
+                if ($this->run(MysqlDumpCommandFactory::withOptions($command, ['--result-file=' . $file]), $spec['env'], $tick)) {
+                    $warnings[] = 'mysqldump could not read the column masking policies (no SELECT on mysql.column_masking_policy): they are not in the dump.';
+                }
                 if ($index > 0) {
                     $this->append($file, $target);
                 }
@@ -269,8 +272,10 @@ final class BuiltinMysqlDumper
      * @param list<string> $command
      * @param array<string, string> $env
      * @param (callable(): void)|null $tick
+     *
+     * @return bool true when mysqldump could not dump the column masking policies (MySQL 9.x; it continues without them)
      */
-    private function run(array $command, array $env, ?callable $tick): void
+    private function run(array $command, array $env, ?callable $tick): bool
     {
         $process = new Process($command, null, $env);
 
@@ -280,10 +285,16 @@ final class BuiltinMysqlDumper
             // Not chained: Symfony's message embeds the command line.
             throw new DumpFailedException(sprintf('Database dump timed out after %d seconds (process_timeout).', $this->timeoutSeconds));
         }
-        // PP-D2-H1: mysqldump reports some errors ("Error: Server has GTIDs disabled.") and still exits 0.
-        if (!$process->isSuccessful() || preg_match('/^(?:mysqldump:\s*)?(?:Error\b|\[ERROR\]|Got error\b)/mi', $process->getErrorOutput()) === 1) {
-            throw new DumpFailedException('Database dump failed: ' . mb_substr(SecretRedactor::redact(trim($process->getErrorOutput())), 0, 500));
+        // PP-D2-H1: mysqldump reports some errors ("Error: Server has GTIDs disabled.") and still exits 0. The one about
+        // column masking policies (MySQL 9.x, an account without SELECT on mysql.column_masking_policy) leaves the
+        // schema whole: it becomes a warning.
+        $masking = '/^mysqldump:\s*Error:.*when trying to dump masking policies\s*$/mi';
+        $stderr  = $process->getErrorOutput();
+        if (!$process->isSuccessful() || preg_match('/^(?:mysqldump:\s*)?(?:Error\b|\[ERROR\]|Got error\b)/mi', (string) preg_replace($masking, '', $stderr)) === 1) {
+            throw new DumpFailedException('Database dump failed: ' . mb_substr(SecretRedactor::redact(trim($stderr)), 0, 500));
         }
+
+        return preg_match($masking, $stderr) === 1;
     }
 
     /**

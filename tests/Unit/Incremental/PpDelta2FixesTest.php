@@ -74,6 +74,16 @@ final class PpDelta2FixesTest extends TestCase
             self::assertStringContainsString('GTIDs disabled', $e->getMessage());
         }
 
+        // MySQL 9.x: no SELECT on mysql.column_masking_policy is reported as an error but the dump is whole: a warning.
+        $masking = EngineFixtures::script($this->dir, 'masking-dump', <<<'SH'
+            if [ "$1" = "--version" ]; then echo "mysqldump  Ver 9.7.2 for Linux on x86_64 (MySQL Community Server - GPL)"; exit 0; fi
+            for a in "$@"; do case "$a" in --result-file=*) out="${a#--result-file=}";; esac; done
+            echo "mysqldump: Error: 'SELECT command denied to user 'bk'@'h' for table 'column_masking_policy'' when trying to dump masking policies" >&2
+            printf -- "-- CHANGE REPLICATION SOURCE TO SOURCE_LOG_FILE='binlog.000002', SOURCE_LOG_POS=1480;\nCREATE TABLE t (id INT);\n-- Dump completed\n" > "$out"
+            SH);
+        $report = (new BuiltinMysqlDumper('mysql://bk@db/app', $masking))->dump($this->dir . '/masking.sql', [], false, null, true);
+        self::assertStringContainsString('column masking policies', implode(' ', $report->warnings));
+
         // Exit 0 without an error line but without any table: not a chain's full backup.
         $empty = EngineFixtures::script($this->dir, 'empty-dump', <<<'SH'
             if [ "$1" = "--version" ]; then echo "mysqldump  Ver 9.7.2 for Linux on x86_64 (MySQL Community Server - GPL)"; exit 0; fi
