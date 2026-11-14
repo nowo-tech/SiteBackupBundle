@@ -199,14 +199,11 @@ final class RemotePublisherTest extends TestCase
 
         $report = $publisher->prune($target, 'b/', new RetentionPolicy(keepLast: 2), $ids[3]);
 
-        // 1.36+ (PP-M5): an unreadable sidecar is reported, never skipped silently; nothing tells whether that archive
-        // starts a chain (no bundle metadata on it), so nothing is pruned until it is fixed or removed.
-        self::assertSame([], $report->deletedKeys);
+        // 1.36+ (PP-M5 / PP-D1-I1): an unreadable sidecar is reported; without any chain under the prefix pruning
+        // goes on as in 1.35.
+        self::assertSame(['b/' . $ids[0] . '.tar.gz', 'b/' . $ids[1] . '.tar.gz'], $report->deletedKeys);
         self::assertSame(['b/broken.tar.gz.backup.json' => 'UnreadableSidecar'], $report->errors);
         $target->delete('b/broken.tar.gz.backup.json');
-        $report = $publisher->prune($target, 'b/', new RetentionPolicy(keepLast: 2), $ids[3]);
-        self::assertSame(['b/' . $ids[0] . '.tar.gz', 'b/' . $ids[1] . '.tar.gz'], $report->deletedKeys);
-        self::assertSame([], $report->errors);
         $left = array_map(static fn (RemoteObject $o) => $o->key, iterator_to_array($target->list(''), false));
         self::assertContains('b/foreign.bin', $left);
         self::assertContains('b/orphan.tar.gz', $left);

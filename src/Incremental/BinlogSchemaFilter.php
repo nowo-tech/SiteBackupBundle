@@ -52,6 +52,8 @@ final class BinlogSchemaFilter
 
     private const MAX_PROBLEMS = 20;
 
+    private const HEADER_END = '/^#\d{6}\s+\d{1,2}:\d{2}:\d{2}\s+server id\s+\d+\s+end_log_pos\s+(\d+)/';
+
     private const HEADER = '/^#\d{6}\s+\d{1,2}:\d{2}:\d{2}\s+server id\s+\d+\s+end_log_pos\s+\d+[^\t]*\t([A-Za-z_-]+)/';
 
     private const ROW_EVENTS = ['Write_rows', 'Update_rows', 'Delete_rows', 'Write_rows_v1', 'Update_rows_v1', 'Delete_rows_v1', 'Update_rows_partial', 'Partial_update_rows'];
@@ -61,20 +63,21 @@ final class BinlogSchemaFilter
     /**
      * @param list<string> $inputs decoded files, in order
      */
-    public static function run(array $inputs, string $output, string $schema, string $mode, ?DateTimeImmutable $stopAt = null): BinlogFilterResult
+    public static function run(array $inputs, string $output, string $schema, string $mode, ?DateTimeImmutable $stopAt = null, ?BinlogBoundaries $boundaries = null): BinlogFilterResult
     {
         $out = @fopen($output, 'x');
         if ($out === false) {
             throw new RuntimeException('Unable to create the filtered binary log file.');
         }
 
-        $state = ['kept' => 0, 'dropped' => 0, 'problems' => [], 'first' => null, 'last' => null, 'cut' => false];
+        $state = ['kept' => 0, 'dropped' => 0, 'problems' => [], 'first' => null, 'last' => null, 'cut' => false, 'broken' => false];
         try {
-            foreach ($inputs as $input) {
-                if ($state['cut']) {
+            foreach ($inputs as $i => $input) {
+                if ($state['cut'] || $state['broken']) {
                     break;
                 }
-                self::file($input, $out, $schema, $mode, $stopAt, $state);
+                $boundaries?->beginInput($i);
+                self::file($input, $out, $schema, $mode, $stopAt, $state, $boundaries);
             }
         } finally {
             fclose($out);
@@ -85,9 +88,9 @@ final class BinlogSchemaFilter
 
     /**
      * @param resource $out
-     * @param array{kept: int, dropped: int, problems: list<string>, first: ?DateTimeImmutable, last: ?DateTimeImmutable, cut: bool} $state
+     * @param array{kept: int, dropped: int, problems: list<string>, first: ?DateTimeImmutable, last: ?DateTimeImmutable, cut: bool, broken: bool} $state
      */
-    private static function file(string $input, $out, string $schema, string $mode, ?DateTimeImmutable $stopAt, array &$state): void
+    private static function file(string $input, $out, string $schema, string $mode, ?DateTimeImmutable $stopAt, array &$state, ?BinlogBoundaries $boundaries): void
     {
         $in = @fopen($input, 'r');
         if ($in === false) {
@@ -101,12 +104,23 @@ final class BinlogSchemaFilter
         $preamble  = true;
         try {
             while (($line = fgets($in, 1 << 20)) !== false) {
-                if ($trailer) {
+                // The trailer of a log lasts until the next real event (several logs in one decoded stream).
+                if ($trailer && !str_starts_with($line, '# at ')) {
                     fwrite($out, $line);
                     continue;
                 }
-                $isAt  = str_starts_with($line, '# at ');
-                $isEnd = str_starts_with($line, '# End of log file');
+                $trailer = false;
+                $isAt    = str_starts_with($line, '# at ');
+                $isEnd   = str_starts_with($line, '# End of log file');
+                // PP-D1-H1: boundaries come from the binary structure; a boundary-looking line anywhere else (inside a
+                // string literal of another tenant) stops everything.
+                $structure = $boundaries instanceof BinlogBoundaries ? self::structure($line, $isAt, $isEnd, $boundaries) : null;
+                if ($structure !== null) {
+                    self::problem($state, $structure . ' (event boundaries do not match the binary logs)');
+                    $state['broken'] = true;
+
+                    return;
+                }
                 if ($preamble && !$isAt && !$isEnd) {
                     fwrite($out, $line);
                     continue;
@@ -133,9 +147,35 @@ final class BinlogSchemaFilter
             if (self::hasHeader($event)) {
                 self::event($event, $out, $schema, $mode, $stopAt, $state, $defaultDb, $group);
             }
+            // A stream that stops early (or never reaches the last log) is not the whole capture.
+            $incomplete = $boundaries instanceof BinlogBoundaries && !$state['cut'] ? $boundaries->complete() : null;
+            if ($incomplete !== null) {
+                self::problem($state, $incomplete . ' (event boundaries do not match the binary logs)');
+                $state['broken'] = true;
+            }
         } finally {
             fclose($in);
         }
+    }
+
+    /**
+     * Checks one line against the real event structure: null when it is fine.
+     */
+    private static function structure(string $line, bool $isAt, bool $isEnd, BinlogBoundaries $boundaries): ?string
+    {
+        if ($isAt) {
+            return preg_match('/^# at (\d+)\s*$/', $line, $m) === 1 ? $boundaries->at((int) $m[1]) : 'a malformed "# at" line';
+        }
+        if ($isEnd) {
+            return $boundaries->end();
+        }
+        if (preg_match(self::HEADER_END, $line, $m) === 1) {
+            $type = preg_match(self::HEADER, $line, $t) === 1 ? $t[1] : '';
+
+            return $boundaries->header((int) $m[1], $type === 'Start' || $type === 'Format_desc');
+        }
+
+        return null;
     }
 
     /**
@@ -155,7 +195,7 @@ final class BinlogSchemaFilter
     /**
      * @param list<string> $event lines: `# at` lines, the header, the content
      * @param resource $out
-     * @param array{kept: int, dropped: int, problems: list<string>, first: ?DateTimeImmutable, last: ?DateTimeImmutable, cut: bool} $state
+     * @param array{kept: int, dropped: int, problems: list<string>, first: ?DateTimeImmutable, last: ?DateTimeImmutable, cut: bool, broken: bool} $state
      * @param array{lines: list<string>, dbs: array<string, true>, at: string}|null $group
      */
     private static function event(array $event, $out, string $schema, string $mode, ?DateTimeImmutable $stopAt, array &$state, ?string &$defaultDb, ?array &$group): void
@@ -250,7 +290,7 @@ final class BinlogSchemaFilter
     /**
      * @param array{lines: list<string>, dbs: array<string, true>, at: string} $group
      * @param resource $out
-     * @param array{kept: int, dropped: int, problems: list<string>, first: ?DateTimeImmutable, last: ?DateTimeImmutable, cut: bool} $state
+     * @param array{kept: int, dropped: int, problems: list<string>, first: ?DateTimeImmutable, last: ?DateTimeImmutable, cut: bool, broken: bool} $state
      */
     private static function rows(array $group, $out, string $schema, string $mode, array &$state, ?DateTimeImmutable $time): void
     {
@@ -287,22 +327,29 @@ final class BinlogSchemaFilter
         $verdict = BinlogStatementClassifier::CONTROL;
         $reason  = 'session';
         $kept    = [];
+        $main    = false;
         foreach (explode('/*!*/;', $content) as $piece) {
             $statement = trim($piece);
             if ($statement === '') {
                 continue;
             }
-            if (preg_match('/^use\s+`((?:[^`]|``)+)`\s*$/i', BinlogStatementClassifier::normalise($statement), $m) === 1) {
+            $normalised = BinlogStatementClassifier::normalise($statement);
+            // PP-D1-H1: an event is [use] [session settings] then ONE statement. A second statement (a `/*!*/;` or a
+            // `use` hidden in a literal or an identifier) is never trusted.
+            if ($main && $normalised !== '') {
+                return [BinlogStatementClassifier::UNKNOWN, [], 'several statements in one event'];
+            }
+            if (preg_match('/^use\s+`((?:[^`]|``)+)`\s*$/i', $normalised, $m) === 1) {
                 $defaultDb = str_replace('``', '`', $m[1]);
                 continue;
             }
             [$result, $why] = BinlogStatementClassifier::classify($statement, $defaultDb, $schema);
             $kept[]         = $statement;
-            if ($result === BinlogStatementClassifier::CONTROL) {
+            if (BinlogStatementClassifier::isSessionSetting($statement)) {
                 continue;
             }
-            // The worst verdict of the event wins: unknown > other / server > schema.
-            if ($result === BinlogStatementClassifier::UNKNOWN || $verdict === BinlogStatementClassifier::CONTROL || $verdict === BinlogStatementClassifier::SCHEMA) {
+            $main = true;
+            if ($result !== BinlogStatementClassifier::CONTROL) {
                 $verdict = $result;
                 $reason  = $why;
             }
@@ -312,7 +359,7 @@ final class BinlogSchemaFilter
     }
 
     /**
-     * @param array{kept: int, dropped: int, problems: list<string>, first: ?DateTimeImmutable, last: ?DateTimeImmutable, cut: bool} $state
+     * @param array{kept: int, dropped: int, problems: list<string>, first: ?DateTimeImmutable, last: ?DateTimeImmutable, cut: bool, broken: bool} $state
      */
     private static function seen(array &$state, ?DateTimeImmutable $time, bool $kept): void
     {
@@ -326,7 +373,7 @@ final class BinlogSchemaFilter
     }
 
     /**
-     * @param array{kept: int, dropped: int, problems: list<string>, first: ?DateTimeImmutable, last: ?DateTimeImmutable, cut: bool} $state
+     * @param array{kept: int, dropped: int, problems: list<string>, first: ?DateTimeImmutable, last: ?DateTimeImmutable, cut: bool, broken: bool} $state
      */
     private static function problem(array &$state, string $problem): void
     {

@@ -20,6 +20,8 @@ final class ChainPaths
 
     public const EVENTS = self::BINLOG_DIRECTORY . CapturedBinlog::EVENTS;
 
+    public const EVENTS_INDEX = self::BINLOG_DIRECTORY . CapturedBinlog::EVENTS_INDEX;
+
     public const DUMP = 'database/dump.sql';
 
     public const MANIFEST = 'MANIFEST.json';

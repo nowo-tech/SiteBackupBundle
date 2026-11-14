@@ -71,7 +71,8 @@ final class BinlogFakes
               exit 0
             fi
             if [ -f "{$dir}/decode-error" ]; then echo "mysqlbinlog: decode failed" >&2; exit 2; fi
-            if [ -f "{$dir}/decoded" ]; then cp "{$dir}/decoded" "\$out"; else echo "-- decoded \$files" > "\$out"; fi
+            n=0; for f in \$files; do n=\$((n+1)); done
+            if [ -f "{$dir}/decoded.\$n" ]; then cp "{$dir}/decoded.\$n" "\$out"; elif [ -f "{$dir}/decoded" ]; then cp "{$dir}/decoded" "\$out"; else echo "-- decoded \$files" > "\$out"; fi
             exit 0
             SH);
     }

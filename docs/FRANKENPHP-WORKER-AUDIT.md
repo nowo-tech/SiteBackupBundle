@@ -158,6 +158,9 @@ Igor (igor-php 0.10.1) flagged five services. None keeps request, user or tenant
 | `RestoreOrchestrator::$filesystem` "not reset in reset()" (WARN) | False positive: Symfony's `Filesystem` is stateless; the call deletes the restore's own staging directory | `@igor-ignore` on a local reference (Igor's reset rule ignores annotations). Hardening: `restore()` now also clears the caller's heartbeat closure (it holds the operation lock) and the throttle when it ends or refuses to start, instead of keeping them until the next restore / `kernel.reset` (`RestoreHeartbeatTest::testKeptAliveOrchestratorKeepsNoHeartbeatBetweenRestores`, five restores on one instance without `reset()`) |
 | `DoctrineDbalSetupProgressStorage::$stepJournal` "not reset in reset()" (WARN) | False positive: `clear()` deletes journal rows in the database; the journal's only in-memory state (schema flag) is reset by `reset()` | `@igor-ignore`; `reset()` calls the journal without the nullsafe operator |
 
+- 1.36 (PP delta 1): `BinlogBoundaries` (the structural cursor of one binlog filter run) mutates its own position on
+  every line; it is created per capture / restore run inside `BinlogCapture` / `ChainRestorer` and never registered
+  as a service. Its mutations carry a same-line `@igor-ignore`.
 - **Status:** Closed — Igor 0 KO / 0 WARN; `igor` CI job added.
 
 No other findings. Panel authentication is stored in the request session (`PasswordSiteBackupAccessGate.php:47-52`, `74`), and role checks call `isGranted()` per request (`ConfigurableSiteBackupAccessChecker.php:21-34`), so no user or auth decision is kept across requests.

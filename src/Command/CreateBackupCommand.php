@@ -8,6 +8,7 @@ use InvalidArgumentException;
 use Nowo\SiteBackupBundle\Enum\ArchiveFormat;
 use Nowo\SiteBackupBundle\Enum\TableRule;
 use Nowo\SiteBackupBundle\Exception\BackupAlreadyRunningException;
+use Nowo\SiteBackupBundle\Exception\BinlogFilterException;
 use Nowo\SiteBackupBundle\Exception\BinlogGapException;
 use Nowo\SiteBackupBundle\Exception\InvalidBackupOptionsException;
 use Nowo\SiteBackupBundle\Incremental\IncrementalBackupManagerInterface;
@@ -41,7 +42,7 @@ final class CreateBackupCommand extends Command
 {
     public const EXIT_LOCKED = 75;
 
-    /** 1.36+: the incremental cannot continue its chain (binlog expired, other server): take a full backup. */
+    /** 1.36+: the incremental cannot continue its chain (binlog gap, or events that cannot be attributed): take a full backup. */
     public const EXIT_BINLOG_GAP = 3;
 
     public function __construct(private readonly SiteBackupManagerInterface $manager)
@@ -66,6 +67,7 @@ final class CreateBackupCommand extends Command
             ->addOption('key-id', null, InputOption::VALUE_REQUIRED, 'Opaque id of the archive password in your key ring (recorded in the meta, 1.29+)')
             ->addOption('record-binlog', null, InputOption::VALUE_NONE, 'Record the binlog coordinates of the dump and start a chain (1.36+; builtin dumper, Oracle MySQL tools)')
             ->addOption('record-file-manifest', null, InputOption::VALUE_NONE, 'Record the file manifest and start a chain (1.36+)')
+            ->addOption('routines', null, InputOption::VALUE_NONE, 'With --record-binlog: also dump stored routines and events (1.36+)')
             ->addOption('incremental-of', null, InputOption::VALUE_REQUIRED, 'Create an incremental backup after this backup (the head of its chain, 1.36+)');
         PasswordInput::configure($this);
     }
@@ -82,6 +84,11 @@ final class CreateBackupCommand extends Command
             return self::EXIT_LOCKED;
         } catch (BinlogGapException $e) {
             $io->error(SecretRedactor::redact($e->getMessage()) . ' (' . $e->getReason() . ')');
+
+            return self::EXIT_BINLOG_GAP;
+        } catch (BinlogFilterException $e) {
+            // PP-D1-L2: like a gap, only a new full backup continues (the same event fails every later capture).
+            $io->error(SecretRedactor::redact($e->getMessage()) . ' Take a full backup.');
 
             return self::EXIT_BINLOG_GAP;
         } catch (InvalidBackupOptionsException|InvalidArgumentException $e) {
@@ -168,7 +175,7 @@ final class CreateBackupCommand extends Command
             if (!$this->manager instanceof IncrementalBackupManagerInterface) {
                 throw new InvalidBackupOptionsException('--incremental-of needs the bundle\'s SiteBackupManager.');
             }
-            if ($input->getOption('no-database') || $input->getOption('no-files') || $paths !== null || $rules !== [] || $input->getOption('record-binlog') || $input->getOption('record-file-manifest')) {
+            if ($input->getOption('no-database') || $input->getOption('no-files') || $paths !== null || $rules !== [] || $input->getOption('record-binlog') || $input->getOption('record-file-manifest') || $input->getOption('routines')) {
                 throw new InvalidBackupOptionsException('--incremental-of takes its content from the chain: --no-database, --no-files, --path, table rules and --record-* do not apply.');
             }
 
@@ -196,6 +203,7 @@ final class CreateBackupCommand extends Command
             keyId: is_string($input->getOption('key-id')) && $input->getOption('key-id') !== '' ? $input->getOption('key-id') : null,
             recordBinlogCoordinates: (bool) $input->getOption('record-binlog'),
             recordFileManifest: (bool) $input->getOption('record-file-manifest'),
+            dumpRoutines: (bool) $input->getOption('routines'),
         );
     }
 }

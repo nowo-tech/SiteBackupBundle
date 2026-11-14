@@ -348,7 +348,7 @@ final class BackupArchiver
                     $warnings     = array_merge($warnings, $report->warnings);
                     if ($report->binlogCoordinates !== null) {
                         // PP-L8: the snapshot is at most this recent; a point in time before it cannot be restored.
-                        $meta += $this->dumpCoordinates($report->binlogCoordinates) + ['snapshot_at' => $this->clock->now()->format(DATE_ATOM)];
+                        $meta += $this->dumpCoordinates($report->binlogCoordinates) + ['snapshot_at' => $this->clock->now()->format(DATE_ATOM), 'dump_routines' => $options->dumpRoutines];
                     }
                 }
                 $beat(BackupProgress::PHASE_HASHING);
@@ -1380,6 +1380,12 @@ final class BackupArchiver
                 $this->filesystem->rename($events->path, $payloadDir . '/' . ChainPaths::EVENTS);
                 $checksums[ChainPaths::EVENTS] = $events->sha256;
                 $meta['binlog_events']         = ['path' => ChainPaths::EVENTS, 'sha256' => $events->sha256, 'size' => $events->sizeBytes, 'dropped_events' => $captured->droppedEvents];
+                $index                         = $captured->eventsIndex;
+                if ($index instanceof CapturedBinlog) {
+                    $this->filesystem->rename($index->path, $payloadDir . '/' . ChainPaths::EVENTS_INDEX);
+                    $checksums[ChainPaths::EVENTS_INDEX]   = $index->sha256;
+                    $meta['binlog_events']['index_sha256'] = $index->sha256;
+                }
             }
         } finally {
             $capture->discard($captured);
@@ -1889,7 +1895,7 @@ final class BackupArchiver
         $tick = static fn () => $beat();
 
         if ($this->builtinDumper instanceof BuiltinMysqlDumper) {
-            return $this->builtinDumper->dump($dumpAbsolute, $options->tableRules, $options->allowUnsafeTableRules, $tick, $options->recordBinlogCoordinates);
+            return $this->builtinDumper->dump($dumpAbsolute, $options->tableRules, $options->allowUnsafeTableRules, $tick, $options->recordBinlogCoordinates, $options->dumpRoutines);
         }
 
         $command = (string) $this->databaseDumpCommand;

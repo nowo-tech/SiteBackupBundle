@@ -149,6 +149,22 @@ opt-in: existing options, defaults, archives, sidecars and events are unchanged.
     (L6), files not written make the restore incomplete (L7), `snapshot_at` bounds `--until` (L8), payload paths
     reserved under `.nowo-site-backup/` (L9), one chain = one format and key, checked at capture and restore (L10).
     The restore prints "Database at" and "Files as of".
+- **Audit PP, delta 1 (before the tag).**
+  - **Untrusted tenants (PP-D1-H1):** event boundaries of the decoded binlogs come from the binary logs' own event
+    headers (`BinlogBoundaries`), never from the text: a `# at`, header or end-of-log line inside another tenant's
+    string literal fails the capture closed. The filtered events' boundaries are archived in
+    `.nowo-site-backup/binlog/events.idx` (checksummed) and checked again at restore time; raw captures are decoded in
+    full and checked against the archived logs (the `--until` cut moved from `--stop-datetime` into the filter). A
+    statement event may hold one statement only.
+  - **Renames across schemas (PP-D1-M1):** `ALTER TABLE … RENAME TO` is classified on both names, like `RENAME TABLE`;
+    a rename spanning schemas fails closed.
+  - **Cross-schema references (PP-D1-L1):** a statement of the schema that names another database after `FROM`,
+    `JOIN`, `LIKE`, `REFERENCES`, `INTO` or `UPDATE` (views, trigger bodies, `LIKE`, foreign keys) fails closed.
+  - `nowo:site-backup:create` exits 3 on `BinlogFilterException` (PP-D1-L2).
+  - Opt-in `BackupOptions::$dumpRoutines` / `--routines` dumps stored routines and events (`--routines --events`) in a
+    chain's full backup; meta `dump_routines` (PP-D1-L3). Triggers are kept as before and verified in CI.
+  - `RemoteBackupPublisher::prune()` keeps the 1.35 behaviour for prefixes without any chain sidecar (an unreadable
+    sidecar is still reported); it fails closed only where chains exist.
 
 ### Changed
 

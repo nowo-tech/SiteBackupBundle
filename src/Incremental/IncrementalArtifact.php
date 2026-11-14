@@ -41,6 +41,7 @@ final readonly class IncrementalArtifact
         public string $mode = self::RAW,
         public ?CapturedBinlog $events = null,
         public int $droppedEvents = 0,
+        public ?CapturedBinlog $eventsIndex = null,
     ) {
         if ($mode !== self::RAW && $mode !== self::FILTERED) {
             throw new InvalidArgumentException('The capture mode is raw or filtered.');

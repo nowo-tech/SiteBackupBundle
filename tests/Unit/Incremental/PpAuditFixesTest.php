@@ -94,12 +94,12 @@ final class PpAuditFixesTest extends TestCase
         (new Filesystem())->mkdir([$this->project . '/config', $this->root . '/work', $this->tools . '/server']);
         $this->clock = new MockClock('2026-11-01 00:00:00 UTC');
         $this->put('config/app.yaml', 'a');
-        file_put_contents($this->tools . '/server/binlog.000002', str_repeat('b', 2000));
+        FakeBinlog::write($this->tools . '/server/binlog.000002', [127, 1480, 2000]);
         for ($n = 3; $n < 8; ++$n) {
-            file_put_contents($this->tools . '/server/binlog.00000' . $n, str_repeat('c', 158));
+            FakeBinlog::write($this->tools . '/server/binlog.00000' . $n, [127, 158]);
         }
         // What the fake mysqlbinlog "decodes" (filtered captures run it through the schema filter).
-        file_put_contents($this->tools . '/decoded', "DELIMITER /*!*/;\n# at 1480\n#261101  0:30:00 server id 1  end_log_pos 2 CRC32 0x1 \tQuery\tthread_id=1\nuse `app`/*!*/;\nCREATE TABLE newt (id INT)\n/*!*/;\n# End of log file\n");
+        file_put_contents($this->tools . '/decoded', "DELIMITER /*!*/;\n" . FakeBinlog::start(127) . FakeBinlog::event(1480, 2000, "Query\tthread_id=1", "use `app`/*!*/;\nCREATE TABLE newt (id INT)\n/*!*/;\n") . "# End of log file\n");
     }
 
     protected function tearDown(): void
@@ -188,7 +188,7 @@ final class PpAuditFixesTest extends TestCase
         $from    = new BinlogCoordinates('binlog.000002', 1480, ChainFixtures::UUID);
 
         // An event that cannot be attributed: nothing is archived, the capture says why.
-        file_put_contents($this->tools . '/decoded', "# at 1480\n#261101  0:30:00 server id 1  end_log_pos 2 CRC32 0x1 \tQuery\tthread_id=1\nuse `app`/*!*/;\nDROP DATABASE app\n/*!*/;\n");
+        file_put_contents($this->tools . '/decoded', "DELIMITER /*!*/;\n" . FakeBinlog::start(127) . FakeBinlog::event(1480, 2000, "Query\tthread_id=1", "use `app`/*!*/;\nDROP DATABASE app\n/*!*/;\n") . "# End of log file\n");
         try {
             $capture->capture($from, 'app');
             self::fail('an unattributable event was archived');
@@ -233,7 +233,7 @@ final class PpAuditFixesTest extends TestCase
         self::assertArrayHasKey(ChainPaths::BINLOG_DIRECTORY . 'binlog.000002', $inc->getChecksums());
 
         // Scenario B in a raw capture: another schema's DDL from an app session -> the restore is refused.
-        file_put_contents($this->tools . '/decoded', "# at 1480\n#261101  0:30:00 server id 1  end_log_pos 2 CRC32 0x1 \tQuery\tthread_id=1\nuse `app`/*!*/;\nDROP TABLE `other`.`victim`\n/*!*/;\n");
+        file_put_contents($this->tools . '/decoded', "DELIMITER /*!*/;\n" . FakeBinlog::start(127) . FakeBinlog::event(1480, 2000, "Query\tthread_id=1", "use `app`/*!*/;\nDROP TABLE `other`.`victim`\n/*!*/;\n") . "# End of log file\n");
         try {
             $manager->restoreChain($inc->getId());
             self::fail('a replay touching another schema was attempted');
@@ -336,11 +336,9 @@ final class PpAuditFixesTest extends TestCase
 
             self::assertSame('UnreadableSidecar', $report->errors['p/' . $full->getId() . '.tar.gz.backup.json'] ?? null);
             self::assertNotContains('p/' . $full->getId() . '.tar.gz', $report->deletedKeys);
-            if ($keepsMetadata) {
-                self::assertSame(['p/' . $old->getId() . '.tar.gz'], $report->deletedKeys, 'the chain id on the object keeps that chain only');
-            } else {
-                self::assertSame([], $report->deletedKeys, 'without a chain id, nothing is pruned');
-            }
+            // With the chain id on the object its chain is kept; without it and without any readable chain sidecar
+            // under the prefix (PP-D1-I1), pruning goes on as in 1.35. The unreadable archive is never deleted.
+            self::assertSame(['p/' . $old->getId() . '.tar.gz'], $report->deletedKeys);
         }
         self::assertStringContainsString('remote sidecar unreadable', implode("\n", $logger->lines()));
     }

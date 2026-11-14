@@ -430,8 +430,32 @@ chain's schema: replays never need another one. `REPLICATION SLAVE` is spelled `
   only on a server dedicated to this application, and encrypt the archives. A raw chain restore decodes the logs and
   refuses the whole restore if any event belongs to another schema.
 
-Changing `binlog_capture` starts a new chain (a chain restore refuses mixed modes). Statement bodies (views, triggers,
-routines) are not parsed: a view of the schema that reads another schema is kept as written.
+Changing `binlog_capture` starts a new chain (a chain restore refuses mixed modes).
+
+**Other tenants are untrusted** (PP delta 1). On a shared server another application can write anything into its own
+schema, including string literals shaped like `mysqlbinlog` output. The filter therefore never trusts the decoded
+text for structure:
+
+- **Event boundaries come from the binary logs themselves.** The capture indexes every event of the copied logs (the
+  v4 headers: start and end position) and accepts a `# at N` line only at the next real event start, an event header
+  only right after it with the indexed end position, and `# End of log file` only once every event was seen. A literal
+  holding `# at …` lines, a header-looking line or a fake trailer makes the boundaries disagree and **fails the
+  capture** (`BinlogFilterException`, nothing archived). The boundaries of the filtered events are recorded in
+  `.nowo-site-backup/binlog/events.idx` (covered by the archive checksums) and checked again at restore time; raw
+  captures are re-indexed from the archived logs.
+- **One statement per event.** A statement event may hold `use`, session settings, then exactly one statement; anything
+  after it fails closed.
+- **Cross-schema statements fail closed:** `RENAME TABLE` and `ALTER TABLE … RENAME TO` are classified on every table
+  they touch (a rename into or out of the schema is refused), and a statement of the schema that names another
+  database after `FROM`, `JOIN`, `LIKE`, `REFERENCES`, `INTO` or `UPDATE` (a view or trigger body, `CREATE TABLE …
+  LIKE`, a foreign key) is refused: such a replay would stop half-way under the restore account. Triggers whose body
+  writes only the schema, and `CREATE` / `DROP TRIGGER` on it, are kept.
+- **Transaction compression** (`binlog_transaction_compression=ON`) is not supported: its payload events do not follow
+  the expected structure and the capture fails closed. Keep it off on servers that use incrementals.
+
+A tenant can therefore make captures fail (start a new chain after removing the offending object), never get its
+events into the archive or the replay. With the `nowo:site-backup:create` command a `BinlogFilterException` exits with
+**3**, like a binlog gap: take a full backup.
 
 ### Taking a chain
 
@@ -452,8 +476,17 @@ try {
 
 ```bash
 bin/console nowo:site-backup:create --record-binlog --record-file-manifest
-bin/console nowo:site-backup:create --incremental-of=<head id>   # exit 3 = binlog gap: take a full backup
+bin/console nowo:site-backup:create --incremental-of=<head id>   # exit 3 = binlog gap or refused event: take a full backup
+bin/console nowo:site-backup:create --record-binlog --routines   # opt-in: stored routines and events in the chain's dump
 ```
+
+- **Triggers** are always in the chain's full dump (`mysqldump` keeps them by default) and are re-created by the dump
+  import; the pre-flight does not count the schema's triggers that the dump re-creates. Triggers created later travel
+  in the incrementals (`CREATE` / `DROP TRIGGER`).
+- **Stored routines and events** are dumped only on request: `BackupOptions(recordBinlogCoordinates: true,
+  dumpRoutines: true)` / `--routines` runs the chain's dump with `--routines --events` (meta `dump_routines`). The
+  dump account needs `EVENT` on the schema (above) and the restore account `SET_ANY_DEFINER` when another account
+  created them.
 
 - `recordBinlogCoordinates` runs the dump with `--source-data=2` (and `--set-gtid-purged=COMMENTED`, 8.0.32+) with the
   `binlog_url` account and records `binlog_file`, `binlog_position`, `gtid_executed`, `server_uuid`,
@@ -496,9 +529,10 @@ bin/console nowo:site-backup:restore-chain <head id> --force --recreate-database
 2. **Prepare, touching nothing.** Extract every archive, re-hash what will be used, fold the file deltas and check the
    final file set against the last applied manifest, **compare the target schema with the dump** (PP-H1: a table, view
    or trigger the dump does not re-create — any object created after the full backup, a migration — refuses the
-   restore, naming the objects; stored routines and events are never in the dump and count as such), assemble the
-   events (filtered captures concatenated and cut at `--until`; raw captures decoded with `--stop-datetime`) and
-   **check every event against the schema** (any other schema's event refuses the restore).
+   restore, naming the objects; stored routines and events count as such unless the full backup was taken with
+   `--routines`), assemble the events (filtered captures concatenated and checked against their recorded boundaries;
+   raw captures decoded in full and checked against the archived logs' structure; both cut at `--until`) and **check
+   every event against the schema** (any other schema's event refuses the restore).
 3. **Apply.** Create the schema if it does not exist (with `--recreate-database`: drop and re-create it first, keeping
    its character set and collation; routines and events are dropped with it), import the dump, replay the events
    (`mysql --binary-mode`, no `--database` filter), write the files (through fresh random temp files, never through a
@@ -536,7 +570,8 @@ incremental depends on (delete chains from their head).
   entries / bytes, format, encryption, key id — never the manifest itself) and the archive object carries
   `nowo-chain-id`. `RemoteBackupPublisher::prune()` never skips a sidecar silently: an unreadable or oversized one is
   reported in `PruneReport::$errors` and logged; its chain (from the object metadata) is kept, and without that
-  metadata nothing is pruned in that run. `orphans()` never returns a chain member (an archive named as a parent or
+  metadata nothing is pruned in that run. A prefix without any chain sidecar prunes as in 1.35 (the unreadable
+  sidecar is still reported). `orphans()` never returns a chain member (an archive named as a parent or
   carrying `nowo-chain-id`).
 - To continue a chain whose parent exists only remotely, download the parent archive and call
   `incrementalOptionsFromArchive($path, $password, $base)`: it verifies the archive and reads the manifest from its

@@ -53,7 +53,6 @@ use function hash_file;
 use function json_decode;
 use function json_encode;
 use function scandir;
-use function str_repeat;
 use function symlink;
 use function touch;
 
@@ -284,8 +283,9 @@ final class ChainEdgeCasesTest extends TestCase
 
     public function testTheRealCaptureServiceInsideTheArchiver(): void
     {
-        file_put_contents($this->root . '/server/binlog.000002', str_repeat('b', 2000));
-        $server   = BinlogFakes::server([['name' => 'binlog.000002', 'size' => 2000]]);
+        FakeBinlog::write($this->root . '/server/binlog.000002', [127, 1480, 2000]);
+        $server = BinlogFakes::server([['name' => 'binlog.000002', 'size' => 2000]]);
+        file_put_contents($this->root . '/decoded', "DELIMITER /*!*/;\n" . FakeBinlog::start(127) . FakeBinlog::event(1480, 2000, "Query\tthread_id=1", "BEGIN\n/*!*/;\n") . "# End of log file\n");
         $capture  = new BinlogCapture($server, 'mysql://bk@db/app', new MysqlBinlogTool(BinlogFakes::mysqlbinlog($this->root)), $this->root . '/work', $this->clock);
         $archiver = new BackupArchiver($this->project, $this->storage, ['config'], [], null, 60, clock: $this->clock, builtinDumper: new BuiltinMysqlDumper('mysql://bk@db/app', EngineFixtures::fakeMysqldump($this->tools)), workDir: $this->root . '/work', binlogCapture: $capture, binlogServer: $server);
         $ticks    = 0;
@@ -295,7 +295,7 @@ final class ChainEdgeCasesTest extends TestCase
             heartbeat: static function () use (&$ticks): void {
                 ++$ticks;
             },
-            binlogFrom: new BinlogCoordinates('binlog.000002', 100, ChainFixtures::UUID),
+            binlogFrom: new BinlogCoordinates('binlog.000002', 1480, ChainFixtures::UUID),
             parentId: 'p',
             chainId: 'p',
         ));
@@ -404,16 +404,18 @@ final class ChainEdgeCasesTest extends TestCase
         $server = BinlogFakes::server([['name' => 'binlog.000002', 'size' => 2000]]);
         (new Filesystem())->mkdir($this->tools . '/server');
         // What the fake mysqlbinlog copies: binlog.000002 (the dump's file, 2000 bytes), then 158-byte logs.
-        file_put_contents($this->tools . '/server/binlog.000002', str_repeat('b', 2000));
+        FakeBinlog::write($this->tools . '/server/binlog.000002', [127, 1480, 2000]);
         for ($n = 3; $n < 8; ++$n) {
-            file_put_contents($this->tools . '/server/binlog.00000' . $n, str_repeat('c', 158));
+            FakeBinlog::write($this->tools . '/server/binlog.00000' . $n, [127, 158]);
         }
         $capture  = new BinlogCapture($server, $url, new MysqlBinlogTool(BinlogFakes::mysqlbinlog($this->tools)), $this->root . '/work', $this->clock);
         $archiver = new BackupArchiver($this->project, $this->storage, ['config'], [], null, 60, clock: $this->clock, builtinDumper: new BuiltinMysqlDumper($url, $dump), workDir: $this->root . '/work', binlogCapture: $capture, binlogServer: $server);
         $restorer = new ChainRestorer($archiver, RestorePathGuard::fromArchiver($this->project, [], $archiver), $this->project, new DumpImporter($url, BinlogFakes::mysqlClient($this->tools)), $this->replayer());
 
         // The fake mysqlbinlog copies <tools>/server/<name>; event times come from <tools>/decoded.
-        file_put_contents($this->tools . '/decoded', "DELIMITER /*!*/;\n# at 4\n#261101  0:30:00 server id 1  end_log_pos 2 CRC32 0x1 \tQuery\tthread_id=1\nBEGIN\n/*!*/;\n# End of log file\n");
+        file_put_contents($this->tools . '/decoded', "DELIMITER /*!*/;\n" . FakeBinlog::start(127) . FakeBinlog::event(1480, 2000, "Query\tthread_id=1", "BEGIN\n/*!*/;\n") . "# End of log file\n");
+        // Two logs in one decoded stream (the second chain captures binlog.000002 and binlog.000003).
+        file_put_contents($this->tools . '/decoded.2', "DELIMITER /*!*/;\n" . FakeBinlog::start(127) . FakeBinlog::event(1480, 2000, "Query\tthread_id=1", "BEGIN\n/*!*/;\n") . FakeBinlog::start(4) . FakeBinlog::event(127, 158, 'Xid = 1', "COMMIT/*!*/;\n") . "# End of log file\n");
 
         return [$this->manager($archiver, $restorer), $archiver];
     }

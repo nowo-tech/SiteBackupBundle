@@ -92,8 +92,30 @@ final class BinlogStatementClassifier
         if ($defaultDb !== $schema && $hasBody) {
             return [self::UNKNOWN, $verb . ' with a body under another default database'];
         }
+        // PP-D1-L1: a statement of the schema that reads or writes another one (a view or trigger body, LIKE, a foreign
+        // key) would stop the replay half-way under the restore account: refused at capture time. Best effort: names
+        // after FROM / JOIN / LIKE / REFERENCES / INTO / UPDATE.
+        if (preg_match_all('/\b(?:FROM|JOIN|LIKE|REFERENCES|INTO|UPDATE)\s+(' . self::NAME . ')/i', $sql, $refs) > 0) {
+            foreach ($refs[1] as $ref) {
+                $db = self::split($ref)[0];
+                if ($db !== null && $db !== $schema) {
+                    return [self::UNKNOWN, $verb . ' that refers to another database'];
+                }
+            }
+        }
 
         return [self::SCHEMA, $verb];
+    }
+
+    /**
+     * True for the session settings `mysqlbinlog` prints before an event's statement (`SET` of session or user
+     * variables, versioned `\C charset` comments, comments).
+     */
+    public static function isSessionSetting(string $statement): bool
+    {
+        $sql = self::normalise($statement);
+
+        return $sql === '' || (preg_match('/^SET\s/i', $sql) === 1 && preg_match(self::SERVER_LEVEL, $sql) !== 1);
     }
 
     /**
@@ -146,8 +168,14 @@ final class BinlogStatementClassifier
                 continue;
             }
             $names = $verb === 'CREATE TRIGGER' ? [$m[1], $m[2]] : [$m[1]];
-            $rest  = $verb === 'CREATE TRIGGER' ? ($m[3] ?? '') : $m[2];
-            $body  = match ($verb) {
+            // PP-D1-M1: `ALTER TABLE a RENAME [TO|AS] b` (also among other alter specs) touches b too.
+            if ($verb === 'ALTER TABLE' && preg_match_all('/\bRENAME\s+(?!COLUMN\b|INDEX\b|KEY\b)(?:TO\s+|AS\s+)?(' . $n . ')/i', $m[2], $renames) > 0) {
+                foreach ($renames[1] as $renamed) {
+                    $names[] = $renamed;
+                }
+            }
+            $rest = $verb === 'CREATE TRIGGER' ? ($m[3] ?? '') : $m[2];
+            $body = match ($verb) {
                 'CREATE VIEW', 'CREATE TRIGGER', 'CREATE ROUTINE', 'CREATE EVENT' => true,
                 'CREATE TABLE', 'ALTER TABLE'                                     => preg_match('/\b(?:SELECT|LIKE)\b/i', $rest) === 1 || self::unqualifiedReference($rest),
                 default                                                           => false,

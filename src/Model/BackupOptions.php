@@ -62,6 +62,9 @@ final readonly class BackupOptions
      *                                           instead of dumping the database; usually where the parent ends
      * @param string|null $parentId 1.36+ (incremental): the backup this one continues
      * @param string|null $chainId 1.36+ (incremental): the chain of the parent
+     * @param bool $dumpRoutines 1.36+: with recordBinlogCoordinates, also dump stored routines and events
+     *                           (`--routines --events`) so chain restores re-create them; the restore account then needs
+     *                           SET_ANY_DEFINER for routines of other definers
      */
     public function __construct(
         public bool $includeDatabase = true,
@@ -85,6 +88,7 @@ final readonly class BackupOptions
         public ?BinlogCoordinates $binlogFrom = null,
         public ?string $parentId = null,
         public ?string $chainId = null,
+        public bool $dumpRoutines = false,
     ) {
         $this->validate();
         $this->validateChain();
@@ -242,6 +246,7 @@ final readonly class BackupOptions
             'binlogFrom'              => $this->binlogFrom,
             'parentId'                => $this->parentId,
             'chainId'                 => $this->chainId,
+            'dumpRoutines'            => $this->dumpRoutines,
         ];
 
         /* @phpstan-ignore argument.type (keys are the constructor's parameter names) */
@@ -311,6 +316,9 @@ final readonly class BackupOptions
         }
         if ($this->recordBinlogCoordinates && $this->tableRules !== []) {
             throw new InvalidBackupOptionsException('recordBinlogCoordinates cannot be combined with table rules: a binlog replay needs every table.');
+        }
+        if ($this->dumpRoutines && !$this->recordBinlogCoordinates) {
+            throw new InvalidBackupOptionsException('dumpRoutines applies to the full backup of a chain (recordBinlogCoordinates).');
         }
         if ($this->recordFileManifest && !$this->includeFiles) {
             throw new InvalidBackupOptionsException('recordFileManifest needs includeFiles.');

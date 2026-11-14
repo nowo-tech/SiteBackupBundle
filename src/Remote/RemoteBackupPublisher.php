@@ -207,7 +207,13 @@ final class RemoteBackupPublisher
         }
 
         $deleted = [];
-        foreach ($blind ? [] : RetentionPlanner::plan($items, $policy, $justCreatedId, $this->clock->now()) as $id) {
+        // PP-D1-I1: a prefix without any chain sidecar keeps the 1.35 behaviour (the unreadable one is reported and
+        // skipped); with chains it could be a parent, so nothing is pruned in this run.
+        $hasChains = false;
+        foreach ($catalogue as [$sidecar]) {
+            $hasChains = $hasChains || is_array($sidecar['chain'] ?? null);
+        }
+        foreach ($blind && $hasChains ? [] : RetentionPlanner::plan($items, $policy, $justCreatedId, $this->clock->now()) as $id) {
             $key = $keysById[$id];
             try {
                 $target->delete($key);

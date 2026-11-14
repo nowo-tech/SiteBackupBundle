@@ -85,10 +85,11 @@ final class BuiltinMysqlDumper
      * @param bool $recordBinlogCoordinates 1.36+: `--source-data=2` (+ `--set-gtid-purged=COMMENTED`) on the data pass,
      *                                      parsed into {@see DumpReport::$binlogCoordinates}; needs the Oracle
      *                                      mysqldump 8.0.26+ (the MariaDB client cannot read MySQL binlog coordinates)
+     * @param bool $routines 1.36+: `--routines --events` on the data pass (opt-in, chain full backups)
      *
      * @throws DumpFailedException|InvalidBackupOptionsException|UnsafeTableRuleException
      */
-    public function dump(string $target, array $tableRules = [], bool $allowUnsafeTableRules = false, ?callable $tick = null, bool $recordBinlogCoordinates = false): DumpReport
+    public function dump(string $target, array $tableRules = [], bool $allowUnsafeTableRules = false, ?callable $tick = null, bool $recordBinlogCoordinates = false, bool $routines = false): DumpReport
     {
         self::assertExtraOptions($this->extraOptions);
         if ($recordBinlogCoordinates && $tableRules !== []) {
@@ -125,7 +126,7 @@ final class BuiltinMysqlDumper
         }
         // `--set-gtid-purged=COMMENTED` exists from 8.0.32; older 8.0 clients record the coordinates without the GTID set.
         $gtidCommented = MysqlToolVersion::supports(MysqlToolVersion::oracleClient($version), '8.0.32');
-        $commands      = self::planCommands($spec['command'], $database, $tableRules, $gtidOff, $recordBinlogCoordinates, $gtidCommented);
+        $commands      = self::planCommands($spec['command'], $database, $tableRules, $gtidOff, $recordBinlogCoordinates, $gtidCommented, $routines);
 
         // Owner-only before mysqldump opens it: the dump is a plaintext copy of the database.
         $this->filesystem->touch($target);
@@ -182,12 +183,16 @@ final class BuiltinMysqlDumper
      *
      * @return list<list<string>>
      */
-    public static function planCommands(array $baseCommand, string $database, array $tableRules, bool $gtidPurgedOff, bool $recordBinlogCoordinates = false, bool $gtidCommented = true): array
+    public static function planCommands(array $baseCommand, string $database, array $tableRules, bool $gtidPurgedOff, bool $recordBinlogCoordinates = false, bool $gtidCommented = true, bool $routines = false): array
     {
         $common = $gtidPurgedOff ? ['--set-gtid-purged=OFF'] : [];
         // 1.36+: the data pass records the binlog coordinates of its snapshot (as a comment) and, from 8.0.32, the
         // snapshot's GTID set as a comment too (never executed on import).
         $data = $recordBinlogCoordinates ? ['--source-data=2', $gtidCommented ? '--set-gtid-purged=COMMENTED' : '--set-gtid-purged=OFF'] : $common;
+        if ($routines) {
+            // 1.36+ (PP-D1-L3, opt-in): stored routines and events too, so a chain restore re-creates them.
+            $data = [...$data, '--routines', '--events'];
+        }
 
         $ignore    = [];
         $structure = [];

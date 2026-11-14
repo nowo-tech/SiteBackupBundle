@@ -13,6 +13,7 @@ use Nowo\SiteBackupBundle\Database\DumpImporter;
 use Nowo\SiteBackupBundle\Exception\ChainBrokenException;
 use Nowo\SiteBackupBundle\Exception\ChainRestoreException;
 use Nowo\SiteBackupBundle\Incremental\BackupChain;
+use Nowo\SiteBackupBundle\Incremental\BinlogBoundaries;
 use Nowo\SiteBackupBundle\Incremental\BinlogCoordinates;
 use Nowo\SiteBackupBundle\Incremental\BinlogReplayer;
 use Nowo\SiteBackupBundle\Incremental\BinlogSchemaFilter;
@@ -36,6 +37,7 @@ use function array_key_last;
 use function array_slice;
 use function array_splice;
 use function array_values;
+use function basename;
 use function count;
 use function dirname;
 use function file_get_contents;
@@ -45,6 +47,7 @@ use function implode;
 use function is_array;
 use function is_dir;
 use function is_file;
+use function is_int;
 use function is_link;
 use function is_string;
 use function json_decode;
@@ -276,7 +279,7 @@ final class ChainRestorer
             }
         }
         if ($extra !== []) {
-            throw new ChainBrokenException([sprintf('The target schema holds %d object(s) the full backup does not re-create (%s%s): restore into an empty schema or server, or pass --recreate-database to drop and re-create the schema first (stored routines and events are not in the dump and are dropped too).', count($extra), implode(', ', array_slice($extra, 0, 20)), count($extra) > 20 ? ', …' : '')]);
+            throw new ChainBrokenException([sprintf('The target schema holds %d object(s) the full backup does not re-create (%s%s): restore into an empty schema or server, or pass --recreate-database to drop and re-create the schema first (stored routines and events are in the dump only when the full backup was taken with dumpRoutines / --routines; otherwise --recreate-database drops them).', count($extra), implode(', ', array_slice($extra, 0, 20)), count($extra) > 20 ? ', …' : '')]);
         }
 
         return false;
@@ -291,13 +294,15 @@ final class ChainRestorer
      */
     private function replayFile(BackupChain $chain, array $dirs, array $binlogLinks, string $staging, ?DateTimeImmutable $until, Closure $tick): ?string
     {
-        $root  = $chain->links[0];
-        $mode  = $chain->links[(int) array_key_first($binlogLinks)]->binlogCapture ?? IncrementalArtifact::RAW;
-        $paths = [];
+        $root      = $chain->links[0];
+        $mode      = $chain->links[(int) array_key_first($binlogLinks)]->binlogCapture ?? IncrementalArtifact::RAW;
+        $paths     = [];
+        $sequences = [];
         foreach ($binlogLinks as $i => $_) {
             $link = $chain->links[$i];
             if ($mode === IncrementalArtifact::FILTERED) {
-                $paths[] = $this->stagedFile($chain->artifacts[$i], $dirs[$i], ChainPaths::EVENTS);
+                $paths[]     = $this->stagedFile($chain->artifacts[$i], $dirs[$i], ChainPaths::EVENTS);
+                $sequences[] = $this->recordedSequence($chain->artifacts[$i], $dirs[$i]);
                 continue;
             }
             foreach ($link->binlogFiles as $file) {
@@ -308,20 +313,47 @@ final class ChainRestorer
             return null;
         }
 
-        $stopAt = $until?->modify('+1 second');
+        // PP-D1-H1: the boundaries of every event are checked against the structure (recorded index of filtered
+        // captures, binary headers of raw ones); the cut at --until is made here for both.
         if ($mode === IncrementalArtifact::RAW) {
-            $decoded = $staging . '/decoded.sql';
-            $this->replayer->decode($paths, $root->end, $until, $decoded, $tick);
-            $paths  = [$decoded];
-            $stopAt = null;
+            $start      = $paths !== [] && basename($paths[0]) === $root->end->file ? $root->end->position : null;
+            $boundaries = BinlogBoundaries::fromRawFiles($paths, $start);
+            $decoded    = $staging . '/decoded.sql';
+            $this->replayer->decode($paths, $root->end, null, $decoded, $tick);
+            $paths = [$decoded];
+        } else {
+            $boundaries = BinlogBoundaries::recorded($sequences);
         }
         $replay = $staging . '/replay.sql';
-        $result = BinlogSchemaFilter::run($paths, $replay, (string) $root->database, BinlogSchemaFilter::CHECK, $stopAt);
+        $result = BinlogSchemaFilter::run($paths, $replay, (string) $root->database, BinlogSchemaFilter::CHECK, $until?->modify('+1 second'), $boundaries);
         if (!$result->isClean()) {
-            throw new ChainBrokenException([sprintf('The binary logs hold %d event(s) outside schema %s or that cannot be attributed to it; nothing was applied: %s', $result->problemCount, (string) $root->database, implode('; ', $result->problems))]);
+            throw new ChainBrokenException([sprintf('The binary logs hold %d event(s) outside schema %s, that cannot be attributed to it or whose boundaries do not match; nothing was applied: %s', $result->problemCount, (string) $root->database, implode('; ', $result->problems))]);
         }
 
         return $replay;
+    }
+
+    /**
+     * The boundary sequence recorded at capture time (`events.idx`, covered by the archive checksums).
+     *
+     * @return list<array{0: int, 1: ?int}>
+     */
+    private function recordedSequence(BackupArtifact $artifact, string $dir): array
+    {
+        try {
+            $raw = json_decode((string) file_get_contents($this->stagedFile($artifact, $dir, ChainPaths::EVENTS_INDEX)), true, 3, JSON_THROW_ON_ERROR);
+        } catch (JsonException) {
+            $raw = null;
+        }
+        $sequence = [];
+        foreach (is_array($raw) ? $raw : [null] as $entry) {
+            if (!is_array($entry) || !is_int($entry[0] ?? null) || (($entry[1] ?? null) !== null && !is_int($entry[1]))) {
+                throw new ChainBrokenException([sprintf('Archive %s: the event index is not a list of positions.', $artifact->getId())]);
+            }
+            $sequence[] = [$entry[0], $entry[1] ?? null];
+        }
+
+        return $sequence;
     }
 
     /**
@@ -386,7 +418,7 @@ final class ChainRestorer
             $link = $chain->links[$i];
             if ($link->binlogCapture === IncrementalArtifact::FILTERED) {
                 $events = $link->binlogEvents;
-                if ($link->binlogFiles !== [] && ($events === null || $events['path'] !== ChainPaths::EVENTS || ($result['checksums'][ChainPaths::EVENTS] ?? null) !== $events['sha256'])) {
+                if ($link->binlogFiles !== [] && ($events === null || $events['path'] !== ChainPaths::EVENTS || ($result['checksums'][ChainPaths::EVENTS] ?? null) !== $events['sha256'] || !isset($result['checksums'][ChainPaths::EVENTS_INDEX]))) {
                     $problems[] = sprintf('Archive %s: the binary log events do not match their meta.', $artifact->getId());
                 }
             } else {

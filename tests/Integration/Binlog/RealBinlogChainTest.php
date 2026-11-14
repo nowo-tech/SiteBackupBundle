@@ -11,6 +11,7 @@ use Nowo\SiteBackupBundle\Database\BuiltinMysqlDumper;
 use Nowo\SiteBackupBundle\Database\DumpImporter;
 use Nowo\SiteBackupBundle\Database\MysqlDumpCommandFactory;
 use Nowo\SiteBackupBundle\Database\MysqlOptionFile;
+use Nowo\SiteBackupBundle\Exception\BinlogFilterException;
 use Nowo\SiteBackupBundle\Exception\BinlogGapException;
 use Nowo\SiteBackupBundle\Exception\ChainBrokenException;
 use Nowo\SiteBackupBundle\Incremental\BinlogCapture;
@@ -33,19 +34,23 @@ use Nowo\SiteBackupBundle\Tests\Unit\Engine\MemoryRestoreProgressStorage;
 use Nowo\SiteBackupBundle\Tests\Unit\RecordingLogger;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Filesystem\Filesystem;
+use Symfony\Component\Process\Exception\ProcessFailedException;
 use Symfony\Component\Process\Process;
 
 use function array_map;
 use function bin2hex;
+use function count;
 use function file_get_contents;
 use function file_put_contents;
 use function getenv;
+use function glob;
 use function implode;
 use function is_file;
 use function is_string;
 use function json_encode;
 use function random_bytes;
 use function sleep;
+use function sort;
 use function trim;
 
 /**
@@ -215,7 +220,105 @@ final class RealBinlogChainTest extends TestCase
     }
 
     /**
-     * @return array{0: SiteBackupManager, 1: BackupArchiver}
+     * Beacon: triggers (kept by the chain's full dump, recreated at restore, not flagged by the pre-flight, trigger DDL in
+     * the incremental) and the opt-in routines and events (PP-D1-L3).
+     */
+    public function testTriggersRoutinesAndEventsSurviveTheChain(): void
+    {
+        [$manager] = $this->stack(IncrementalArtifact::FILTERED);
+        $this->admin("CREATE TABLE pitr (id INT PRIMARY KEY); CREATE TABLE audit (id INT PRIMARY KEY, note VARCHAR(16) NOT NULL DEFAULT 'new');"
+            . ' CREATE TRIGGER trg_audit AFTER INSERT ON pitr FOR EACH ROW INSERT INTO audit (id) VALUES (NEW.id);'
+            . ' CREATE PROCEDURE p_count() SELECT COUNT(*) FROM pitr;'
+            . ' CREATE EVENT e_noop ON SCHEDULE EVERY 1 DAY DISABLE DO DELETE FROM audit WHERE id < 0;'
+            . ' INSERT INTO pitr VALUES (1)', 'app');
+        $full = $manager->createBackup(new BackupOptions(includeFiles: false, recordBinlogCoordinates: true, dumpRoutines: true));
+        self::assertTrue($full->getMeta()['dump_routines']);
+
+        $this->app('INSERT INTO pitr VALUES (2)');
+        $i1 = $manager->createBackup($manager->incrementalOptions($full->getId()));
+
+        // The schema's own triggers, routine and event are in the dump: the pre-flight lets a plain restore through.
+        $report = $manager->restoreChain($i1->getId(), null, 'ci');
+        self::assertTrue($report->complete, (string) json_encode($report));
+        self::assertSame("1\n2", trim($this->app('SELECT id FROM audit ORDER BY id')));
+        self::assertSame("EVENT e_noop\nPROCEDURE p_count\nTRIGGER trg_audit", $this->objects());
+
+        // Trigger DDL after the full backup (Beacon's immutable-row shape, a create then drop).
+        $this->admin("CREATE TRIGGER trg_immutable BEFORE UPDATE ON audit FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'immutable';"
+            . ' CREATE TRIGGER trg_tmp BEFORE DELETE ON pitr FOR EACH ROW SET @x = 1; DROP TRIGGER trg_tmp', 'app');
+        $this->app('INSERT INTO pitr VALUES (3)');
+        $i2 = $manager->createBackup($manager->incrementalOptions($i1->getId()));
+        self::assertStringContainsString('TRIGGER trg_immutable', $this->extract($i2, ChainPaths::EVENTS));
+
+        $report = $manager->restoreChain($i2->getId(), null, 'ci', null, true);
+        self::assertTrue($report->complete, (string) json_encode($report));
+        self::assertSame("EVENT e_noop\nPROCEDURE p_count\nTRIGGER trg_audit\nTRIGGER trg_immutable", $this->objects());
+        // Replayed rows did not fire the triggers twice; the restored triggers fire for new writes.
+        self::assertSame("1\n2\n3", trim($this->app('SELECT id FROM audit ORDER BY id')));
+        $this->app('INSERT INTO pitr VALUES (4)');
+        self::assertSame('4', trim($this->app('SELECT COUNT(*) FROM audit')));
+        try {
+            $this->app("UPDATE audit SET note = 'x' WHERE id = 1");
+            self::fail('the restored immutable trigger did not fire');
+        } catch (ProcessFailedException $e) {
+            self::assertStringContainsString('immutable', $e->getProcess()->getErrorOutput());
+        }
+    }
+
+    /**
+     * PP-D1-H1 / D1-M1 / D1-L1: another tenant (untrusted) cannot get anything into the app's archive or replay.
+     */
+    public function testUntrustedTenantsFailClosed(): void
+    {
+        [$manager, , $storage] = $this->stack(IncrementalArtifact::FILTERED);
+        $this->app('CREATE TABLE pitr (id INT PRIMARY KEY); INSERT INTO pitr VALUES (1)');
+        $this->admin('CREATE TABLE other.mv (id INT)');
+
+        $attacks = [
+            // X12: a literal holding fake event boundaries and a fake `use app` event.
+            'boundaries in a literal' => ["CREATE TABLE inj (c INT) COMMENT='x\n# at 4\n#261101 10:00:00 server id 1  end_log_pos 300 CRC32 0x1 \tQuery\tthread_id=1\nuse `app`/*!*/;\nDROP TABLE pitr\n/*!*/;\n# End of log file\n'", 'other', 'do not match the binary logs'],
+            // X10: a table renamed across schemas.
+            'rename into app' => ['ALTER TABLE other.mv RENAME TO app.mv', null, 'across several databases'],
+            // X5: a view of the app that reads another schema.
+            'cross-schema view' => ['CREATE VIEW app.v_leak AS SELECT * FROM other.victim', null, 'another database'],
+        ];
+        foreach ($attacks as $case => [$sql, $database, $expected]) {
+            $full    = $manager->createBackup(new BackupOptions(includeFiles: false, recordBinlogCoordinates: true));
+            $archive = $this->archives($storage);
+            $this->app('INSERT INTO pitr VALUES (' . (count($archive) + 10) . ')');
+            $this->admin($sql, $database);
+            try {
+                $manager->createBackup($manager->incrementalOptions($full->getId()));
+                self::fail($case . ': the capture was archived');
+            } catch (BinlogFilterException $e) {
+                self::assertStringContainsString($expected, $e->getMessage(), $case);
+            }
+            self::assertSame($archive, $this->archives($storage), $case . ': something was archived');
+            self::assertSame('1', trim($this->app('SELECT COUNT(*) FROM pitr WHERE id = 1')), $case);
+            $this->admin('DROP TABLE IF EXISTS other.inj; DROP VIEW IF EXISTS app.v_leak; DROP TABLE IF EXISTS app.mv; CREATE TABLE IF NOT EXISTS other.mv (id INT)');
+        }
+    }
+
+    private function objects(): string
+    {
+        return trim($this->admin("SELECT CONCAT('TRIGGER ', TRIGGER_NAME) AS o FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = 'app'"
+            . " UNION ALL SELECT CONCAT(ROUTINE_TYPE, ' ', ROUTINE_NAME) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = 'app'"
+            . " UNION ALL SELECT CONCAT('EVENT ', EVENT_NAME) FROM information_schema.EVENTS WHERE EVENT_SCHEMA = 'app' ORDER BY o"));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function archives(string $storage): array
+    {
+        $files = glob($storage . '/*') ?: [];
+        sort($files);
+
+        return $files;
+    }
+
+    /**
+     * @return array{0: SiteBackupManager, 1: BackupArchiver, 2: string}
      */
     private function stack(string $mode): array
     {
@@ -223,9 +326,10 @@ final class RealBinlogChainTest extends TestCase
         $mysql    = $this->env['SBB_BINLOG_MYSQL'];
         $tool     = new MysqlBinlogTool($this->env['SBB_BINLOG_MYSQLBINLOG'], 300);
         $server   = new MysqlClientBinlogServer($this->env['SBB_BINLOG_BACKUP_URL'], $mysql, 120, $work);
+        $storage  = $this->env['SBB_BINLOG_SHARED_DIR'] . '/storage-' . $mode . '-' . bin2hex(random_bytes(3));
         $archiver = new BackupArchiver(
             $this->project,
-            $this->env['SBB_BINLOG_SHARED_DIR'] . '/storage-' . $mode . '-' . bin2hex(random_bytes(3)),
+            $storage,
             ['config'],
             [],
             null,
@@ -249,7 +353,7 @@ final class RealBinlogChainTest extends TestCase
             ),
         );
 
-        return [$manager, $archiver];
+        return [$manager, $archiver, $storage];
     }
 
     /**

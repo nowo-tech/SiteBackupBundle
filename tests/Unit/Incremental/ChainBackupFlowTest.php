@@ -45,11 +45,9 @@ use function array_slice;
 use function dirname;
 use function file_get_contents;
 use function file_put_contents;
-use function hash;
 use function is_array;
 use function sort;
 use function sprintf;
-use function str_repeat;
 use function time;
 use function touch;
 use function unlink;
@@ -264,12 +262,21 @@ final class ChainBackupFlowTest extends TestCase
         $this->clock->sleep(3600);
         $i2 = $manager->createBackup($manager->incrementalOptions($i1->getId()));
 
+        // The decoded chain: binlog.000002 from 1480, then binlog.000003 and binlog.000004 (900 bytes each).
+        file_put_contents($tools . '/decoded.3', "DELIMITER /*!*/;\n" . FakeBinlog::start(127) . FakeBinlog::event(1480, 2000, "Query\tthread_id=1", "use `app`/*!*/;\nBEGIN\n/*!*/;\n")
+            . FakeBinlog::start(4) . FakeBinlog::event(127, 900, 'Xid = 1', "COMMIT/*!*/;\n")
+            . FakeBinlog::start(4) . FakeBinlog::event(127, 900, "Query\tthread_id=1", "use `app`/*!*/;\nCREATE TABLE later (id INT)\n/*!*/;\n", '261101  1:45:00') . "# End of log file\n");
         $report = $manager->restoreChain($i2->getId(), new DateTimeImmutable('2026-11-01 01:30:00 UTC'));
         self::assertTrue($report->complete);
         self::assertSame("import\nreplay\n", file_get_contents($tools . '/order'));
         self::assertStringContainsString('CREATE TABLE t', (string) file_get_contents($tools . '/imported.sql'));
         $decodeArgs = (string) file_get_contents($tools . '/binlog-args');
-        self::assertStringContainsString('--skip-gtids --start-position=1480 --stop-datetime=2026-11-01 01:30:01', $decodeArgs);
+        // PP-D1-H1: the whole logs are decoded (their structure is checked), the filter cuts at the target instant.
+        self::assertStringContainsString('--skip-gtids --start-position=1480 --result-file=', $decodeArgs);
+        self::assertStringNotContainsString('--stop-datetime', $decodeArgs);
+        $replayed = (string) file_get_contents($tools . '/replayed.sql');
+        self::assertStringContainsString('BEGIN', $replayed);
+        self::assertStringNotContainsString('CREATE TABLE later', $replayed, 'an event after the target instant was replayed');
         self::assertStringContainsString('.nowo-site-backup/binlog/binlog.000004', $decodeArgs);
         self::assertStringNotContainsString('--database', $decodeArgs);
         self::assertSame(
@@ -465,8 +472,8 @@ final class ChainBackupFlowTest extends TestCase
                 // binlog.000002 (the dump's file) is 2000 bytes, later ones 900: a log read to its end is not read again.
                 $logs = $from->position < ($from->sequence() === 2 ? 2000 : 900) ? [$from->file => $from->sequence() === 2 ? 2000 : 900] : [];
                 foreach ($logs + [$next => 900] as $name => $size) {
-                    file_put_contents($work . '/' . $name, str_repeat('e', $size));
-                    $files[] = new CapturedBinlog($name, $work . '/' . $name, $size, hash('sha256', str_repeat('e', $size)));
+                    FakeBinlog::write($work . '/' . $name, $size === 2000 ? [127, 1480, 2000] : [127, $size]);
+                    $files[] = new CapturedBinlog($name, $work . '/' . $name, $size, (string) hash_file('sha256', $work . '/' . $name));
                 }
 
                 return new IncrementalArtifact($from, new BinlogCoordinates($next, 900, $from->serverUuid), $database, $files, $work, new DateTimeImmutable('2026-11-01 00:10 UTC'), new DateTimeImmutable('2026-11-01 00:50 UTC'), new DateTimeImmutable('2026-11-01 01:00 UTC'));

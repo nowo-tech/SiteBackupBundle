@@ -148,7 +148,11 @@ nothing changes until a backup asks for binlog coordinates, a file manifest or a
   Chain archives also carry the object metadata `nowo-chain-id`.
 - `RemoteBackupPublisher::prune()` now reports an unreadable or oversized sidecar in `PruneReport::$errors`
   (`UnreadableSidecar`) and keeps its chain, or prunes nothing in that run when the chain is unknown (1.35 skipped it
-  silently). `orphans()` never returns chain members.
+  silently). A prefix without any chain sidecar prunes as in 1.35 (only the report is new). `orphans()` never returns
+  chain members.
+- Chain backups refuse, at capture time, events whose boundaries do not match the binary logs, statements that rename
+  tables across schemas or reference another database, and transaction-compressed binlogs: such a capture fails with
+  `BinlogFilterException` (`nowo:site-backup:create` exits 3); start a new chain after removing the cause.
 - Local `backup.retention` order is unchanged for hosts without chains (oldest first); with chains, deletions go
   newest first.
 - Shared MySQL server: keep the default `binlog_capture: filtered`; use separate `binlog_url` / `restore_url`

@@ -11,6 +11,7 @@ use Nowo\SiteBackupBundle\Exception\BinlogFilterException;
 use Nowo\SiteBackupBundle\Exception\BinlogGapException;
 use Nowo\SiteBackupBundle\Exception\BinlogUnavailableException;
 use Psr\Clock\ClockInterface;
+use RuntimeException;
 use SensitiveParameter;
 use Symfony\Component\Clock\NativeClock;
 use Symfony\Component\Filesystem\Filesystem;
@@ -18,11 +19,15 @@ use Throwable;
 
 use function array_map;
 use function count;
+use function file_put_contents;
 use function filesize;
 use function hash_file;
 use function is_file;
+use function json_encode;
 use function preg_match;
 use function sprintf;
+
+use const JSON_THROW_ON_ERROR;
 
 /**
  * Default {@see BinlogCaptureInterface} (1.36+): the Oracle `mysql` client for the statements
@@ -136,14 +141,23 @@ final class BinlogCapture implements BinlogCaptureInterface
             $decoded = $directory . '/decoded.sql';
             $this->tool->decode($paths, $decoded, $start, null, null, false, $tick);
             $filtered = $directory . '/' . CapturedBinlog::EVENTS;
-            $result   = BinlogSchemaFilter::run([$decoded], $filtered, $database, BinlogSchemaFilter::FILTER);
+            try {
+                // PP-D1-H1: event boundaries from the binary headers of the captured logs, never from the text.
+                $boundaries = BinlogBoundaries::fromRawFiles($paths, $start);
+            } catch (RuntimeException $e) {
+                throw new BinlogUnavailableException('The captured binary logs cannot be indexed: ' . $e->getMessage(), 0, $e);
+            }
+            $result = BinlogSchemaFilter::run([$decoded], $filtered, $database, BinlogSchemaFilter::FILTER, null, $boundaries);
             $this->filesystem->remove([$decoded, $raw]);
             if (!$result->isClean()) {
                 throw new BinlogFilterException($result->problems, $result->problemCount);
             }
-            $events = new CapturedBinlog(CapturedBinlog::EVENTS, $filtered, (int) filesize($filtered), (string) hash_file('sha256', $filtered));
+            $events  = new CapturedBinlog(CapturedBinlog::EVENTS, $filtered, (int) filesize($filtered), (string) hash_file('sha256', $filtered));
+            $idxPath = $directory . '/' . CapturedBinlog::EVENTS_INDEX;
+            file_put_contents($idxPath, json_encode(BinlogBoundaries::recordFrom($filtered), JSON_THROW_ON_ERROR));
+            $index = new CapturedBinlog(CapturedBinlog::EVENTS_INDEX, $idxPath, (int) filesize($idxPath), (string) hash_file('sha256', $idxPath));
 
-            return new IncrementalArtifact($from, $to, $database, $files, $directory, $result->firstEventAt, $result->lastEventAt, $this->clock->now(), IncrementalArtifact::FILTERED, $events, $result->droppedEvents);
+            return new IncrementalArtifact($from, $to, $database, $files, $directory, $result->firstEventAt, $result->lastEventAt, $this->clock->now(), IncrementalArtifact::FILTERED, $events, $result->droppedEvents, $index);
         } catch (Throwable $e) {
             $this->filesystem->remove($directory);
 
