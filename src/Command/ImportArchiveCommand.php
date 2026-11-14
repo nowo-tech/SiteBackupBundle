@@ -6,7 +6,9 @@ namespace Nowo\SiteBackupBundle\Command;
 
 use InvalidArgumentException;
 use JsonException;
+use Nowo\SiteBackupBundle\Incremental\IncrementalBackupManagerInterface;
 use Nowo\SiteBackupBundle\Log\SecretRedactor;
+use Nowo\SiteBackupBundle\Model\BackupArtifact;
 use Nowo\SiteBackupBundle\Model\ImportOptions;
 use Nowo\SiteBackupBundle\Service\SiteBackupManagerInterface;
 use Symfony\Component\Console\Attribute\AsCommand;
@@ -18,7 +20,11 @@ use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 use Throwable;
 
+use function array_map;
+use function array_values;
+use function count;
 use function file_get_contents;
+use function implode;
 use function is_array;
 use function is_bool;
 use function is_file;
@@ -42,7 +48,7 @@ final class ImportArchiveCommand extends Command
     protected function configure(): void
     {
         $this
-            ->addArgument('file', InputArgument::REQUIRED, 'Archive to import')
+            ->addArgument('file', InputArgument::REQUIRED | InputArgument::IS_ARRAY, 'Archive to import; 1.36+: a chain is the full backup then its incrementals, oldest first')
             ->addOption('actor', null, InputOption::VALUE_REQUIRED, 'Who imported it', 'cli')
             ->addOption('sidecar', null, InputOption::VALUE_REQUIRED, 'The archive\'s .backup.json / .meta.json (its signature)')
             ->addOption('require-signature', null, InputOption::VALUE_NEGATABLE, 'Require a valid signed sidecar (default: backup.signing.required)')
@@ -86,8 +92,20 @@ final class ImportArchiveCommand extends Command
             deleteAfterRestore: !(bool) $input->getOption('keep-after-restore'),
         );
 
+        $files = $input->getArgument('file');
+        $files = is_array($files) ? array_values(array_map('strval', $files)) : [(string) $files];
+
         try {
-            $artifact = $this->manager->importArchive((string) $input->getArgument('file'), $password, (string) $input->getOption('actor'), $options);
+            if (count($files) > 1) {
+                if (!$this->manager instanceof IncrementalBackupManagerInterface) {
+                    throw new InvalidArgumentException('Importing a chain needs the bundle\'s SiteBackupManager.');
+                }
+                $chain    = $this->manager->importChain($files, $password, (string) $input->getOption('actor'), $options);
+                $artifact = $chain[count($chain) - 1];
+                $io->writeln('Chain: ' . implode(' → ', array_map(static fn (BackupArtifact $a): string => $a->getId(), $chain)));
+            } else {
+                $artifact = $this->manager->importArchive($files[0], $password, (string) $input->getOption('actor'), $options);
+            }
         } catch (Throwable $e) {
             $io->error(SecretRedactor::redact($e->getMessage()));
 
@@ -99,7 +117,8 @@ final class ImportArchiveCommand extends Command
         foreach ($artifact->getWarnings() as $warning) {
             $io->warning($warning);
         }
-        $io->success(sprintf('Imported as backup %s (plaintext tar.gz, owner-only). Restore it with nowo:site-backup:restore %s%s.', $artifact->getId(), $artifact->getId(), $options->deleteAfterRestore ? ' (it is deleted after the restore)' : ', then delete it'));
+        $command = count($files) > 1 ? 'nowo:site-backup:restore-chain' : 'nowo:site-backup:restore';
+        $io->success(sprintf('Imported as backup %s (plaintext tar.gz, owner-only). Restore it with %s %s%s.', $artifact->getId(), $command, $artifact->getId(), $options->deleteAfterRestore ? ' (it is deleted after the restore)' : ', then delete it'));
 
         return Command::SUCCESS;
     }

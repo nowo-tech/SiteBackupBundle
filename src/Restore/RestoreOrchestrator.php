@@ -205,6 +205,9 @@ final class RestoreOrchestrator implements ResetInterface
      */
     public function restore(BackupArtifact $artifact, ?string $actor = null, ?Closure $onHeartbeat = null): RestoreProgress
     {
+        // 1.36+: an incremental alone is a delta (changed files, binary logs): restoring it would half-apply the backup.
+        self::assertNotIncremental($artifact);
+
         // A long-lived worker may run several restores: the heartbeat throttle starts fresh for each.
         $this->reset();
         $this->onHeartbeat = $onHeartbeat;
@@ -333,6 +336,16 @@ final class RestoreOrchestrator implements ResetInterface
             if ($filesTouched) {
                 $this->workerRestartSignal?->request('restore:' . $artifact->getId());
             }
+        }
+    }
+
+    /**
+     * @throws RuntimeException for an incremental backup (1.36+): restore its chain instead
+     */
+    public static function assertNotIncremental(BackupArtifact $artifact): void
+    {
+        if (($artifact->getMeta()['type'] ?? null) === 'incremental') {
+            throw new RuntimeException(sprintf('Backup %s is an incremental backup: restore its chain (nowo:site-backup:restore-chain %s); nothing was changed.', $artifact->getId(), $artifact->getId()));
         }
     }
 

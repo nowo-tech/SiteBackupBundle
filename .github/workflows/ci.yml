@@ -189,6 +189,94 @@ jobs:
         if: always()
         run: docker rm -f sbb-mysql >/dev/null 2>&1 || true
 
+  # 1.36+ (Beacon E0 items 9-11): binlog incrementals against a real MySQL 9 server and the Oracle client tools.
+  binlog-incrementals:
+    name: Binlog incrementals (MySQL 9, GTID ${{ matrix.gtid }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # GTID on, default log size.
+          - gtid: 'on'
+            server: '--gtid-mode=ON --enforce-gtid-consistency=ON'
+          # Beacon production: GTID never enabled (file + position only) and small logs, so one incremental spans
+          # several binary log files.
+          - gtid: 'off'
+            server: '--gtid-mode=OFF --enforce-gtid-consistency=OFF --max-binlog-size=4096'
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: json, zip, sodium
+          coverage: none
+          tools: composer:v2
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Start MySQL 9.7 with binary logs and create the Oracle client wrappers
+        run: |
+          set -eu
+          command -v bsdtar || { sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends libarchive-tools; }
+          # Three throwaway passwords (masked): the app's account, the backup account, the restore account (PP-M4).
+          PWA="ci-$(openssl rand -hex 12)"; PWB="ci-$(openssl rand -hex 12)"; PWR="ci-$(openssl rand -hex 12)"
+          echo "::add-mask::$PWA"; echo "::add-mask::$PWB"; echo "::add-mask::$PWR"
+          docker run -d --name sbb-mysql9 -p 127.0.0.1:3306:3306 -e MYSQL_ALLOW_EMPTY_PASSWORD=1 -e MYSQL_DATABASE=app mysql:9.7.2 \
+            ${{ matrix.server }} --binlog-format=ROW --binlog-row-image=FULL
+          # Over TCP: the entrypoint's init server is socket-only, the real one listens once init is done.
+          for i in $(seq 1 120); do docker exec sbb-mysql9 mysql -uroot -h127.0.0.1 --protocol=TCP -e "SELECT 1" >/dev/null 2>&1 && break; sleep 2; done
+          docker exec sbb-mysql9 mysql -uroot -h127.0.0.1 --protocol=TCP -e "SELECT VERSION()"
+          # Least privilege (docs/USAGE.md "MySQL grants"): no SYSTEM_VARIABLES_ADMIN anywhere.
+          docker exec sbb-mysql9 mysql -uroot -e "
+            CREATE USER 'app'@'%' IDENTIFIED BY '$PWA'; GRANT ALL ON app.* TO 'app'@'%';
+            CREATE USER 'bk'@'%' IDENTIFIED BY '$PWB'; GRANT RELOAD, REPLICATION CLIENT, REPLICATION SLAVE ON *.* TO 'bk'@'%';
+            GRANT SELECT, SHOW VIEW, TRIGGER, LOCK TABLES, EVENT ON app.* TO 'bk'@'%';
+            GRANT SHOW_ROUTINE ON *.* TO 'bk'@'%';
+            CREATE USER 'rs'@'%' IDENTIFIED BY '$PWR'; GRANT ALL ON app.* TO 'rs'@'%';
+            GRANT REPLICATION_APPLIER, SESSION_VARIABLES_ADMIN, SET_ANY_DEFINER ON *.* TO 'rs'@'%';"
+          # The server image ships mysql and mysqldump but not mysqlbinlog: take it from the matching Oracle client RPM
+          # (sha256 = repo.mysql.com digest) and run it in the same image (same glibc and libraries).
+          curl -fsSL -o "$RUNNER_TEMP/client.rpm" https://repo.mysql.com/yum/mysql-9.7-community/el/9/x86_64/mysql-community-client-9.7.2-1.el9.x86_64.rpm
+          echo "888efdbf8f63750686377e520bf2e3df2e98c1cfb5b1cb21ebc8ce65e359b0c5  $RUNNER_TEMP/client.rpm" | sha256sum -c -
+          mkdir -p "$RUNNER_TEMP/rpm" "$RUNNER_TEMP/bin"
+          bsdtar -xf "$RUNNER_TEMP/client.rpm" -C "$RUNNER_TEMP/rpm" ./usr/bin/mysqlbinlog
+          SHARED="$RUNNER_TEMP/sbb-binlog"
+          mkdir -p "$SHARED"
+          for tool in mysql mysqldump mysqlbinlog; do
+            printf '#!/bin/sh\necho "$*" >> "%s/argv.log"\nexec docker run --rm -i --network host --user %s -e MYSQL_PWD -e TZ -v "%s:%s" -v "%s:/usr/local/bin/mysqlbinlog:ro" mysql:9.7.2 %s "$@"\n' \
+              "$SHARED" "$(id -u):$(id -g)" "$SHARED" "$SHARED" "$RUNNER_TEMP/rpm/usr/bin/mysqlbinlog" "$tool" > "$RUNNER_TEMP/bin/$tool"
+            chmod +x "$RUNNER_TEMP/bin/$tool"
+            "$RUNNER_TEMP/bin/$tool" --version
+          done
+          {
+            echo "SBB_BINLOG_DATABASE_URL=mysql://app:$PWA@127.0.0.1:3306/app"
+            echo "SBB_BINLOG_BACKUP_URL=mysql://bk:$PWB@127.0.0.1:3306/app"
+            echo "SBB_BINLOG_RESTORE_URL=mysql://rs:$PWR@127.0.0.1:3306/app"
+            echo "SBB_BINLOG_ADMIN_URL=mysql://root@127.0.0.1:3306/app"
+            echo "SBB_BINLOG_SHARED_DIR=$SHARED"
+            echo "SBB_BINLOG_MYSQL=$RUNNER_TEMP/bin/mysql"
+            echo "SBB_BINLOG_MYSQLDUMP=$RUNNER_TEMP/bin/mysqldump"
+            echo "SBB_BINLOG_MYSQLBINLOG=$RUNNER_TEMP/bin/mysqlbinlog"
+            echo "SBB_BINLOG_GTID=${{ matrix.gtid }}"
+          } >> "$GITHUB_ENV"
+
+      - name: Shared server, filtered and raw captures, DDL after the full, point-in-time restore, gaps
+        run: vendor/bin/phpunit --no-coverage --display-skipped --fail-on-skipped tests/Integration/Binlog
+
+      - name: Server log on failure
+        if: failure()
+        run: docker logs --tail 200 sbb-mysql9 || true
+
+      - name: Stop MySQL
+        if: always()
+        run: docker rm -f sbb-mysql9 >/dev/null 2>&1 || true
+
   code-style:
     name: Code Style
     runs-on: ubuntu-latest

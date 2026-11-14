@@ -1,0 +1,110 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Nowo\SiteBackupBundle\Database;
+
+use InvalidArgumentException;
+use RuntimeException;
+use SensitiveParameter;
+
+use function chmod;
+use function fclose;
+use function fopen;
+use function fwrite;
+use function implode;
+use function preg_match;
+use function sprintf;
+use function str_replace;
+
+/**
+ * A `[client]` option file for the Oracle MySQL client tools (1.36+, binary log capture and replay).
+ *
+ * The binary log tools receive the credentials only through this file (`--defaults-file=<path>`, the first argument),
+ * never through argv; the file is created 0600 with `x` mode (it never reuses an existing path) inside a private
+ * per-call directory, and the caller removes it in a `finally`.
+ */
+final class MysqlOptionFile
+{
+    /**
+     * @param array{database: string, host: ?string, port: int, socket: ?string, user: string, pass: string} $connection
+     * @param list<string> $tlsOptions extra client options; only `--ssl-*` / `--tls-*` are used
+     */
+    public static function contents(#[SensitiveParameter] array $connection, array $tlsOptions = []): string
+    {
+        $lines = ['[client]', 'user=' . self::quote($connection['user'])];
+        if ($connection['pass'] !== '') {
+            $lines[] = 'password=' . self::quote($connection['pass']);
+        }
+        if ($connection['socket'] !== null) {
+            $lines[] = 'socket=' . self::quote($connection['socket']);
+        } else {
+            $lines[] = 'host=' . self::quote((string) $connection['host']);
+            $lines[] = sprintf('port=%d', $connection['port']);
+        }
+        // 1.36+ (PP-L6): the TLS settings of backup.database.extra_options (`--ssl-*` / `--tls-*`) apply to the tools too.
+        foreach (self::tlsOptions($tlsOptions) as $name => $value) {
+            $lines[] = $value === null ? $name : $name . '=' . self::quote($value);
+        }
+
+        return implode("\n", $lines) . "\n";
+    }
+
+    /**
+     * Writes `<directory>/client.cnf` (0600) for $databaseUrl and returns its path.
+     *
+     * @param list<string> $tlsOptions see {@see self::contents()}
+     *
+     * @throws InvalidArgumentException when the URL is not usable
+     */
+    public static function write(#[SensitiveParameter] string $databaseUrl, string $directory, array $tlsOptions = []): string
+    {
+        $contents = self::contents(MysqlDumpCommandFactory::connection($databaseUrl), $tlsOptions);
+        $path     = $directory . '/client.cnf';
+        $handle   = @fopen($path, 'x');
+        if ($handle === false) {
+            throw new RuntimeException('Unable to create the MySQL option file.');
+        }
+
+        try {
+            chmod($path, 0o600);
+            fwrite($handle, $contents);
+        } finally {
+            fclose($handle);
+        }
+
+        return $path;
+    }
+
+    /**
+     * The `--ssl-*` / `--tls-*` long options of a list (others ignored), as option-file names and values.
+     *
+     * @param list<string> $options e.g. `--ssl-mode=VERIFY_IDENTITY`, `--ssl-ca=/etc/mysql/ca.pem`
+     *
+     * @return array<string, ?string>
+     */
+    public static function tlsOptions(array $options): array
+    {
+        $tls = [];
+        foreach ($options as $option) {
+            if (preg_match('/^--((?:ssl|tls)-[a-z0-9-]+)(?:=(.*))?$/s', $option, $m) !== 1) {
+                continue;
+            }
+            $tls[$m[1]] = isset($m[2]) ? $m[2] : null;
+        }
+
+        return $tls;
+    }
+
+    /**
+     * A double-quoted option value; `\` and `"` escaped. Line breaks and other control bytes cannot be expressed.
+     */
+    private static function quote(#[SensitiveParameter] string $value): string
+    {
+        if (preg_match('/[\x00-\x1F\x7F]/', $value) === 1) {
+            throw new InvalidArgumentException('Database credentials with control characters cannot be passed to the MySQL client tools.');
+        }
+
+        return '"' . str_replace(['\\', '"'], ['\\\\', '\\"'], $value) . '"';
+    }
+}

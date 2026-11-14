@@ -1,0 +1,497 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Nowo\SiteBackupBundle\Tests\Integration\Binlog;
+
+use DateTimeImmutable;
+use DateTimeZone;
+use Nowo\SiteBackupBundle\Backup\BackupArchiver;
+use Nowo\SiteBackupBundle\Database\BuiltinMysqlDumper;
+use Nowo\SiteBackupBundle\Database\DumpImporter;
+use Nowo\SiteBackupBundle\Database\MysqlDumpCommandFactory;
+use Nowo\SiteBackupBundle\Database\MysqlOptionFile;
+use Nowo\SiteBackupBundle\Exception\BinlogFilterException;
+use Nowo\SiteBackupBundle\Exception\BinlogGapException;
+use Nowo\SiteBackupBundle\Exception\ChainBrokenException;
+use Nowo\SiteBackupBundle\Incremental\BinlogCapture;
+use Nowo\SiteBackupBundle\Incremental\BinlogCoordinates;
+use Nowo\SiteBackupBundle\Incremental\BinlogPrerequisites;
+use Nowo\SiteBackupBundle\Incremental\BinlogReplayer;
+use Nowo\SiteBackupBundle\Incremental\ChainPaths;
+use Nowo\SiteBackupBundle\Incremental\Check;
+use Nowo\SiteBackupBundle\Incremental\IncrementalArtifact;
+use Nowo\SiteBackupBundle\Incremental\MysqlBinlogTool;
+use Nowo\SiteBackupBundle\Incremental\MysqlClientBinlogServer;
+use Nowo\SiteBackupBundle\Model\BackupArtifact;
+use Nowo\SiteBackupBundle\Model\BackupOptions;
+use Nowo\SiteBackupBundle\Restore\ChainRestorer;
+use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
+use Nowo\SiteBackupBundle\Restore\RestorePathGuard;
+use Nowo\SiteBackupBundle\Service\SiteBackupManager;
+use Nowo\SiteBackupBundle\Tests\Unit\Engine\MemoryHistoryStorage;
+use Nowo\SiteBackupBundle\Tests\Unit\Engine\MemoryRestoreProgressStorage;
+use Nowo\SiteBackupBundle\Tests\Unit\RecordingLogger;
+use PHPUnit\Framework\TestCase;
+use Symfony\Component\Filesystem\Filesystem;
+use Symfony\Component\Process\Exception\ProcessFailedException;
+use Symfony\Component\Process\Process;
+
+use function array_map;
+use function bin2hex;
+use function count;
+use function file_get_contents;
+use function file_put_contents;
+use function getenv;
+use function glob;
+use function implode;
+use function is_file;
+use function is_string;
+use function json_encode;
+use function random_bytes;
+use function sleep;
+use function sort;
+use function trim;
+
+/**
+ * Items 9–11 and audit PP against a real MySQL 9 server with binary logs, a second application schema (a shared server,
+ * the default assumption) and least-privilege accounts (CI job "Binlog incrementals (MySQL 9)").
+ *
+ * Environment (skipped without it):
+ * - SBB_BINLOG_DATABASE_URL: the application's account (ALL on the schema only) = backup.database.url;
+ * - SBB_BINLOG_BACKUP_URL: backup.database.binlog_url (RELOAD, REPLICATION CLIENT, REPLICATION SLAVE on *.*; read on
+ *   the schema);
+ * - SBB_BINLOG_RESTORE_URL: backup.database.restore_url (ALL on the schema, REPLICATION_APPLIER,
+ *   SESSION_VARIABLES_ADMIN, SET_ANY_DEFINER for the app's views — no SYSTEM_VARIABLES_ADMIN, PP-M4);
+ * - SBB_BINLOG_ADMIN_URL: an administrator (other schemas, accounts, DDL without a default database, PURGE);
+ * - SBB_BINLOG_SHARED_DIR (mounted at the same path by the tool wrappers, which append their argv to
+ *   `<shared>/argv.log`), SBB_BINLOG_MYSQL / SBB_BINLOG_MYSQLDUMP / SBB_BINLOG_MYSQLBINLOG.
+ */
+final class RealBinlogChainTest extends TestCase
+{
+    /** @var array<string, string> */
+    private array $env = [];
+
+    private string $project;
+
+    private RecordingLogger $logger;
+
+    private MemoryHistoryStorage $history;
+
+    protected function setUp(): void
+    {
+        foreach (['SBB_BINLOG_DATABASE_URL', 'SBB_BINLOG_BACKUP_URL', 'SBB_BINLOG_RESTORE_URL', 'SBB_BINLOG_ADMIN_URL', 'SBB_BINLOG_SHARED_DIR', 'SBB_BINLOG_MYSQL', 'SBB_BINLOG_MYSQLDUMP', 'SBB_BINLOG_MYSQLBINLOG'] as $name) {
+            $value = getenv($name);
+            if (!is_string($value) || $value === '') {
+                self::markTestSkipped('Real binlog test: set ' . $name . ' (see the class doc).');
+            }
+            $this->env[$name] = $value;
+        }
+        $this->project = $this->env['SBB_BINLOG_SHARED_DIR'] . '/project-' . bin2hex(random_bytes(4));
+        (new Filesystem())->mkdir([$this->project . '/config', $this->work()]);
+        $this->logger  = new RecordingLogger();
+        $this->history = new MemoryHistoryStorage();
+
+        $this->admin('DROP DATABASE IF EXISTS other; CREATE DATABASE other; CREATE TABLE other.victim (id INT PRIMARY KEY); INSERT INTO other.victim VALUES (1)');
+        $this->admin('DROP DATABASE IF EXISTS app; CREATE DATABASE app');
+    }
+
+    public function testFilteredChainOnASharedServerWithDdlAfterTheFull(): void
+    {
+        $server = new MysqlClientBinlogServer($this->env['SBB_BINLOG_BACKUP_URL'], $this->env['SBB_BINLOG_MYSQL'], 120, $this->work());
+        $checks = (new BinlogPrerequisites($server, ['mysqldump' => $this->env['SBB_BINLOG_MYSQLDUMP'], 'mysql' => $this->env['SBB_BINLOG_MYSQL'], 'mysqlbinlog' => $this->env['SBB_BINLOG_MYSQLBINLOG']], 604800, 30, $this->env['SBB_BINLOG_DATABASE_URL']))->check();
+        self::assertTrue(Check::allPass($checks), (string) json_encode($checks));
+        $byName = [];
+        foreach ($checks as $check) {
+            $byName[$check->name] = $check;
+        }
+        self::assertSame(Check::OK, $byName['grants']->status, 'the dedicated backup account holds no broad grant');
+        // The backup account cannot see the other schemas (no SHOW DATABASES): least privilege, the check stays ok.
+        self::assertSame(Check::OK, $byName['schemas']->status);
+
+        [$manager] = $this->stack(IncrementalArtifact::FILTERED);
+
+        $this->app('CREATE TABLE pitr (id INT PRIMARY KEY, v VARBINARY(32)); INSERT INTO pitr VALUES (1, 0x61); CREATE TABLE filler (id INT PRIMARY KEY, pad VARCHAR(255))');
+        file_put_contents($this->project . '/config/app.yaml', "v: 1\n");
+        $full = $manager->createBackup(new BackupOptions(recordBinlogCoordinates: true, recordFileManifest: true));
+        self::assertSame(trim($this->admin('SELECT @@GLOBAL.server_uuid')), $full->getMeta()['server_uuid']);
+        if ($this->gtidOff()) {
+            // Beacon production: file + position only, no GTID set anywhere.
+            self::assertContains($full->getMeta()['gtid_executed'] ?? null, [null, '']);
+        }
+        sleep(1);
+        // Separate transactions of ~250 bytes: with max_binlog_size=4096 (GTID-off cell) the capture spans several logs.
+        $filler = [];
+        for ($n = 1; $n <= 40; ++$n) {
+            $filler[] = 'INSERT INTO filler VALUES (' . $n . ", REPEAT('x', 200))";
+        }
+        $this->app(implode('; ', $filler));
+
+        // Writes on the shared server: another tenant (rows, an account), PP-M2 scenario B (another schema's table
+        // dropped from an app session) and PP-M1 scenario C (DDL on app without a default database).
+        $this->app('INSERT INTO pitr VALUES (2, 0x62); UPDATE pitr SET v = 0x00ff275c0d0a WHERE id = 1');
+        $this->admin('INSERT INTO other.victim VALUES (2)');
+        $this->admin("CREATE USER IF NOT EXISTS 'tenant'@'%' IDENTIFIED BY 'tenant-REDACTED-TEST'");
+        $this->admin('DROP TABLE other.victim; CREATE TABLE other.victim (id INT PRIMARY KEY); INSERT INTO other.victim VALUES (42)', 'app');
+        $this->admin('ALTER TABLE app.pitr ADD COLUMN w INT NOT NULL DEFAULT 7');
+        file_put_contents($this->project . '/config/app.yaml', "v: 2\n");
+        sleep(2);
+        $until = new DateTimeImmutable(trim($this->admin('SELECT UTC_TIMESTAMP()')), new DateTimeZone('UTC'));
+        sleep(2);
+        $this->app('INSERT INTO pitr VALUES (3, 0x63, 33); DELETE FROM pitr WHERE id = 2');
+
+        $i1 = $manager->createBackup($manager->incrementalOptions($full->getId()));
+        self::assertSame(IncrementalArtifact::FILTERED, $i1->getMeta()['binlog_capture']);
+        if ($this->gtidOff()) {
+            self::assertGreaterThan(2, count($i1->getMeta()['binlog_files']), 'one incremental spans several rotated logs');
+        }
+        self::assertGreaterThan(0, $i1->getMeta()['binlog_events']['dropped_events']);
+        // PP-M3: the archive holds the app schema's events only.
+        $events = $this->extract($i1, ChainPaths::EVENTS);
+        self::assertStringNotContainsString('victim', $events);
+        self::assertStringNotContainsString('tenant', $events);
+        self::assertStringNotContainsString('`other`', $events);
+        self::assertStringContainsString('ALTER TABLE app.pitr ADD COLUMN w', $events);
+
+        // PP-H1 scenario A: objects created after the full backup.
+        sleep(1);
+        $this->app('CREATE TABLE newt (id INT PRIMARY KEY); INSERT INTO newt VALUES (1); CREATE VIEW v_pitr AS SELECT id FROM pitr; INSERT INTO pitr VALUES (4, 0x64, 44)');
+        file_put_contents($this->project . '/config/app.yaml', "v: 3\n");
+        $i2 = $manager->createBackup($manager->incrementalOptions($i1->getId()));
+
+        $before = $this->app('SELECT COUNT(*) FROM pitr');
+        try {
+            $manager->restoreChain($i2->getId());
+            self::fail('a restore onto a schema with newer objects was attempted');
+        } catch (ChainBrokenException $e) {
+            self::assertStringContainsString('TABLE newt', $e->getMessage());
+            self::assertStringContainsString('VIEW v_pitr', $e->getMessage());
+        }
+        self::assertSame($before, $this->app('SELECT COUNT(*) FROM pitr'), 'the refused restore changed the database');
+
+        // Point in time T, with --recreate-database: rows and columns as of T, files as of the full backup.
+        $report = $manager->restoreChain($i2->getId(), $until, 'ci', null, true);
+        self::assertTrue($report->complete, (string) json_encode($report));
+        self::assertSame("1\t00FF275C0D0A\t7\n2\t62\t7", trim($this->app('SELECT id, HEX(v), w FROM pitr ORDER BY id')));
+        self::assertSame('', trim($this->app("SHOW TABLES LIKE 'newt'")));
+        self::assertSame("v: 1\n", file_get_contents($this->project . '/config/app.yaml'));
+        self::assertEquals($until, $report->databaseAt);
+
+        // The head: every event, the new objects included.
+        $report = $manager->restoreChain($i2->getId(), null, 'ci', null, true);
+        self::assertTrue($report->complete);
+        self::assertSame("1\t00FF275C0D0A\t7\n3\t63\t33\n4\t64\t44", trim($this->app('SELECT id, HEX(v), w FROM pitr ORDER BY id')));
+        self::assertSame('1', trim($this->app('SELECT COUNT(*) FROM newt')));
+        self::assertSame('3', trim($this->app('SELECT COUNT(*) FROM v_pitr')));
+        self::assertSame("v: 3\n", file_get_contents($this->project . '/config/app.yaml'));
+
+        // The other tenant was never touched by any restore.
+        self::assertSame('42', trim($this->admin('SELECT GROUP_CONCAT(id) FROM other.victim')));
+
+        // Beacon: new full after restore. The restores above closed this chain: the next incremental is refused like a
+        // gap (the CLI exits 3), and a new full backup starts a chain that continues.
+        try {
+            $manager->incrementalOptions($i2->getId());
+            self::fail('an incremental after a restore onto the live server was allowed');
+        } catch (BinlogGapException $e) {
+            self::assertSame(BinlogGapException::CLOSED_BY_RESTORE, $e->getReason());
+        }
+        sleep(1);
+        $fresh = $manager->createBackup(new BackupOptions(recordBinlogCoordinates: true, recordFileManifest: true));
+        $this->app('INSERT INTO pitr VALUES (5, 0x65, 55)');
+        $next   = $manager->createBackup($manager->incrementalOptions($fresh->getId()));
+        $report = $manager->restoreChain($next->getId(), null, 'ci', null, true);
+        self::assertTrue($report->complete);
+        self::assertSame('5', trim($this->app('SELECT MAX(id) FROM pitr')));
+        sleep(1);
+        $fresh = $manager->createBackup(new BackupOptions(recordBinlogCoordinates: true, recordFileManifest: true));
+
+        // Gaps: another server, then purged logs.
+        $capture = new BinlogCapture($server, $this->env['SBB_BINLOG_BACKUP_URL'], new MysqlBinlogTool($this->env['SBB_BINLOG_MYSQLBINLOG'], 300), $this->work());
+        try {
+            $capture->capture(new BinlogCoordinates((string) $i2->getMeta()['binlog_file'], 4, '00000000-0000-0000-0000-000000000000'), 'app');
+            self::fail('a capture from another server was accepted');
+        } catch (BinlogGapException $e) {
+            self::assertSame(BinlogGapException::SERVER_CHANGED, $e->getReason());
+        }
+        $this->admin('FLUSH BINARY LOGS');
+        $this->admin("PURGE BINARY LOGS TO '" . $server->status()['file'] . "'");
+        try {
+            $manager->createBackup($manager->incrementalOptions($fresh->getId()));
+            self::fail('a capture from purged logs was accepted');
+        } catch (BinlogGapException $e) {
+            self::assertSame(BinlogGapException::EXPIRED, $e->getReason());
+        }
+
+        $this->assertNoPassword([$full, $i1, $i2, $next]);
+    }
+
+    public function testRawCapturesAreRefusedAtRestoreWhenTheyTouchAnotherSchema(): void
+    {
+        [$manager] = $this->stack(IncrementalArtifact::RAW);
+        $this->app('CREATE TABLE pitr (id INT PRIMARY KEY, v INT); INSERT INTO pitr VALUES (1, 1)');
+        $full = $manager->createBackup(new BackupOptions(includeFiles: false, recordBinlogCoordinates: true));
+
+        // Scenario B: from an app session, another schema's table is dropped and re-created by its tenant.
+        $this->app('INSERT INTO pitr VALUES (2, 2)');
+        $this->admin('DROP TABLE other.victim', 'app');
+        $this->admin('CREATE TABLE other.victim (id INT PRIMARY KEY); INSERT INTO other.victim VALUES (42)');
+        $inc = $manager->createBackup($manager->incrementalOptions($full->getId()));
+        self::assertSame(IncrementalArtifact::RAW, $inc->getMeta()['binlog_capture']);
+
+        try {
+            $manager->restoreChain($inc->getId(), null, 'ci', null, true);
+            self::fail('a raw replay touching another schema was attempted');
+        } catch (ChainBrokenException $e) {
+            self::assertStringContainsString('outside schema app', $e->getMessage());
+        }
+        self::assertSame('42', trim($this->admin('SELECT GROUP_CONCAT(id) FROM other.victim')));
+        self::assertSame('2', trim($this->app('SELECT COUNT(*) FROM pitr')), 'the refused restore changed the database');
+        $this->assertNoPassword([$full, $inc]);
+    }
+
+    /**
+     * Beacon: triggers (kept by the chain's full dump, recreated at restore, not flagged by the pre-flight, trigger DDL in
+     * the incremental) and the opt-in routines and events (PP-D1-L3).
+     */
+    public function testTriggersRoutinesAndEventsSurviveTheChain(): void
+    {
+        [$manager] = $this->stack(IncrementalArtifact::FILTERED);
+        // Created by an administrator for the app's account (Beacon's shape: DEFINER = the app). A DEFINER holding
+        // SYSTEM_USER (root) would need SYSTEM_USER on the restore account too.
+        $this->admin("CREATE TABLE pitr (id INT PRIMARY KEY); CREATE TABLE audit (id INT PRIMARY KEY, note VARCHAR(16) NOT NULL DEFAULT 'new');"
+            . ' CREATE DEFINER=`app`@`%` TRIGGER trg_audit AFTER INSERT ON pitr FOR EACH ROW INSERT INTO audit (id) VALUES (NEW.id);'
+            . ' CREATE DEFINER=`app`@`%` PROCEDURE p_count() SELECT COUNT(*) FROM pitr;'
+            . ' CREATE DEFINER=`app`@`%` EVENT e_noop ON SCHEDULE EVERY 1 DAY DISABLE DO DELETE FROM audit WHERE id < 0;'
+            . ' INSERT INTO pitr VALUES (1)', 'app');
+        $full = $manager->createBackup(new BackupOptions(includeFiles: false, recordBinlogCoordinates: true, dumpRoutines: true));
+        self::assertTrue($full->getMeta()['dump_routines']);
+
+        $this->app('INSERT INTO pitr VALUES (2)');
+        $i1 = $manager->createBackup($manager->incrementalOptions($full->getId()));
+
+        // Binary logging on the target and log_bin_trust_function_creators OFF (the default) without SUPER: MySQL would
+        // stop the dump import at the first trigger (ERROR 1419). Refused before anything is touched.
+        try {
+            $manager->restoreChain($i1->getId(), null, 'ci');
+            self::fail('a restore that stops at ERROR 1419 was attempted');
+        } catch (ChainBrokenException $e) {
+            self::assertStringContainsString('log_bin_trust_function_creators', $e->getMessage());
+        }
+        self::assertSame('2', trim($this->app('SELECT COUNT(*) FROM audit')), 'the refused restore changed the database');
+        $this->admin('SET GLOBAL log_bin_trust_function_creators = ON');
+        try {
+            $this->restoreTriggersChain($manager, $i1);
+        } finally {
+            $this->admin('SET GLOBAL log_bin_trust_function_creators = OFF');
+        }
+    }
+
+    private function restoreTriggersChain(SiteBackupManager $manager, BackupArtifact $i1): void
+    {
+        // The schema's own triggers, routine and event are in the dump: the pre-flight lets a plain restore through.
+        $report = $manager->restoreChain($i1->getId(), null, 'ci');
+        self::assertTrue($report->complete, (string) json_encode($report));
+        self::assertSame("1\n2", trim($this->app('SELECT id FROM audit ORDER BY id')));
+        self::assertSame("EVENT e_noop\nPROCEDURE p_count\nTRIGGER trg_audit", $this->objects());
+
+        // A restore onto the live server is itself written to the binary log: the old chain would carry it. Start a new
+        // chain after a restore (as documented).
+        $full2 = $manager->createBackup(new BackupOptions(includeFiles: false, recordBinlogCoordinates: true, dumpRoutines: true));
+
+        // Trigger DDL after the full backup (Beacon's immutable-row shape, a create then drop).
+        $this->admin("CREATE DEFINER=`app`@`%` TRIGGER trg_immutable BEFORE UPDATE ON audit FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'immutable';"
+            . ' CREATE DEFINER=`app`@`%` TRIGGER trg_tmp BEFORE DELETE ON pitr FOR EACH ROW SET @x = 1; DROP TRIGGER trg_tmp', 'app');
+        $this->app('INSERT INTO pitr VALUES (3)');
+        $i2 = $manager->createBackup($manager->incrementalOptions($full2->getId()));
+        self::assertStringContainsString('TRIGGER trg_immutable', $this->extract($i2, ChainPaths::EVENTS));
+
+        $report = $manager->restoreChain($i2->getId(), null, 'ci', null, true);
+        self::assertTrue($report->complete, (string) json_encode($report));
+        self::assertSame("EVENT e_noop\nPROCEDURE p_count\nTRIGGER trg_audit\nTRIGGER trg_immutable", $this->objects());
+        // Replayed rows did not fire the triggers twice; the restored triggers fire for new writes.
+        self::assertSame("1\n2\n3", trim($this->app('SELECT id FROM audit ORDER BY id')));
+        $this->app('INSERT INTO pitr VALUES (4)');
+        self::assertSame('4', trim($this->app('SELECT COUNT(*) FROM audit')));
+        try {
+            $this->app("UPDATE audit SET note = 'x' WHERE id = 1");
+            self::fail('the restored immutable trigger did not fire');
+        } catch (ProcessFailedException $e) {
+            self::assertStringContainsString('immutable', $e->getProcess()->getErrorOutput());
+        }
+    }
+
+    /**
+     * PP-D1-H1 / D1-M1 / D1-L1: another tenant (untrusted) cannot get anything into the app's archive or replay.
+     */
+    public function testUntrustedTenantsFailClosed(): void
+    {
+        [$manager, , $storage] = $this->stack(IncrementalArtifact::FILTERED);
+        $this->app('CREATE TABLE pitr (id INT PRIMARY KEY); INSERT INTO pitr VALUES (1)');
+        $this->admin('CREATE TABLE other.mv (id INT)');
+
+        $attacks = [
+            // X12: a literal holding fake event boundaries and a fake `use app` event.
+            'boundaries in a literal' => ["CREATE TABLE inj (c INT) COMMENT='x\n# at 4\n#261101 10:00:00 server id 1  end_log_pos 300 CRC32 0x1 \tQuery\tthread_id=1\nuse `app`/*!*/;\nDROP TABLE pitr\n/*!*/;\n# End of log file\n'", 'other', 'do not match the binary logs'],
+            // X10: a table renamed across schemas.
+            'rename into app' => ['ALTER TABLE other.mv RENAME TO app.mv', null, 'across several databases'],
+            // X5: a view of the app that reads another schema.
+            'cross-schema view' => ['CREATE VIEW v_leak AS SELECT * FROM other.victim', 'app', 'refers to another database'],
+            // PP-D2-M1 (V9): a tenant's XA left prepared.
+            'tenant XA' => ["XA START 'tx1'; INSERT INTO other.victim VALUES (77); XA END 'tx1'; XA PREPARE 'tx1'", 'other', 'XA transaction'],
+        ];
+        foreach ($attacks as $case => [$sql, $database, $expected]) {
+            $full    = $manager->createBackup(new BackupOptions(includeFiles: false, recordBinlogCoordinates: true));
+            $archive = $this->archives($storage);
+            $this->app('INSERT INTO pitr VALUES (' . (count($archive) + 10) . ')');
+            $this->admin($sql, $database);
+            try {
+                $manager->createBackup($manager->incrementalOptions($full->getId()));
+                self::fail($case . ': the capture was archived');
+            } catch (BinlogFilterException $e) {
+                self::assertStringContainsString($expected, $e->getMessage(), $case);
+            }
+            self::assertSame($archive, $this->archives($storage), $case . ': something was archived');
+            self::assertSame('1', trim($this->app('SELECT COUNT(*) FROM pitr WHERE id = 1')), $case);
+            if ($case === 'tenant XA') {
+                $this->admin("XA ROLLBACK 'tx1'");
+            }
+            $this->admin('DROP TABLE IF EXISTS other.inj; DROP VIEW IF EXISTS app.v_leak; DROP TABLE IF EXISTS app.mv; CREATE TABLE IF NOT EXISTS other.mv (id INT)');
+        }
+
+        // PP-D2-L1 (V10): benign tenant DDL whose comment holds `/*!*/;` is dropped, not a reason for a full backup.
+        $full = $manager->createBackup(new BackupOptions(includeFiles: false, recordBinlogCoordinates: true));
+        $this->admin("CREATE TABLE c2 (c INT) COMMENT 'plain /*!*/; text'", 'other');
+        $this->app('INSERT INTO pitr VALUES (99)');
+        $inc = $manager->createBackup($manager->incrementalOptions($full->getId()));
+        self::assertStringNotContainsString('plain', $this->extract($inc, ChainPaths::EVENTS));
+        self::assertGreaterThan(0, $inc->getMeta()['binlog_events']['dropped_events']);
+    }
+
+    private function gtidOff(): bool
+    {
+        return getenv('SBB_BINLOG_GTID') === 'off';
+    }
+
+    private function objects(): string
+    {
+        return trim($this->admin("SELECT CONCAT('TRIGGER ', TRIGGER_NAME) AS o FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = 'app'"
+            . " UNION ALL SELECT CONCAT(ROUTINE_TYPE, ' ', ROUTINE_NAME) FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = 'app'"
+            . " UNION ALL SELECT CONCAT('EVENT ', EVENT_NAME) FROM information_schema.EVENTS WHERE EVENT_SCHEMA = 'app' ORDER BY o"));
+    }
+
+    /**
+     * @return list<string>
+     */
+    private function archives(string $storage): array
+    {
+        $files = glob($storage . '/*') ?: [];
+        sort($files);
+
+        return $files;
+    }
+
+    /**
+     * @return array{0: SiteBackupManager, 1: BackupArchiver, 2: string}
+     */
+    private function stack(string $mode): array
+    {
+        $work     = $this->work();
+        $mysql    = $this->env['SBB_BINLOG_MYSQL'];
+        $tool     = new MysqlBinlogTool($this->env['SBB_BINLOG_MYSQLBINLOG'], 300);
+        $server   = new MysqlClientBinlogServer($this->env['SBB_BINLOG_BACKUP_URL'], $mysql, 120, $work);
+        $storage  = $this->env['SBB_BINLOG_SHARED_DIR'] . '/storage-' . $mode . '-' . bin2hex(random_bytes(3));
+        $archiver = new BackupArchiver(
+            $this->project,
+            $storage,
+            ['config'],
+            [],
+            null,
+            300,
+            builtinDumper: new BuiltinMysqlDumper($this->env['SBB_BINLOG_DATABASE_URL'], $this->env['SBB_BINLOG_MYSQLDUMP'], timeoutSeconds: 300, binlogDatabaseUrl: $this->env['SBB_BINLOG_BACKUP_URL']),
+            workDir: $work,
+            binlogCapture: new BinlogCapture($server, $this->env['SBB_BINLOG_BACKUP_URL'], $tool, $work, mode: $mode),
+            binlogServer: $server,
+        );
+        $manager = new SiteBackupManager(
+            archiver: $archiver,
+            restoreOrchestrator: new RestoreOrchestrator($this->project, $archiver, new MemoryRestoreProgressStorage(), []),
+            historyStorage: $this->history,
+            logger: $this->logger,
+            chainRestorer: new ChainRestorer(
+                $archiver,
+                RestorePathGuard::fromArchiver($this->project, [], $archiver),
+                $this->project,
+                new DumpImporter($this->env['SBB_BINLOG_RESTORE_URL'], $mysql, timeoutSeconds: 300),
+                new BinlogReplayer($this->env['SBB_BINLOG_RESTORE_URL'], $tool, $mysql, 300, $work),
+            ),
+        );
+
+        return [$manager, $archiver, $storage];
+    }
+
+    /**
+     * @param list<BackupArtifact> $artifacts
+     */
+    private function assertNoPassword(array $artifacts): void
+    {
+        $argv = is_file($this->env['SBB_BINLOG_SHARED_DIR'] . '/argv.log') ? (string) file_get_contents($this->env['SBB_BINLOG_SHARED_DIR'] . '/argv.log') : '';
+        self::assertStringContainsString('--defaults-file=', $argv);
+        foreach (['SBB_BINLOG_DATABASE_URL', 'SBB_BINLOG_BACKUP_URL', 'SBB_BINLOG_RESTORE_URL'] as $name) {
+            $password = MysqlDumpCommandFactory::connection($this->env[$name])['pass'];
+            self::assertNotSame('', $password, $name . ' needs a password for this assertion');
+            self::assertStringNotContainsString($password, $argv, $name);
+            self::assertStringNotContainsString($password, implode("\n", $this->logger->lines()), $name);
+            self::assertStringNotContainsString($password, (string) json_encode(array_map(static fn ($e): array => $e->toArray(), $this->history->list(500))), $name);
+            self::assertStringNotContainsString($password, (string) json_encode(array_map(static fn (BackupArtifact $a): array => $a->getMeta(), $artifacts)), $name);
+        }
+    }
+
+    private function extract(BackupArtifact $artifact, string $relative): string
+    {
+        $dir = $this->work() . '/extract-' . bin2hex(random_bytes(4));
+        (new Filesystem())->mkdir($dir);
+        try {
+            (new Process(['tar', '-xzf', $artifact->getAbsolutePath(), '-C', $dir]))->mustRun();
+
+            return (string) file_get_contents($dir . '/' . $relative);
+        } finally {
+            (new Filesystem())->remove($dir);
+        }
+    }
+
+    private function work(): string
+    {
+        return $this->env['SBB_BINLOG_SHARED_DIR'] . '/work';
+    }
+
+    private function app(string $sql): string
+    {
+        return $this->sql($this->env['SBB_BINLOG_DATABASE_URL'], $sql, 'app');
+    }
+
+    private function admin(string $sql, ?string $database = null): string
+    {
+        return $this->sql($this->env['SBB_BINLOG_ADMIN_URL'], $sql, $database);
+    }
+
+    private function sql(string $url, string $statement, ?string $database): string
+    {
+        $dir = $this->work() . '/sql-' . bin2hex(random_bytes(6));
+        (new Filesystem())->mkdir($dir, 0o700);
+        try {
+            $optionFile = MysqlOptionFile::write($url, $dir);
+            $command    = [$this->env['SBB_BINLOG_MYSQL'], '--defaults-file=' . $optionFile, '--batch', '--skip-column-names', '--execute=' . $statement];
+            if ($database !== null) {
+                $command = [...$command, '--', $database];
+            }
+            $process = new Process($command);
+            $process->setTimeout(120);
+            $process->mustRun();
+
+            return $process->getOutput();
+        } finally {
+            (new Filesystem())->remove($dir);
+        }
+    }
+}

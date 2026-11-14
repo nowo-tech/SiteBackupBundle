@@ -9,8 +9,11 @@ use Nowo\SiteBackupBundle\Enum\TableRule;
 use Nowo\SiteBackupBundle\Exception\DumpFailedException;
 use Nowo\SiteBackupBundle\Exception\InvalidBackupOptionsException;
 use Nowo\SiteBackupBundle\Exception\UnsafeTableRuleException;
+use Nowo\SiteBackupBundle\Incremental\DumpCoordinatesParser;
+use Nowo\SiteBackupBundle\Incremental\MysqlToolVersion;
 use Nowo\SiteBackupBundle\Log\SecretRedactor;
 use Nowo\SiteBackupBundle\Process\ProcessDeadline;
+use SensitiveParameter;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Process\Exception\ProcessTimedOutException;
 use Symfony\Component\Process\Process;
@@ -19,11 +22,13 @@ use function array_filter;
 use function count;
 use function explode;
 use function fclose;
+use function fgets;
 use function fopen;
 use function in_array;
 use function mb_substr;
 use function min;
 use function preg_match;
+use function preg_replace;
 use function sprintf;
 use function str_contains;
 use function str_replace;
@@ -71,22 +76,40 @@ final class BuiltinMysqlDumper
         private readonly array $requiredTables = [],
         private readonly string $migrationsTable = TableSafetyChecker::DEFAULT_MIGRATIONS_TABLE,
         private readonly Filesystem $filesystem = new Filesystem(),
+        #[SensitiveParameter]
+        private readonly ?string $binlogDatabaseUrl = null,
     ) {
     }
 
     /**
      * @param array<string, TableRule> $tableRules
      * @param (callable(): void)|null $tick called while the dump runs
+     * @param bool $recordBinlogCoordinates 1.36+: `--source-data=2` (+ `--set-gtid-purged=COMMENTED`) on the data pass,
+     *                                      parsed into {@see DumpReport::$binlogCoordinates}; needs the Oracle
+     *                                      mysqldump 8.0.26+ (the MariaDB client cannot read MySQL binlog coordinates)
+     * @param bool $routines 1.36+: `--routines --events` on the data pass (opt-in, chain full backups)
+     * @param bool $serverGtidOn 1.36+ (PP-D2-H1): the server's `gtid_mode` is ON / ON_PERMISSIVE; only then does a
+     *                           coordinates dump ask for `--set-gtid-purged=COMMENTED` (with GTID off mysqldump prints
+     *                           "Error: Server has GTIDs disabled.", exits 0 and writes an empty dump)
      *
      * @throws DumpFailedException|InvalidBackupOptionsException|UnsafeTableRuleException
      */
-    public function dump(string $target, array $tableRules = [], bool $allowUnsafeTableRules = false, ?callable $tick = null): DumpReport
+    public function dump(string $target, array $tableRules = [], bool $allowUnsafeTableRules = false, ?callable $tick = null, bool $recordBinlogCoordinates = false, bool $routines = false, bool $serverGtidOn = false): DumpReport
     {
         self::assertExtraOptions($this->extraOptions);
+        if ($recordBinlogCoordinates && $tableRules !== []) {
+            throw new InvalidBackupOptionsException('recordBinlogCoordinates cannot be combined with table rules: a binlog replay needs every table.');
+        }
 
+        // 1.36+ (PP-M4): a dump that records binlog coordinates needs RELOAD + REPLICATION CLIENT: it runs with the
+        // dedicated backup.database.binlog_url account when one is configured, never widening the app's account.
+        $url = $recordBinlogCoordinates && $this->binlogDatabaseUrl !== null && $this->binlogDatabaseUrl !== '' ? $this->binlogDatabaseUrl : (string) $this->databaseUrl;
         try {
-            $spec     = MysqlDumpCommandFactory::fromDatabaseUrl((string) $this->databaseUrl, $this->skipSslVerifyServerCert, $this->binary, $this->extraOptions);
-            $database = MysqlDumpCommandFactory::databaseName((string) $this->databaseUrl);
+            $spec     = MysqlDumpCommandFactory::fromDatabaseUrl($url, $this->skipSslVerifyServerCert, $this->binary, $this->extraOptions);
+            $database = MysqlDumpCommandFactory::databaseName($url);
+            if ($database !== MysqlDumpCommandFactory::databaseName((string) $this->databaseUrl)) {
+                throw new InvalidArgumentException('backup.database.binlog_url must name the same database as backup.database.url.');
+            }
         } catch (InvalidArgumentException $e) {
             throw new DumpFailedException('Database dump: ' . $e->getMessage(), 0, $e);
         }
@@ -101,7 +124,14 @@ final class BuiltinMysqlDumper
 
         [$flavour, $version] = $this->probeClient();
         $gtidOff             = $flavour === self::FLAVOUR_MYSQL;
-        $commands            = self::planCommands($spec['command'], $database, $tableRules, $gtidOff);
+        if ($recordBinlogCoordinates) {
+            if ($flavour !== self::FLAVOUR_MYSQL || !MysqlToolVersion::supports(MysqlToolVersion::oracleClient($version))) {
+                throw new InvalidBackupOptionsException(sprintf('recordBinlogCoordinates needs the Oracle mysqldump %s+ (backup.database.binary); the MariaDB client tools cannot read MySQL binlog coordinates.', MysqlToolVersion::MINIMUM));
+            }
+        }
+        // `--set-gtid-purged=COMMENTED` exists from 8.0.32; older 8.0 clients record the coordinates without the GTID set.
+        $gtidCommented = $serverGtidOn && MysqlToolVersion::supports(MysqlToolVersion::oracleClient($version), '8.0.32');
+        $commands      = self::planCommands($spec['command'], $database, $tableRules, $gtidOff, $recordBinlogCoordinates, $gtidCommented, $routines);
 
         // Owner-only before mysqldump opens it: the dump is a plaintext copy of the database.
         $this->filesystem->touch($target);
@@ -115,7 +145,9 @@ final class BuiltinMysqlDumper
                     $this->filesystem->touch($file);
                     $this->filesystem->chmod($file, 0o600);
                 }
-                $this->run(MysqlDumpCommandFactory::withOptions($command, ['--result-file=' . $file]), $spec['env'], $tick);
+                if ($this->run(MysqlDumpCommandFactory::withOptions($command, ['--result-file=' . $file]), $spec['env'], $tick)) {
+                    $warnings[] = 'mysqldump could not read the column masking policies (no SELECT on mysql.column_masking_policy): they are not in the dump.';
+                }
                 if ($index > 0) {
                     $this->append($file, $target);
                 }
@@ -124,7 +156,33 @@ final class BuiltinMysqlDumper
             $this->filesystem->remove($structureFile);
         }
 
-        return new DumpReport($flavour, $version, count($commands), $gtidOff, $warnings);
+        $coordinates = null;
+        if ($recordBinlogCoordinates) {
+            // PP-D2-H1: a chain's full must be a whole dump (mysqldump may exit 0 after an error with an empty file).
+            if (!self::isCompleteDump($target)) {
+                throw new DumpFailedException('The dump is incomplete (no table, or no "Dump completed" trailer): the chain was not started.');
+            }
+            $coordinates = DumpCoordinatesParser::parse($target);
+            if ($coordinates === null) {
+                throw new DumpFailedException('The dump holds no binlog coordinates: is log_bin on, and does the account have RELOAD and REPLICATION CLIENT?');
+            }
+        }
+
+        return new DumpReport($flavour, $version, count($commands), $gtidOff, $warnings, $coordinates);
+    }
+
+    /**
+     * The schema this dumper dumps (1.36+: the database of binlog coordinates and captures).
+     *
+     * @throws DumpFailedException when the URL is not usable
+     */
+    public function databaseName(): string
+    {
+        try {
+            return MysqlDumpCommandFactory::databaseName((string) $this->databaseUrl);
+        } catch (InvalidArgumentException $e) {
+            throw new DumpFailedException('Database dump: ' . $e->getMessage(), 0, $e);
+        }
     }
 
     /**
@@ -136,9 +194,16 @@ final class BuiltinMysqlDumper
      *
      * @return list<list<string>>
      */
-    public static function planCommands(array $baseCommand, string $database, array $tableRules, bool $gtidPurgedOff): array
+    public static function planCommands(array $baseCommand, string $database, array $tableRules, bool $gtidPurgedOff, bool $recordBinlogCoordinates = false, bool $gtidCommented = true, bool $routines = false): array
     {
         $common = $gtidPurgedOff ? ['--set-gtid-purged=OFF'] : [];
+        // 1.36+: the data pass records the binlog coordinates of its snapshot (as a comment) and, from 8.0.32, the
+        // snapshot's GTID set as a comment too (never executed on import).
+        $data = $recordBinlogCoordinates ? ['--source-data=2', $gtidCommented ? '--set-gtid-purged=COMMENTED' : '--set-gtid-purged=OFF'] : $common;
+        if ($routines) {
+            // 1.36+ (PP-D1-L3, opt-in): stored routines and events too, so a chain restore re-creates them.
+            $data = [...$data, '--routines', '--events'];
+        }
 
         $ignore    = [];
         $structure = [];
@@ -149,7 +214,7 @@ final class BuiltinMysqlDumper
             }
         }
 
-        $commands = [MysqlDumpCommandFactory::withOptions($baseCommand, [...$common, ...$ignore])];
+        $commands = [MysqlDumpCommandFactory::withOptions($baseCommand, [...$data, ...$ignore])];
         if ($structure !== []) {
             $commands[] = [...MysqlDumpCommandFactory::withOptions($baseCommand, [...$common, '--no-data']), ...$structure];
         }
@@ -207,8 +272,10 @@ final class BuiltinMysqlDumper
      * @param list<string> $command
      * @param array<string, string> $env
      * @param (callable(): void)|null $tick
+     *
+     * @return bool true when mysqldump could not dump the column masking policies (MySQL 9.x; it continues without them)
      */
-    private function run(array $command, array $env, ?callable $tick): void
+    private function run(array $command, array $env, ?callable $tick): bool
     {
         $process = new Process($command, null, $env);
 
@@ -218,9 +285,39 @@ final class BuiltinMysqlDumper
             // Not chained: Symfony's message embeds the command line.
             throw new DumpFailedException(sprintf('Database dump timed out after %d seconds (process_timeout).', $this->timeoutSeconds));
         }
-        if (!$process->isSuccessful()) {
-            throw new DumpFailedException('Database dump failed: ' . mb_substr(SecretRedactor::redact(trim($process->getErrorOutput())), 0, 500));
+        // PP-D2-H1: mysqldump reports some errors ("Error: Server has GTIDs disabled.") and still exits 0. The one about
+        // column masking policies (MySQL 9.x, an account without SELECT on mysql.column_masking_policy) leaves the
+        // schema whole: it becomes a warning.
+        $masking = '/^mysqldump:\s*Error:.*when trying to dump masking policies\s*$/mi';
+        $stderr  = $process->getErrorOutput();
+        if (!$process->isSuccessful() || preg_match('/^(?:mysqldump:\s*)?(?:Error\b|\[ERROR\]|Got error\b)/mi', (string) preg_replace($masking, '', $stderr)) === 1) {
+            throw new DumpFailedException('Database dump failed: ' . mb_substr(SecretRedactor::redact(trim($stderr)), 0, 500));
         }
+
+        return preg_match($masking, $stderr) === 1;
+    }
+
+    /**
+     * A table definition and mysqldump's `-- Dump completed` trailer are both present.
+     */
+    private static function isCompleteDump(string $path): bool
+    {
+        $handle = @fopen($path, 'r');
+        if ($handle === false) {
+            return false;
+        }
+        $table     = false;
+        $completed = false;
+        try {
+            while (($line = fgets($handle, 1 << 16)) !== false) {
+                $table     = $table || str_starts_with($line, 'CREATE TABLE ');
+                $completed = $completed || str_starts_with($line, '-- Dump completed');
+            }
+        } finally {
+            fclose($handle);
+        }
+
+        return $table && $completed;
     }
 
     private function append(string $from, string $to): void

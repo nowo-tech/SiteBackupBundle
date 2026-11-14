@@ -32,11 +32,22 @@ use Nowo\SiteBackupBundle\EventSubscriber\SetupRequestSubscriber;
 use Nowo\SiteBackupBundle\EventSubscriber\UnlocalizedDefaultLocaleSubscriber;
 use Nowo\SiteBackupBundle\Exclusion\SiteBackupExclusionMatcher;
 use Nowo\SiteBackupBundle\Form\AbstractSiteBackupFormType;
+use Nowo\SiteBackupBundle\Incremental\BinlogCapture;
+use Nowo\SiteBackupBundle\Incremental\BinlogCaptureInterface;
+use Nowo\SiteBackupBundle\Incremental\BinlogPrerequisites;
+use Nowo\SiteBackupBundle\Incremental\BinlogPrerequisitesInterface;
+use Nowo\SiteBackupBundle\Incremental\BinlogReplayer;
+use Nowo\SiteBackupBundle\Incremental\BinlogServerInterface;
+use Nowo\SiteBackupBundle\Incremental\IncrementalBackupManagerInterface;
+use Nowo\SiteBackupBundle\Incremental\MysqlBinlogTool;
+use Nowo\SiteBackupBundle\Incremental\MysqlClientBinlogServer;
 use Nowo\SiteBackupBundle\Lock\BackupOperationLock;
 use Nowo\SiteBackupBundle\Remote\BackupRemoteTargetInterface;
 use Nowo\SiteBackupBundle\Remote\FlysystemRemoteTarget;
 use Nowo\SiteBackupBundle\Remote\RemoteBackupPublisher;
+use Nowo\SiteBackupBundle\Restore\ChainRestorer;
 use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
+use Nowo\SiteBackupBundle\Restore\RestorePathGuard;
 use Nowo\SiteBackupBundle\Retention\RetentionPolicy;
 use Nowo\SiteBackupBundle\Routing\PanelRouteLoader;
 use Nowo\SiteBackupBundle\Routing\SetupLocales;
@@ -507,7 +518,8 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
                 ->setArgument('$timeoutSeconds', $timeout)
                 ->setArgument('$schemaInspector', new Reference(SchemaInspectorInterface::class))
                 ->setArgument('$requiredTables', array_values($database['required_tables']))
-                ->setArgument('$migrationsTable', (string) $database['migrations_table']);
+                ->setArgument('$migrationsTable', (string) $database['migrations_table'])
+                ->setArgument('$binlogDatabaseUrl', is_string($database['binlog_url']) && $database['binlog_url'] !== '' ? $database['binlog_url'] : null);
         }
 
         $age = $backup['encryption']['age'];
@@ -569,7 +581,11 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
 
         $container->register(RemoteBackupPublisher::class, RemoteBackupPublisher::class)
             ->setArgument('$eventDispatcher', new Reference('event_dispatcher', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
-            ->setArgument('$signer', new Reference(BackupSigner::class));
+            ->setArgument('$signer', new Reference(BackupSigner::class))
+            ->setArgument('$logger', new Reference('logger', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
+            ->addTag('monolog.logger', ['channel' => 'site_backup']);
+
+        $this->configureIncremental($container, $config);
 
         $container->register(BackupOperationLock::class, BackupOperationLock::class)
             ->setArgument('$lockDirectory', $backup['storage_dir'])
@@ -631,6 +647,87 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
     }
 
     /**
+     * 1.36+: binary log incrementals and chain restores. The services exist always (no side effect until a chain
+     * backup or restore asks for them); the archiver uses them only with backup.database.dumper: builtin.
+     *
+     * @param array<string, mixed> $config
+     */
+    private function configureIncremental(ContainerBuilder $container, array $config): void
+    {
+        $backup   = $config['backup'];
+        $database = $backup['database'];
+        $timeout  = (int) $config['process_timeout'];
+        $url      = (string) $database['url'];
+        $workDir  = (string) $backup['work_dir'];
+        // PP-M4: dedicated accounts for captures and restores; both default to backup.database.url.
+        $binlogUrl  = is_string($database['binlog_url']) && $database['binlog_url'] !== '' ? $database['binlog_url'] : $url;
+        $restoreUrl = is_string($database['restore_url']) && $database['restore_url'] !== '' ? $database['restore_url'] : $url;
+        // PP-L6: the TLS settings of extra_options reach the option files of the binlog tools.
+        $tls = array_values(array_filter($database['extra_options'], static fn ($o): bool => is_string($o) && preg_match('/^--(?:ssl|tls)-/', $o) === 1));
+
+        $container->register(MysqlClientBinlogServer::class, MysqlClientBinlogServer::class)
+            ->setArgument('$databaseUrl', $binlogUrl)
+            ->setArgument('$clientBinary', (string) $database['client_binary'])
+            ->setArgument('$timeoutSeconds', $timeout)
+            ->setArgument('$workDir', $workDir)
+            ->setArgument('$tlsOptions', $tls);
+        $container->setAlias(BinlogServerInterface::class, MysqlClientBinlogServer::class)->setPublic(false);
+
+        $container->register(MysqlBinlogTool::class, MysqlBinlogTool::class)
+            ->setArgument('$binary', (string) $database['mysqlbinlog_binary'])
+            ->setArgument('$timeoutSeconds', $timeout);
+
+        $container->register(BinlogCapture::class, BinlogCapture::class)
+            ->setArgument('$server', new Reference(BinlogServerInterface::class))
+            ->setArgument('$databaseUrl', $binlogUrl)
+            ->setArgument('$tool', new Reference(MysqlBinlogTool::class))
+            ->setArgument('$workDir', $workDir)
+            ->setArgument('$clock', new Reference(ClockInterface::class, ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
+            ->setArgument('$mode', (string) $database['binlog_capture'])
+            ->setArgument('$tlsOptions', $tls);
+        $container->setAlias(BinlogCaptureInterface::class, BinlogCapture::class)->setPublic(false);
+
+        $container->register(BinlogPrerequisites::class, BinlogPrerequisites::class)
+            ->setArgument('$server', new Reference(BinlogServerInterface::class))
+            ->setArgument('$binaries', [
+                'mysqldump'   => (string) $database['binary'],
+                'mysql'       => (string) $database['client_binary'],
+                'mysqlbinlog' => (string) $database['mysqlbinlog_binary'],
+            ])
+            ->setArgument('$minExpirySeconds', (int) $database['binlog_min_expiry_seconds'])
+            ->setArgument('$database', $url)
+            ->setArgument('$captureMode', (string) $database['binlog_capture']);
+        $container->setAlias(BinlogPrerequisitesInterface::class, BinlogPrerequisites::class)->setPublic(false);
+
+        $container->register(BinlogReplayer::class, BinlogReplayer::class)
+            ->setArgument('$databaseUrl', $restoreUrl)
+            ->setArgument('$tlsOptions', $tls)
+            ->setArgument('$tool', new Reference(MysqlBinlogTool::class))
+            ->setArgument('$clientBinary', (string) $database['client_binary'])
+            ->setArgument('$timeoutSeconds', $timeout)
+            ->setArgument('$workDir', $workDir);
+
+        // The chain restore holds the operation lock itself: its importer must not take it again.
+        $container->register('nowo_site_backup.chain.importer', DumpImporter::class)
+            ->setArgument('$databaseUrl', $restoreUrl)
+            ->setArgument('$clientBinary', (string) $database['client_binary'])
+            ->setArgument('$skipSslVerifyServerCert', (bool) $database['skip_ssl_verify_server_cert'])
+            ->setArgument('$timeoutSeconds', $timeout);
+
+        $container->register(RestorePathGuard::class, RestorePathGuard::class)
+            ->setFactory([RestorePathGuard::class, 'fromArchiver'])
+            ->setArguments(['%kernel.project_dir%', array_values($config['restore']['protected_paths'] ?? []), new Reference(BackupArchiver::class)]);
+
+        $container->register(ChainRestorer::class, ChainRestorer::class)
+            ->setArgument('$archiver', new Reference(BackupArchiver::class))
+            ->setArgument('$guard', new Reference(RestorePathGuard::class))
+            ->setArgument('$projectDir', '%kernel.project_dir%')
+            ->setArgument('$importer', new Reference('nowo_site_backup.chain.importer'))
+            ->setArgument('$replayer', new Reference(BinlogReplayer::class))
+            ->setArgument('$workerRestartSignal', new Reference(WorkerRestartSignal::class));
+    }
+
+    /**
      * @param array<string, mixed> $config
      */
     private function configureStorage(ContainerBuilder $container, array $config): void
@@ -674,6 +771,8 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$encryptor', new Reference(ArchiveEncryptorInterface::class))
             ->setArgument('$signer', new Reference(BackupSigner::class))
             ->setArgument('$statsCollector', new Reference(TableStatsCollector::class))
+            ->setArgument('$binlogCapture', $backup['database']['dumper'] === 'builtin' ? new Reference(BinlogCaptureInterface::class) : null)
+            ->setArgument('$binlogServer', $backup['database']['dumper'] === 'builtin' ? new Reference(BinlogServerInterface::class) : null)
 
             ->setArgument('$extractLimits', $backup['extract_limits']);
     }
@@ -925,7 +1024,9 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$operationLock', new Reference(BackupOperationLock::class))
             ->setArgument('$localRetention', $policy)
             ->setArgument('$defaultFormat', ArchiveFormat::from((string) $backup['default_format']))
-            ->setArgument('$defaultCompressionLevel', (int) $backup['compression_level']);
+            ->setArgument('$defaultCompressionLevel', (int) $backup['compression_level'])
+            ->setArgument('$chainRestorer', new Reference(ChainRestorer::class));
+        $container->setAlias(IncrementalBackupManagerInterface::class, SiteBackupManager::class)->setPublic(false);
     }
 
     /**

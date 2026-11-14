@@ -8,7 +8,10 @@ use InvalidArgumentException;
 use Nowo\SiteBackupBundle\Enum\ArchiveFormat;
 use Nowo\SiteBackupBundle\Enum\TableRule;
 use Nowo\SiteBackupBundle\Exception\BackupAlreadyRunningException;
+use Nowo\SiteBackupBundle\Exception\BinlogFilterException;
+use Nowo\SiteBackupBundle\Exception\BinlogGapException;
 use Nowo\SiteBackupBundle\Exception\InvalidBackupOptionsException;
+use Nowo\SiteBackupBundle\Incremental\IncrementalBackupManagerInterface;
 use Nowo\SiteBackupBundle\Log\SecretRedactor;
 use Nowo\SiteBackupBundle\Model\BackupOptions;
 use Nowo\SiteBackupBundle\Service\SiteBackupManagerInterface;
@@ -39,6 +42,9 @@ final class CreateBackupCommand extends Command
 {
     public const EXIT_LOCKED = 75;
 
+    /** 1.36+: the incremental cannot continue its chain (binlog gap, or events that cannot be attributed): take a full backup. */
+    public const EXIT_BINLOG_GAP = 3;
+
     public function __construct(private readonly SiteBackupManagerInterface $manager)
     {
         parent::__construct();
@@ -58,7 +64,11 @@ final class CreateBackupCommand extends Command
             ->addOption('structure-only', null, InputOption::VALUE_REQUIRED | InputOption::VALUE_IS_ARRAY, 'Table dumped without rows (repeatable; needs the builtin dumper)')
             ->addOption('allow-unsafe-table-rules', null, InputOption::VALUE_NONE, 'Downgrade the foreign-key / view refusals of --skip-table to warnings')
             ->addOption('json', null, InputOption::VALUE_NONE, 'Print the result as JSON (id, file, size, sha256, format, warnings)')
-            ->addOption('key-id', null, InputOption::VALUE_REQUIRED, 'Opaque id of the archive password in your key ring (recorded in the meta, 1.29+)');
+            ->addOption('key-id', null, InputOption::VALUE_REQUIRED, 'Opaque id of the archive password in your key ring (recorded in the meta, 1.29+)')
+            ->addOption('record-binlog', null, InputOption::VALUE_NONE, 'Record the binlog coordinates of the dump and start a chain (1.36+; builtin dumper, Oracle MySQL tools)')
+            ->addOption('record-file-manifest', null, InputOption::VALUE_NONE, 'Record the file manifest and start a chain (1.36+)')
+            ->addOption('routines', null, InputOption::VALUE_NONE, 'With --record-binlog: also dump stored routines and events (1.36+)')
+            ->addOption('incremental-of', null, InputOption::VALUE_REQUIRED, 'Create an incremental backup after this backup (the head of its chain, 1.36+)');
         PasswordInput::configure($this);
     }
 
@@ -72,6 +82,15 @@ final class CreateBackupCommand extends Command
             $io->warning(SecretRedactor::redact($e->getMessage()));
 
             return self::EXIT_LOCKED;
+        } catch (BinlogGapException|BinlogFilterException $e) {
+            // PP-D1-L2: a refused event, like a gap, needs a new full backup. Beacon counts promotions per reason: the
+            // machine-readable code goes to stdout (`reason: <code>`, or JSON with --json) and to the history row.
+            $io->error(SecretRedactor::redact($e->getMessage()) . ' Take a full backup.');
+            $output->writeln((bool) $input->getOption('json')
+                ? (string) json_encode(['error' => 'needs_full_backup', 'reason' => $e->getReason()])
+                : 'reason: ' . $e->getReason());
+
+            return self::EXIT_BINLOG_GAP;
         } catch (InvalidBackupOptionsException|InvalidArgumentException $e) {
             $io->error(SecretRedactor::redact($e->getMessage()));
 
@@ -83,7 +102,12 @@ final class CreateBackupCommand extends Command
         }
 
         if ((bool) $input->getOption('json')) {
-            $output->writeln((string) json_encode([
+            $chain = [];
+            if (is_string($artifact->getMeta()['type'] ?? null)) {
+                // 1.36+: only for chain backups.
+                $chain = ['type' => $artifact->getMeta()['type'], 'chain_id' => $artifact->getMeta()['chain_id'] ?? null, 'parent_id' => $artifact->getMeta()['parent_id'] ?? null];
+            }
+            $output->writeln((string) json_encode($chain + [
                 'id'        => $artifact->getId(),
                 'file'      => $artifact->getAbsolutePath(),
                 'size'      => $artifact->getSizeBytes(),
@@ -146,6 +170,25 @@ final class CreateBackupCommand extends Command
             }
         }
 
+        $parent = $input->getOption('incremental-of');
+        if (is_string($parent) && $parent !== '') {
+            if (!$this->manager instanceof IncrementalBackupManagerInterface) {
+                throw new InvalidBackupOptionsException('--incremental-of needs the bundle\'s SiteBackupManager.');
+            }
+            if ($input->getOption('no-database') || $input->getOption('no-files') || $paths !== null || $rules !== [] || $input->getOption('record-binlog') || $input->getOption('record-file-manifest') || $input->getOption('routines')) {
+                throw new InvalidBackupOptionsException('--incremental-of takes its content from the chain: --no-database, --no-files, --path, table rules and --record-* do not apply.');
+            }
+
+            return $this->manager->incrementalOptions($parent, new BackupOptions(
+                format: $format,
+                compressionLevel: $level,
+                label: $default->label,
+                createdBy: $default->createdBy,
+                password: PasswordInput::read($input),
+                keyId: is_string($input->getOption('key-id')) && $input->getOption('key-id') !== '' ? $input->getOption('key-id') : null,
+            ));
+        }
+
         return new BackupOptions(
             includeDatabase: !(bool) $input->getOption('no-database'),
             includeFiles: !(bool) $input->getOption('no-files') && $format !== ArchiveFormat::SqlGz,
@@ -158,6 +201,9 @@ final class CreateBackupCommand extends Command
             allowUnsafeTableRules: (bool) $input->getOption('allow-unsafe-table-rules'),
             password: PasswordInput::read($input),
             keyId: is_string($input->getOption('key-id')) && $input->getOption('key-id') !== '' ? $input->getOption('key-id') : null,
+            recordBinlogCoordinates: (bool) $input->getOption('record-binlog'),
+            recordFileManifest: (bool) $input->getOption('record-file-manifest'),
+            dumpRoutines: (bool) $input->getOption('routines'),
         );
     }
 }
