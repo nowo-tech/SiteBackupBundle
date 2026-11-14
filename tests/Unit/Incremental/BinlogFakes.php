@@ -24,6 +24,11 @@ final class BinlogFakes
             for a in "\$@"; do case "\$a" in --defaults-file=*) cat "\${a#--defaults-file=}" > "{$dir}/cnf"; echo "\${a#--defaults-file=}" > "{$dir}/cnf-path";; esac; done
             if [ -f "{$dir}/fail" ]; then echo "ERROR 1227 (42000) at line 1: Access denied; password=REDACTED-TEST" >&2; exit 1; fi
             case "\$*" in
+              *"DEFAULT_CHARACTER_SET_NAME"*) printf 'utf8mb4\\tutf8mb4_0900_ai_ci\\n';;
+              *"SELECT SCHEMA_NAME"*) if [ -f "{$dir}/schemata" ]; then cat "{$dir}/schemata"; fi;;
+              *"information_schema.TABLES"*) if [ -f "{$dir}/objects" ]; then cat "{$dir}/objects"; fi;;
+              *"CREATE DATABASE"*) echo "\$*" >> "{$dir}/ddl";;
+              *"SHOW DATABASES"*) printf 'app\\nmysql\\n';;
               *"SELECT VERSION()"*) echo "{$version}";;
               *"server_uuid"*) echo "3E11FA47-71CA-11E1-9E33-C80AA9429562";;
               *"SHOW GLOBAL VARIABLES"*) printf 'log_bin\\tON\\nbinlog_format\\tROW\\nbinlog_row_image\\tFULL\\nunrelated\\tx\\n';;
@@ -75,8 +80,8 @@ final class BinlogFakes
      * @param list<array{name: string, size: int}> $logs
      * @param list<array{name: string, size: int}>|null $afterFlush
      */
-    public static function server(array $logs, string $uuid = ChainFixtures::UUID, string $version = '9.7.2', ?array $afterFlush = null): FakeBinlogServer
+    public static function server(array $logs, string $uuid = ChainFixtures::UUID, string $version = '9.7.2', ?array $afterFlush = null, string $format = 'ROW'): FakeBinlogServer
     {
-        return new FakeBinlogServer($logs, $uuid, $version, $afterFlush);
+        return new FakeBinlogServer($logs, $uuid, $version, $afterFlush, $format);
     }
 }

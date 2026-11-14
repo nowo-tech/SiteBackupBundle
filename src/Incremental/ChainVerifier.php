@@ -87,6 +87,9 @@ final class ChainVerifier
         if ($link->chainId === null || $link->chainId !== $root->chainId) {
             $problems[] = sprintf('Backup %s belongs to another chain.', $link->id);
         }
+        if ($link->storage !== $root->storage) {
+            $problems[] = sprintf('Backup %s is stored with another format, encryption or key than the full backup (%s vs %s): one chain, one format and key.', $link->id, $link->storage, $root->storage);
+        }
         if ($link->parentId !== $parent->id) {
             $problems[] = sprintf('The parent of backup %s is missing (expected %s).', $link->id, $parent->id);
         }
@@ -125,6 +128,15 @@ final class ChainVerifier
         }
 
         $problems = [];
+        if ($link->binlogCapture !== null && $link->binlogCapture !== IncrementalArtifact::RAW && $link->binlogCapture !== IncrementalArtifact::FILTERED) {
+            $problems[] = sprintf('Backup %s has an unknown binlog capture mode.', $link->id);
+        }
+        if ($parent->isIncremental() && $link->binlogCapture !== $parent->binlogCapture) {
+            $problems[] = sprintf('Backup %s mixes raw and filtered binlog captures in one chain.', $link->id);
+        }
+        if ($link->binlogCapture === IncrementalArtifact::FILTERED && $link->binlogFiles !== [] && $link->binlogEvents === null) {
+            $problems[] = sprintf('Backup %s is a filtered capture without its events file.', $link->id);
+        }
         if ($root->end instanceof BinlogCoordinates && $link->end->serverUuid !== $root->end->serverUuid) {
             $problems[] = sprintf('Backup %s comes from another MySQL server (server_uuid differs).', $link->id);
         }

@@ -49,9 +49,18 @@ interface IncrementalBackupManagerInterface
     public function importChain(array $paths, #[SensitiveParameter] ?ArchivePassword $password = null, ?string $actor = null, ?ImportOptions $options = null): array;
 
     /**
-     * Restores the chain ending with $headId, up to $until (inclusive, UTC; null = the head).
+     * Restores the chain ending with $headId, up to $until (inclusive, UTC; null = the head). A target schema that
+     * holds objects the full backup does not re-create is refused unless $recreateDatabase (drop + create first).
      *
      * @throws BackupAlreadyRunningException|ChainBrokenException|ChainRestoreException
      */
-    public function restoreChain(string $headId, ?DateTimeImmutable $until = null, ?string $actor = null, #[SensitiveParameter] ?ArchivePassword $password = null): ChainRestoreReport;
+    public function restoreChain(string $headId, ?DateTimeImmutable $until = null, ?string $actor = null, #[SensitiveParameter] ?ArchivePassword $password = null, bool $recreateDatabase = false): ChainRestoreReport;
+
+    /**
+     * Options of the next incremental when the parent is only available as an archive (its remote sidecar carries no
+     * file manifest): the archive is verified and its MANIFEST meta read; nothing is stored.
+     *
+     * @throws InvalidBackupOptionsException when the parent cannot be continued
+     */
+    public function incrementalOptionsFromArchive(string $parentArchivePath, #[SensitiveParameter] ?ArchivePassword $password = null, ?BackupOptions $base = null): BackupOptions;
 }

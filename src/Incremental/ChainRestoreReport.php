@@ -16,6 +16,10 @@ final readonly class ChainRestoreReport
      * @param list<string> $chain backup ids, full first
      * @param list<ChainRestoreStep> $steps in execution order
      * @param list<string> $notes
+     * @param DateTimeImmutable|null $databaseAt the instant the database is restored to (`--until`, or the last
+     *                                           replayed event), null without a database part
+     * @param DateTimeImmutable|null $filesAsOf the creation time of the backup the files are restored from (the
+     *                                          last incremental at or before `--until`), null without files
      */
     public function __construct(
         public array $chain,
@@ -24,6 +28,8 @@ final readonly class ChainRestoreReport
         public ?DateTimeImmutable $until = null,
         public ?string $error = null,
         public array $notes = [],
+        public ?DateTimeImmutable $databaseAt = null,
+        public ?DateTimeImmutable $filesAsOf = null,
     ) {
     }
 

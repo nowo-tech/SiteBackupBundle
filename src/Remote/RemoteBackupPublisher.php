@@ -18,10 +18,12 @@ use Nowo\SiteBackupBundle\Retention\RetentionPolicy;
 use Nowo\SiteBackupBundle\Signing\BackupSigner;
 use Psr\Clock\ClockInterface;
 use Psr\EventDispatcher\EventDispatcherInterface;
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Clock\NativeClock;
 use Throwable;
 
 use function array_key_exists;
+use function count;
 use function fclose;
 use function feof;
 use function fopen;
@@ -67,6 +69,9 @@ final class RemoteBackupPublisher
 
     private const SIDECAR_MAX_BYTES = 64 * 1024;
 
+    /** 1.36+: object metadata naming the chain of a chain member. */
+    private const CHAIN_METADATA = 'nowo-chain-id';
+
     /** Bundle backup ids (`Ymd-His-<8 hex>`); other ids in a sidecar are ignored by prune (EO-L3). */
     private const ID_PATTERN = '/^\d{8}-\d{6}-[0-9a-f]{8}$/';
 
@@ -77,6 +82,7 @@ final class RemoteBackupPublisher
         private readonly ?EventDispatcherInterface $eventDispatcher = null,
         private readonly ClockInterface $clock = new NativeClock(),
         private readonly ?BackupSigner $signer = null,
+        private readonly ?LoggerInterface $logger = null,
     ) {
     }
 
@@ -161,11 +167,28 @@ final class RemoteBackupPublisher
         ?callable $filter = null,
         ?bool $requireSignature = null,
     ): PruneReport {
-        $required = $requireSignature ?? ($this->signer instanceof BackupSigner && $this->signer->isRequired());
-        $latest   = $this->clock->now()->getTimestamp() + self::FUTURE_SKEW_SECONDS;
-        $keysById = [];
-        $items    = [];
-        foreach ($this->catalogue($target, $prefix) as $archiveKey => [$sidecar, $object]) {
+        $required                 = $requireSignature ?? ($this->signer instanceof BackupSigner && $this->signer->isRequired());
+        $latest                   = $this->clock->now()->getTimestamp() + self::FUTURE_SKEW_SECONDS;
+        $keysById                 = [];
+        $items                    = [];
+        [$catalogue, $unreadable] = $this->catalogue($target, $prefix);
+        $errors                   = [];
+        $blind                    = false;
+        foreach ($unreadable as $archiveKey => $object) {
+            // PP-M5: never skip silently. The archive's own metadata names its chain: that chain is kept whole; without
+            // it nothing is pruned in this run (the archive could be the parent of anything).
+            $errors[$archiveKey . self::SIDECAR_SUFFIX] = 'UnreadableSidecar';
+            [$known, $chainId]                          = $this->chainOf($target, $archiveKey, $object);
+            $this->logger?->warning('SiteBackup: remote sidecar unreadable or too large; it is kept and so is its chain.', ['bundle' => 'site_backup', 'action' => 'prune', 'key' => $archiveKey . self::SIDECAR_SUFFIX, 'chain_known' => $known]);
+            if (!$known) {
+                $blind = true;
+                continue;
+            }
+            if ($chainId !== null) {
+                $items[] = new RetentionItem('unreadable:' . $archiveKey, $this->clock->now(), false, $chainId);
+            }
+        }
+        foreach ($catalogue as $archiveKey => [$sidecar, $object]) {
             if ($filter !== null && !$filter($sidecar)) {
                 continue;
             }
@@ -184,8 +207,7 @@ final class RemoteBackupPublisher
         }
 
         $deleted = [];
-        $errors  = [];
-        foreach (RetentionPlanner::plan($items, $policy, $justCreatedId, $this->clock->now()) as $id) {
+        foreach ($blind ? [] : RetentionPlanner::plan($items, $policy, $justCreatedId, $this->clock->now()) as $id) {
             $key = $keysById[$id];
             try {
                 $target->delete($key);
@@ -215,11 +237,26 @@ final class RemoteBackupPublisher
             $objects[$object->key] = $object;
         }
 
+        // PP-L11: an archive that a chain member names as its parent, or that carries chain metadata, is never an orphan
+        // to delete: removing it would break the chain.
+        $parents = [];
+        foreach ($this->catalogue($target, $prefix)[0] as [$sidecar]) {
+            $parent = is_array($sidecar['chain'] ?? null) ? ($sidecar['chain']['parent_id'] ?? null) : null;
+            if (is_string($parent) && preg_match(self::ID_PATTERN, $parent) === 1) {
+                $parents[] = $parent;
+            }
+        }
+
         $limit   = $this->clock->now()->getTimestamp() - $olderThanSeconds;
         $orphans = [];
         foreach ($objects as $key => $object) {
-            if (str_ends_with($key, self::SIDECAR_SUFFIX) || isset($objects[$key . self::SIDECAR_SUFFIX])) {
+            if (str_ends_with($key, self::SIDECAR_SUFFIX) || isset($objects[$key . self::SIDECAR_SUFFIX]) || isset($object->metadata[self::CHAIN_METADATA])) {
                 continue;
+            }
+            foreach ($parents as $parent) {
+                if (str_contains($key, $parent)) {
+                    continue 2;
+                }
             }
             if ($object->lastModified->getTimestamp() <= $limit) {
                 $orphans[] = $object;
@@ -278,10 +315,15 @@ final class RemoteBackupPublisher
             return [];
         }
         $chain = [];
-        foreach (IncrementalOptions::PARENT_META_KEYS as $key) {
+        foreach (IncrementalOptions::SIDECAR_KEYS as $key) {
             if (array_key_exists($key, $meta)) {
                 $chain[$key] = $meta[$key];
             }
+        }
+        if (is_array($meta['file_manifest'] ?? null)) {
+            // PP-M5: the manifest itself stays in the archive (MANIFEST.json); the sidecar stays small.
+            $chain['file_manifest_entries'] = count(is_array($meta['file_manifest']['entries'] ?? null) ? $meta['file_manifest']['entries'] : []);
+            $chain['file_manifest_bytes']   = strlen((string) json_encode($meta['file_manifest']));
         }
 
         return ['chain' => $chain];
@@ -324,6 +366,11 @@ final class RemoteBackupPublisher
         $keyId = $artifact->getMeta()['key_id'] ?? null;
         if (is_string($keyId) && $keyId !== '') {
             $metadata['nowo-key-id'] = $keyId;
+        }
+        // 1.36+: chain members name their chain on the object itself (prune / orphans without a readable sidecar).
+        $chainId = $artifact->getMeta()['chain_id'] ?? null;
+        if (is_string($chainId) && preg_match('/^[A-Za-z0-9._-]{1,128}$/', $chainId) === 1) {
+            $metadata[self::CHAIN_METADATA] = $chainId;
         }
 
         foreach ($extra as $name => $value) {
@@ -418,7 +465,7 @@ final class RemoteBackupPublisher
     /**
      * Archive key => [sidecar, archive object], for archives under $prefix that have a readable sidecar.
      *
-     * @return array<string, array{0: array<string, mixed>, 1: RemoteObject}>
+     * @return array{0: array<string, array{0: array<string, mixed>, 1: RemoteObject}>, 1: array<string, RemoteObject>} readable, unreadable (archive key => object)
      */
     private function catalogue(BackupRemoteTargetInterface $target, string $prefix): array
     {
@@ -427,7 +474,8 @@ final class RemoteBackupPublisher
             $keys[$object->key] = $object;
         }
 
-        $catalogue = [];
+        $catalogue  = [];
+        $unreadable = [];
         foreach ($keys as $key => $_) {
             if (!str_ends_with($key, self::SIDECAR_SUFFIX)) {
                 continue;
@@ -439,10 +487,36 @@ final class RemoteBackupPublisher
             $sidecar = $this->readSidecar($target, $key);
             if ($sidecar !== null) {
                 $catalogue[$archiveKey] = [$sidecar, $keys[$archiveKey]];
+            } else {
+                $unreadable[$archiveKey] = $keys[$archiveKey];
             }
         }
 
-        return $catalogue;
+        return [$catalogue, $unreadable];
+    }
+
+    /**
+     * What an archive object's metadata says about its chain (listing first, then head): [known, chain id]. Known =
+     * the object carries the bundle's metadata (`nowo-backup-id`): without `nowo-chain-id` it is not a chain member.
+     *
+     * @return array{0: bool, 1: ?string}
+     */
+    private function chainOf(BackupRemoteTargetInterface $target, string $archiveKey, RemoteObject $object): array
+    {
+        $metadata = $object->metadata;
+        if (!isset($metadata['nowo-backup-id'])) {
+            try {
+                $metadata = $target->head($archiveKey)->metadata ?? [];
+            } catch (Throwable) {
+                $metadata = [];
+            }
+        }
+        if (!isset($metadata['nowo-backup-id'])) {
+            return [false, null];
+        }
+        $chainId = $metadata[self::CHAIN_METADATA] ?? null;
+
+        return [true, is_string($chainId) && $chainId !== '' ? $chainId : null];
     }
 
     /**

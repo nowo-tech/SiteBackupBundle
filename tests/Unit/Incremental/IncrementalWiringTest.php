@@ -5,12 +5,14 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\Tests\Unit\Incremental;
 
 use Nowo\SiteBackupBundle\Backup\BackupArchiver;
+use Nowo\SiteBackupBundle\Database\BuiltinMysqlDumper;
 use Nowo\SiteBackupBundle\DependencyInjection\Configuration;
 use Nowo\SiteBackupBundle\DependencyInjection\SiteBackupExtension;
 use Nowo\SiteBackupBundle\Incremental\BinlogCapture;
 use Nowo\SiteBackupBundle\Incremental\BinlogCaptureInterface;
 use Nowo\SiteBackupBundle\Incremental\BinlogPrerequisites;
 use Nowo\SiteBackupBundle\Incremental\BinlogPrerequisitesInterface;
+use Nowo\SiteBackupBundle\Incremental\BinlogReplayer;
 use Nowo\SiteBackupBundle\Incremental\BinlogServerInterface;
 use Nowo\SiteBackupBundle\Incremental\IncrementalBackupManagerInterface;
 use Nowo\SiteBackupBundle\Incremental\MysqlBinlogTool;
@@ -54,6 +56,23 @@ final class IncrementalWiringTest extends TestCase
         self::assertSame('/opt/mysql/bin/mysqlbinlog', $container->getDefinition(MysqlBinlogTool::class)->getArgument('$binary'));
         self::assertSame(86400, $container->getDefinition(BinlogPrerequisites::class)->getArgument('$minExpirySeconds'));
         self::assertSame('/opt/mysql/bin/mysqlbinlog', $container->getDefinition(BinlogPrerequisites::class)->getArgument('$binaries')['mysqlbinlog']);
+
+        // PP-M4 / PP-L6 / PP-M3: dedicated accounts, TLS options and the capture mode.
+        $container = $this->load(['backup' => ['database' => [
+            'dumper'         => 'builtin',
+            'url'            => 'mysql://app@db/app',
+            'binlog_url'     => 'mysql://bk@db/app',
+            'restore_url'    => 'mysql://rs@db/app',
+            'binlog_capture' => 'raw',
+            'extra_options'  => ['--ssl-mode=VERIFY_IDENTITY', '--column-statistics=0'],
+        ]]]);
+        self::assertSame('mysql://bk@db/app', $container->getDefinition(MysqlClientBinlogServer::class)->getArgument('$databaseUrl'));
+        self::assertSame(['--ssl-mode=VERIFY_IDENTITY'], $container->getDefinition(MysqlClientBinlogServer::class)->getArgument('$tlsOptions'));
+        self::assertSame('raw', $container->getDefinition(BinlogCapture::class)->getArgument('$mode'));
+        self::assertSame('mysql://rs@db/app', $container->getDefinition(BinlogReplayer::class)->getArgument('$databaseUrl'));
+        self::assertSame('mysql://rs@db/app', $container->getDefinition('nowo_site_backup.chain.importer')->getArgument('$databaseUrl'));
+        self::assertSame('mysql://bk@db/app', $container->getDefinition(BuiltinMysqlDumper::class)->getArgument('$binlogDatabaseUrl'));
+        self::assertSame('filtered', (new Processor())->processConfiguration(new Configuration(), [[]])['backup']['database']['binlog_capture']);
     }
 
     /**

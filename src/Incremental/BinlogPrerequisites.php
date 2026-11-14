@@ -4,11 +4,15 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Incremental;
 
+use InvalidArgumentException;
+use Nowo\SiteBackupBundle\Database\MysqlDumpCommandFactory;
 use Nowo\SiteBackupBundle\Log\SecretRedactor;
 use Nowo\SiteBackupBundle\Process\ProcessDeadline;
+use SensitiveParameter;
 use Symfony\Component\Process\Process;
 use Throwable;
 
+use function count;
 use function explode;
 use function implode;
 use function in_array;
@@ -45,6 +49,9 @@ final class BinlogPrerequisites implements BinlogPrerequisitesInterface
         private readonly array $binaries = ['mysqldump' => 'mysqldump', 'mysql' => 'mysql', 'mysqlbinlog' => 'mysqlbinlog'],
         private readonly int $minExpirySeconds = 604800,
         private readonly int $probeTimeoutSeconds = 30,
+        #[SensitiveParameter]
+        private readonly ?string $database = null,
+        private readonly string $captureMode = IncrementalArtifact::FILTERED,
     ) {
     }
 
@@ -80,7 +87,6 @@ final class BinlogPrerequisites implements BinlogPrerequisitesInterface
         $format   = strtoupper($vars['binlog_format'] ?? '');
         $checks[] = match ($format) {
             'ROW'   => Check::ok('binlog_format', 'ROW.'),
-            'MIXED' => Check::warning('binlog_format', 'MIXED: statement events are filtered by the default database only; ROW is recommended.'),
             default => Check::fail('binlog_format', sprintf('binlog_format is %s: ROW is required.', $format === '' ? 'unknown' : $format)),
         };
 
@@ -91,6 +97,7 @@ final class BinlogPrerequisites implements BinlogPrerequisitesInterface
 
         $checks[] = $this->expiry($vars['binlog_expire_logs_seconds'] ?? null);
         $checks[] = $this->grants();
+        $checks[] = $this->schemas();
         $checks[] = Check::ok('gtid_mode', sprintf('gtid_mode is %s (replays skip GTIDs either way).', $vars['gtid_mode'] ?? 'OFF'));
 
         return $checks;
@@ -140,6 +147,43 @@ final class BinlogPrerequisites implements BinlogPrerequisitesInterface
         return Check::ok('expiry', sprintf('Binary logs expire after %d s.', $seconds));
     }
 
+    /**
+     * PP-M3: binary logs are server-wide. With other application schemas on the server, a raw capture archives their
+     * data and account statements; a filtered capture keeps only this schema's events.
+     */
+    private function schemas(): Check
+    {
+        try {
+            $schemas = $this->server->schemas();
+        } catch (Throwable $e) {
+            return Check::warning('schemas', 'SHOW DATABASES failed: ' . mb_substr(SecretRedactor::redact($e->getMessage()), 0, 200));
+        }
+        $own    = $this->database !== null ? self::databaseName($this->database) : null;
+        $others = [];
+        foreach ($schemas as $schema) {
+            if (!in_array(strtolower($schema), ['mysql', 'information_schema', 'performance_schema', 'sys'], true) && $schema !== $own) {
+                $others[] = $schema;
+            }
+        }
+        if ($others === []) {
+            return Check::ok('schemas', 'No other application schema on this server.');
+        }
+        $detail = sprintf('%d other schema(s) on this server (shared server).', count($others));
+
+        return $this->captureMode === IncrementalArtifact::RAW
+            ? Check::warning('schemas', $detail . ' binlog_capture: raw archives their events too: use filtered, or a dedicated server, and encrypt the archives.')
+            : Check::ok('schemas', $detail . ' binlog_capture: filtered keeps only this schema\'s events.');
+    }
+
+    private static function databaseName(string $url): ?string
+    {
+        try {
+            return MysqlDumpCommandFactory::databaseName($url);
+        } catch (InvalidArgumentException) {
+            return null;
+        }
+    }
+
     private function grants(): Check
     {
         try {
@@ -157,8 +201,9 @@ final class BinlogPrerequisites implements BinlogPrerequisitesInterface
                 $held[trim($privilege)] = true;
             }
         }
-        if (isset($held['ALL PRIVILEGES']) || isset($held['ALL'])) {
-            return Check::ok('grants', 'ALL PRIVILEGES on *.*.');
+        if (isset($held['ALL PRIVILEGES']) || isset($held['ALL']) || isset($held['SUPER']) || isset($held['SYSTEM_VARIABLES_ADMIN'])) {
+            // PP-M4: works, but far more than captures need (an injection in the app would own the server).
+            return Check::warning('grants', 'The account holds ALL / SUPER / SYSTEM_VARIABLES_ADMIN on *.*: use a dedicated backup account (backup.database.binlog_url) with RELOAD, REPLICATION CLIENT, REPLICATION SLAVE only.');
         }
 
         $missing = [];

@@ -54,6 +54,13 @@ interface BinlogServerInterface
     public function status(): array;
 
     /**
+     * Every database on the server (`SHOW DATABASES`), system ones included.
+     *
+     * @return list<string>
+     */
+    public function schemas(): array;
+
+    /**
      * `SHOW GRANTS FOR CURRENT_USER()`, one line per grant.
      *
      * @return list<string>

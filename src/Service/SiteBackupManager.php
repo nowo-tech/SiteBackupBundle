@@ -188,8 +188,13 @@ final class SiteBackupManager implements SiteBackupManagerInterface, Incremental
             $items[] = RetentionItem::fromArtifact($artifact);
         }
 
-        // Newest first: an incremental goes before the backup it depends on (1.36+, chains are pruned whole).
-        foreach (array_reverse(RetentionPlanner::plan($items, $this->localRetention, $created->getId(), $this->clock->now())) as $id) {
+        $plan   = RetentionPlanner::plan($items, $this->localRetention, $created->getId(), $this->clock->now());
+        $chains = false;
+        foreach ($items as $item) {
+            $chains = $chains || $item->chainId !== null;
+        }
+        // 1.36+: with chains, newest first (an incremental before the backup it depends on); otherwise the 1.35 order.
+        foreach ($chains ? array_reverse($plan) : $plan as $id) {
             try {
                 $this->doDelete($id, $actor ?? 'retention');
             } catch (Throwable $e) {
@@ -413,7 +418,18 @@ final class SiteBackupManager implements SiteBackupManagerInterface, Incremental
         return $imported;
     }
 
-    public function restoreChain(string $headId, ?DateTimeImmutable $until = null, ?string $actor = null, #[SensitiveParameter] ?ArchivePassword $password = null): ChainRestoreReport
+    public function incrementalOptionsFromArchive(string $parentArchivePath, #[SensitiveParameter] ?ArchivePassword $password = null, ?BackupOptions $base = null): BackupOptions
+    {
+        try {
+            $parent = $this->archiver->readArchiveMeta($parentArchivePath, $password);
+        } catch (Throwable $e) {
+            throw new InvalidBackupOptionsException('The parent archive cannot be read: ' . SecretRedactor::fromThrowable($e), 0, $e);
+        }
+
+        return IncrementalOptions::fromParentMeta($parent['id'], $parent['meta'], $base);
+    }
+
+    public function restoreChain(string $headId, ?DateTimeImmutable $until = null, ?string $actor = null, #[SensitiveParameter] ?ArchivePassword $password = null, bool $recreateDatabase = false): ChainRestoreReport
     {
         if (!$this->chainRestorer instanceof ChainRestorer) {
             throw new RuntimeException('Chain restores need the bundle\'s ChainRestorer service.');
@@ -434,7 +450,7 @@ final class SiteBackupManager implements SiteBackupManagerInterface, Incremental
             $this->logger->warning('SiteBackup: chain restore started.', $this->context('restore_chain', $headId) + ['links' => (string) count($chain->ids())]);
 
             try {
-                $report = $this->chainRestorer->restore($chain, $until, $password, $lock instanceof BackupOperationLockHandle ? static fn () => $lock->refresh() : null);
+                $report = $this->chainRestorer->restore($chain, $until, $password, $lock instanceof BackupOperationLockHandle ? static fn () => $lock->refresh() : null, $recreateDatabase);
             } catch (Throwable $e) {
                 // @igor-ignore - Service coordinates I/O or request-scoped work; not unsafe worker singleton state.
                 $this->historyStorage->append(new BackupHistoryEntry(
@@ -451,7 +467,7 @@ final class SiteBackupManager implements SiteBackupManagerInterface, Incremental
 
             // @igor-ignore - Service coordinates I/O or request-scoped work; not unsafe worker singleton state.
             $this->historyStorage->append(new BackupHistoryEntry(
-                action: 'restore_chain_complete',
+                action: $report->complete ? 'restore_chain_complete' : 'restore_chain_incomplete',
                 occurredAt: $this->clock->now(),
                 actor: $actor,
                 backupId: $headId,
@@ -459,7 +475,7 @@ final class SiteBackupManager implements SiteBackupManagerInterface, Incremental
             $this->logger->info('SiteBackup: chain restore completed.', $this->context('restore_chain', $headId));
 
             // Imported (plaintext) archives are removed once restored, head first.
-            foreach (array_reverse($chain->artifacts) as $artifact) {
+            foreach ($report->complete ? array_reverse($chain->artifacts) : [] as $artifact) {
                 if (($artifact->getMeta()['delete_after_restore'] ?? false) === true) {
                     $this->doDelete($artifact->getId(), $actor ?? 'restore');
                 }

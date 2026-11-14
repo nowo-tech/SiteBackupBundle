@@ -22,12 +22,14 @@ use Nowo\SiteBackupBundle\Exception\InsufficientDiskException;
 use Nowo\SiteBackupBundle\Exception\InvalidBackupOptionsException;
 use Nowo\SiteBackupBundle\Exception\UnsafeArchiveException;
 use Nowo\SiteBackupBundle\Exception\WrongPasswordException;
-use Nowo\SiteBackupBundle\Incremental\BinlogCapture;
 use Nowo\SiteBackupBundle\Incremental\BinlogCaptureInterface;
 use Nowo\SiteBackupBundle\Incremental\BinlogCoordinates;
 use Nowo\SiteBackupBundle\Incremental\BinlogServerInterface;
+use Nowo\SiteBackupBundle\Incremental\CapturedBinlog;
 use Nowo\SiteBackupBundle\Incremental\ChainLink;
+use Nowo\SiteBackupBundle\Incremental\ChainPaths;
 use Nowo\SiteBackupBundle\Incremental\FileManifest;
+use Nowo\SiteBackupBundle\Incremental\IncrementalArtifact;
 use Nowo\SiteBackupBundle\Log\SecretRedactor;
 use Nowo\SiteBackupBundle\Model\ArchivePassword;
 use Nowo\SiteBackupBundle\Model\BackupArtifact;
@@ -174,7 +176,8 @@ final class BackupArchiver
     private const CHAIN_META_KEYS = [
         'type', 'chain_id', 'parent_id', 'binlog_file', 'binlog_position', 'server_uuid', 'gtid_executed', 'binlog_database',
         'binlog_from', 'binlog_files', 'first_event_at', 'last_event_at', 'binlog_captured_at', 'file_manifest',
-        'file_manifest_sha256', 'base_manifest_sha256', 'files_changed', 'files_deleted',
+        'file_manifest_sha256', 'base_manifest_sha256', 'files_changed', 'files_deleted', 'binlog_capture', 'binlog_events',
+        'snapshot_at',
     ];
 
     /** @var array{max_bytes: int, max_entries: int, max_ratio: int} */
@@ -298,7 +301,8 @@ final class BackupArchiver
             }
             // Files modified from 2 s before the start on may change again within the same mtime second: not trusted.
             $racyFrom  = $this->clock->now()->getTimestamp() - 2;
-            $checksums = $options->includeFiles ? $this->copyIncludedPaths($payloadDir, $includes, $skipped, $outside, $beat, $track ? $options->baseManifest : null, $track, $entries, $racyFrom) : [];
+            $reserved  = 0;
+            $checksums = $options->includeFiles ? $this->copyIncludedPaths($payloadDir, $includes, $skipped, $outside, $beat, $track ? $options->baseManifest : null, $track, $entries, $racyFrom, $reserved) : [];
             $meta      = [
                 'project_dir'       => $this->projectDir,
                 'includes'          => $options->includeFiles ? array_values($includes) : [],
@@ -343,7 +347,8 @@ final class BackupArchiver
                     $meta['dump'] = $report->toManifest();
                     $warnings     = array_merge($warnings, $report->warnings);
                     if ($report->binlogCoordinates !== null) {
-                        $meta += $this->dumpCoordinates($report->binlogCoordinates);
+                        // PP-L8: the snapshot is at most this recent; a point in time before it cannot be restored.
+                        $meta += $this->dumpCoordinates($report->binlogCoordinates) + ['snapshot_at' => $this->clock->now()->format(DATE_ATOM)];
                     }
                 }
                 $beat(BackupProgress::PHASE_HASHING);
@@ -366,6 +371,9 @@ final class BackupArchiver
             }
             if ($outside > 0) {
                 $warnings[] = sprintf('%d link(s) pointing outside the project skipped.', $outside);
+            }
+            if ($reserved > 0) {
+                $warnings[] = sprintf('%d file(s) at a path the archive reserves (MANIFEST.json, database/dump.sql, .nowo-site-backup/) skipped.', $reserved);
             }
             if ($options->password !== null && !$ageWrap && $options->password->estimatedBits() < ArchivePassword::WEAK_ZIP_BITS) {
                 $warnings[] = 'The archive password looks weak for zip AES (PBKDF2-SHA1 x 1000): prefer a generated password of 20+ characters.';
@@ -438,13 +446,12 @@ final class BackupArchiver
      * dropped, and the result is stored as a plain `tar.gz` in the bundle layout, so `restore()` and the panel can use it.
      * The stored copy is plaintext (`0600`, owner-only, owner decision Q-O6): delete it after the restore.
      *
-     * @throws CorruptArchiveException|FormatUnavailableException|UnsafeArchiveException|WrongPasswordException
-     */
-    /**
      * @param array{original_parent_id: string, parent_id: string}|null $chainLink 1.36+: the archive is the next
      *                                                                             incremental of a chain being imported:
      *                                                                             its original parent and the new id of
      *                                                                             that parent here
+     *
+     * @throws CorruptArchiveException|FormatUnavailableException|UnsafeArchiveException|WrongPasswordException
      */
     public function import(string $path, #[SensitiveParameter] ?ArchivePassword $password = null, ?string $createdBy = null, ?ImportOptions $options = null, ?array $chainLink = null): BackupArtifact
     {
@@ -557,6 +564,34 @@ final class BackupArchiver
         } finally {
             $this->filesystem->remove($workDir);
         }
+    }
+
+    /**
+     * The id and meta recorded in an archive's MANIFEST (1.36+): verifies the archive like an import, stores nothing.
+     * Used to continue a chain whose parent is only available remotely (the sidecar carries no file manifest).
+     *
+     * @throws CorruptArchiveException|FormatUnavailableException|UnsafeArchiveException|WrongPasswordException
+     *
+     * @return array{id: string, meta: array<string, mixed>}
+     */
+    public function readArchiveMeta(string $path, #[SensitiveParameter] ?ArchivePassword $password = null): array
+    {
+        if (!is_file($path) || !is_readable($path)) {
+            throw new CorruptArchiveException('The archive is missing or not readable.');
+        }
+        $workDir = PrivateTempDirectory::create(self::WORK_DIR_PREFIX . 'meta-', $this->workRoot());
+        try {
+            $original = $this->unpack($path, $password, $workDir, $workDir . '/payload')['original'];
+        } finally {
+            $this->filesystem->remove($workDir);
+        }
+        $id = $original['id'] ?? null;
+        unset($original['id']);
+        if (!is_string($id) || $id === '') {
+            throw new CorruptArchiveException('The archive has no id in its MANIFEST.');
+        }
+
+        return ['id' => $id, 'meta' => $original];
     }
 
     /**
@@ -1277,14 +1312,15 @@ final class BackupArchiver
         }
 
         $deleted = $base->deletedIn($manifest);
-        $file    = $payloadDir . '/DELETED.json';
+        $file    = $payloadDir . '/' . ChainPaths::DELETED;
+        $this->filesystem->mkdir(dirname($file), 0o700);
         try {
             file_put_contents($file, json_encode($deleted, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
         } catch (JsonException $e) {
             throw new RuntimeException('Unable to write DELETED.json.', 0, $e);
         }
         $this->filesystem->chmod($file, 0o600);
-        $checksums['DELETED.json'] = $this->hashFile($file, null);
+        $checksums[ChainPaths::DELETED] = $this->hashFile($file, null);
 
         return $meta + [
             'base_manifest_sha256' => $base->sha256(),
@@ -1324,24 +1360,33 @@ final class BackupArchiver
         $capture = $this->binlogCapture();
         $beat(BackupProgress::PHASE_DUMPING);
         $database = $this->databaseName();
-        $captured = $capture instanceof BinlogCapture
-            ? $capture->capture($from, $database, static fn () => $beat())
-            : $capture->capture($from, $database);
+        $captured = $capture->capture($from, $database, static fn () => $beat());
 
+        $meta = [];
         try {
-            $this->filesystem->mkdir($payloadDir . '/binlog', 0o700);
+            $this->filesystem->mkdir($payloadDir . '/' . ChainPaths::BINLOG_DIRECTORY, 0o700);
             $files = [];
             foreach ($captured->files as $file) {
-                $relative = 'binlog/' . $file->name;
-                $this->filesystem->rename($file->path, $payloadDir . '/' . $relative);
-                $checksums[$relative] = $file->sha256;
-                $files[]              = ['name' => $file->name, 'sha256' => $file->sha256, 'size' => $file->sizeBytes];
+                // Filtered: the source logs are described (contiguity) but not archived.
+                $files[] = ['name' => $file->name, 'sha256' => $file->sha256, 'size' => $file->sizeBytes];
+                if ($captured->mode === IncrementalArtifact::RAW) {
+                    $relative = ChainPaths::BINLOG_DIRECTORY . $file->name;
+                    $this->filesystem->rename($file->path, $payloadDir . '/' . $relative);
+                    $checksums[$relative] = $file->sha256;
+                }
+            }
+            $events = $captured->events;
+            if ($events instanceof CapturedBinlog) {
+                $this->filesystem->rename($events->path, $payloadDir . '/' . ChainPaths::EVENTS);
+                $checksums[ChainPaths::EVENTS] = $events->sha256;
+                $meta['binlog_events']         = ['path' => ChainPaths::EVENTS, 'sha256' => $events->sha256, 'size' => $events->sizeBytes, 'dropped_events' => $captured->droppedEvents];
             }
         } finally {
             $capture->discard($captured);
         }
 
-        return $captured->to->toArray() + [
+        return $captured->to->toArray() + $meta + [
+            'binlog_capture'     => $captured->mode,
             'binlog_from'        => $captured->from->toArray(),
             'binlog_database'    => $database,
             'binlog_files'       => $files,
@@ -1538,11 +1583,11 @@ final class BackupArchiver
      *
      * @return array<string, string> path => SHA-256 of the files copied into the payload
      */
-    private function copyIncludedPaths(string $payloadDir, array $includePaths, int &$skipped, int &$outside, Closure $beat, ?FileManifest $base = null, bool $track = false, array &$entries = [], int $racyFrom = PHP_INT_MAX): array
+    private function copyIncludedPaths(string $payloadDir, array $includePaths, int &$skipped, int &$outside, Closure $beat, ?FileManifest $base = null, bool $track = false, array &$entries = [], int $racyFrom = PHP_INT_MAX, int &$reserved = 0): array
     {
         $checksums = [];
         $project   = rtrim($this->projectDir, '/\\');
-        $verdicts  = ['secret' => 0, 'outside' => 0];
+        $verdicts  = ['secret' => 0, 'outside' => 0, 'reserved' => 0];
         $floor     = null;
         $beat(BackupProgress::PHASE_COPYING);
 
@@ -1585,6 +1630,7 @@ final class BackupArchiver
 
         $skipped += $verdicts['secret'];
         $outside += $verdicts['outside'];
+        $reserved += $verdicts['reserved'];
 
         return $checksums;
     }
@@ -1607,7 +1653,8 @@ final class BackupArchiver
         $size  = 0;
         $mtime = FileManifest::UNTRUSTED_MTIME;
         if ($track) {
-            $verdict = $this->classify($relative, $absolute, $floor);
+            // PP-L9: a project file at a payload path of the bundle would be dropped from every chain restore.
+            $verdict = ChainPaths::isReserved($relative) ? 'reserved' : $this->classify($relative, $absolute, $floor);
             if ($verdict !== null) {
                 ++$verdicts[$verdict];
 

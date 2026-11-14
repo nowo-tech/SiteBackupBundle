@@ -7,6 +7,7 @@ namespace Nowo\SiteBackupBundle\Incremental;
 use InvalidArgumentException;
 use Nowo\SiteBackupBundle\Backup\PrivateTempDirectory;
 use Nowo\SiteBackupBundle\Database\MysqlOptionFile;
+use Nowo\SiteBackupBundle\Exception\BinlogFilterException;
 use Nowo\SiteBackupBundle\Exception\BinlogGapException;
 use Nowo\SiteBackupBundle\Exception\BinlogUnavailableException;
 use Psr\Clock\ClockInterface;
@@ -39,6 +40,10 @@ use function sprintf;
  */
 final class BinlogCapture implements BinlogCaptureInterface
 {
+    /**
+     * @param string $mode {@see IncrementalArtifact::FILTERED} (default) or {@see IncrementalArtifact::RAW}
+     * @param list<string> $tlsOptions `--ssl-*` / `--tls-*` options for the option file (PP-L6)
+     */
     public function __construct(
         private readonly BinlogServerInterface $server,
         #[SensitiveParameter]
@@ -47,7 +52,12 @@ final class BinlogCapture implements BinlogCaptureInterface
         private readonly ?string $workDir = null,
         private readonly ClockInterface $clock = new NativeClock(),
         private readonly Filesystem $filesystem = new Filesystem(),
+        private readonly string $mode = IncrementalArtifact::FILTERED,
+        private readonly array $tlsOptions = [],
     ) {
+        if ($mode !== IncrementalArtifact::FILTERED && $mode !== IncrementalArtifact::RAW) {
+            throw new InvalidArgumentException('backup.database.binlog_capture is filtered or raw.');
+        }
     }
 
     public function capture(BinlogCoordinates $from, string $database, ?callable $tick = null): IncrementalArtifact
@@ -59,6 +69,11 @@ final class BinlogCapture implements BinlogCaptureInterface
         $version = MysqlToolVersion::oracleServer($this->server->version());
         if (!MysqlToolVersion::supports($version)) {
             throw new BinlogUnavailableException(sprintf('Binary log incrementals need a MySQL %s+ server (MariaDB is not supported).', MysqlToolVersion::MINIMUM));
+        }
+        // PP-L4: only row-based logs can be attributed to a schema event by event.
+        $format = strtoupper($this->server->variables(['binlog_format'])['binlog_format'] ?? '');
+        if ($format !== 'ROW') {
+            throw new BinlogUnavailableException(sprintf('Binary log incrementals need binlog_format=ROW (the server uses %s).', $format === '' ? 'an unknown format' : $format));
         }
         $uuid = $this->server->serverUuid();
         if ($uuid !== $from->serverUuid) {
@@ -72,10 +87,10 @@ final class BinlogCapture implements BinlogCaptureInterface
         // Empty: $from sits at the end of the last closed log, nothing was written since.
         $end = $closed === [] ? null : $closed[count($closed) - 1];
 
-        $directory = PrivateTempDirectory::create('nowo-site-backup-binlog-', $this->workDir);
+        $directory = PrivateTempDirectory::createOwned('nowo-site-backup-binlog-', $this->workDir);
         try {
             if ($end === null) {
-                return new IncrementalArtifact($from, $from, $database, [], $directory, null, null, $this->clock->now());
+                return new IncrementalArtifact($from, $from, $database, [], $directory, null, null, $this->clock->now(), $this->mode);
             }
 
             $raw = $directory . '/raw';
@@ -83,7 +98,7 @@ final class BinlogCapture implements BinlogCaptureInterface
             $credentials = $directory . '/credentials';
             $this->filesystem->mkdir($credentials, 0o700);
             try {
-                $optionFile = MysqlOptionFile::write((string) $this->databaseUrl, $credentials);
+                $optionFile = MysqlOptionFile::write((string) $this->databaseUrl, $credentials, $this->tlsOptions);
             } catch (InvalidArgumentException $e) {
                 throw new BinlogUnavailableException('Binary log tools: ' . $e->getMessage(), 0, $e);
             }
@@ -103,15 +118,32 @@ final class BinlogCapture implements BinlogCaptureInterface
                 $files[] = new CapturedBinlog($log['name'], $path, $size, (string) hash_file('sha256', $path));
             }
 
-            $events = $directory . '/events.txt';
-            $start  = $files[0]->name === $from->file ? $from->position : null;
-            $this->tool->decode(array_map(static fn (CapturedBinlog $f): string => $f->path, $files), $events, $start, null, null, true, $tick);
-            [$first, $last] = BinlogEventTimes::scan($events);
-            $this->filesystem->remove($events);
+            $start = $files[0]->name === $from->file ? $from->position : null;
+            $paths = array_map(static fn (CapturedBinlog $f): string => $f->path, $files);
+            $to    = new BinlogCoordinates($end['name'], $end['size'], $uuid);
 
-            $to = new BinlogCoordinates($end['name'], $end['size'], $uuid);
+            if ($this->mode === IncrementalArtifact::RAW) {
+                $events = $directory . '/events.txt';
+                $this->tool->decode($paths, $events, $start, null, null, true, $tick);
+                [$first, $last] = BinlogEventTimes::scan($events);
+                $this->filesystem->remove($events);
 
-            return new IncrementalArtifact($from, $to, $database, $files, $directory, $first, $last, $this->clock->now());
+                return new IncrementalArtifact($from, $to, $database, $files, $directory, $first, $last, $this->clock->now(), IncrementalArtifact::RAW);
+            }
+
+            // Filtered (default): decode everything (no --database), keep the schema's events only, fail closed on any
+            // event that cannot be attributed; the raw logs (every schema of the server) never leave this directory.
+            $decoded = $directory . '/decoded.sql';
+            $this->tool->decode($paths, $decoded, $start, null, null, false, $tick);
+            $filtered = $directory . '/' . CapturedBinlog::EVENTS;
+            $result   = BinlogSchemaFilter::run([$decoded], $filtered, $database, BinlogSchemaFilter::FILTER);
+            $this->filesystem->remove([$decoded, $raw]);
+            if (!$result->isClean()) {
+                throw new BinlogFilterException($result->problems, $result->problemCount);
+            }
+            $events = new CapturedBinlog(CapturedBinlog::EVENTS, $filtered, (int) filesize($filtered), (string) hash_file('sha256', $filtered));
+
+            return new IncrementalArtifact($from, $to, $database, $files, $directory, $result->firstEventAt, $result->lastEventAt, $this->clock->now(), IncrementalArtifact::FILTERED, $events, $result->droppedEvents);
         } catch (Throwable $e) {
             $this->filesystem->remove($directory);
 

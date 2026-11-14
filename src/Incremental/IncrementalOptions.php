@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\Incremental;
 
 use InvalidArgumentException;
+use Nowo\SiteBackupBundle\Enum\ArchiveFormat;
 use Nowo\SiteBackupBundle\Exception\InvalidBackupOptionsException;
 use Nowo\SiteBackupBundle\Model\BackupArtifact;
 use Nowo\SiteBackupBundle\Model\BackupOptions;
@@ -25,11 +26,13 @@ use function sprintf;
  */
 final class IncrementalOptions
 {
-    /** Meta keys a next incremental needs (also the `chain` block of a remote sidecar). */
-    public const PARENT_META_KEYS = [
+    /**
+     * The `chain` block of a remote sidecar (PP-M5: small; the file manifest stays in the archive, its SHA-256 here).
+     */
+    public const SIDECAR_KEYS = [
         'type', 'chain_id', 'parent_id', 'includes', 'database_dump', 'binlog_file', 'binlog_position', 'server_uuid',
-        'gtid_executed', 'binlog_database', 'binlog_from', 'binlog_files', 'first_event_at', 'last_event_at',
-        'binlog_captured_at', 'file_manifest', 'file_manifest_sha256', 'base_manifest_sha256',
+        'gtid_executed', 'binlog_database', 'binlog_capture', 'binlog_from', 'first_event_at', 'last_event_at',
+        'binlog_captured_at', 'snapshot_at', 'file_manifest_sha256', 'base_manifest_sha256', 'format', 'encrypted', 'key_id',
     ];
 
     /**
@@ -55,6 +58,9 @@ final class IncrementalOptions
 
         $manifest = null;
         $includes = null;
+        if (!is_array($parentMeta['file_manifest'] ?? null) && is_string($parentMeta['file_manifest_sha256'] ?? null)) {
+            throw new InvalidBackupOptionsException(sprintf('The file manifest of backup %s is in its archive (a remote sidecar holds only its SHA-256): use incrementalOptionsFromArchive() with the downloaded archive.', $parentId));
+        }
         if (is_array($parentMeta['file_manifest'] ?? null)) {
             try {
                 $manifest = FileManifest::fromArray($parentMeta['file_manifest']);
@@ -75,7 +81,17 @@ final class IncrementalOptions
             throw new InvalidBackupOptionsException(sprintf('Backup %s has neither binlog coordinates nor a file manifest to continue from.', $parentId));
         }
 
-        $base ??= new BackupOptions();
+        // PP-L10: one chain, one format and key (a chain restore uses one password for every archive).
+        $format = ArchiveFormat::tryFrom(is_string($parentMeta['format'] ?? null) ? $parentMeta['format'] : '') ?? ArchiveFormat::TarGz;
+        $base ??= new BackupOptions(includeFiles: $format !== ArchiveFormat::SqlGz, format: $format === ArchiveFormat::SqlGz ? ArchiveFormat::TarGz : $format);
+        $encrypted = ($parentMeta['encrypted'] ?? false) === true;
+        $keyId     = is_string($parentMeta['key_id'] ?? null) ? $parentMeta['key_id'] : null;
+        if ($format !== ArchiveFormat::SqlGz && $base->format !== $format) {
+            throw new InvalidBackupOptionsException(sprintf('Backup %s is a %s archive: every backup of a chain uses the same format (start a new chain to change it).', $parentId, $format->value));
+        }
+        if (($base->password !== null) !== $encrypted || ($encrypted && $base->keyId !== $keyId)) {
+            throw new InvalidBackupOptionsException(sprintf('Backup %s is %s: every backup of a chain uses the same encryption and key id (start a new chain to rotate the key).', $parentId, $encrypted ? 'encrypted with key id "' . (string) $keyId . '"' : 'not encrypted'));
+        }
 
         return new BackupOptions(
             includeDatabase: $from instanceof BinlogCoordinates,

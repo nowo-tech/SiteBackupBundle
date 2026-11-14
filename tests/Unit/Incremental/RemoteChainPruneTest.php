@@ -62,7 +62,13 @@ final class RemoteChainPruneTest extends TestCase
         // The sidecar's chain block is enough to continue a chain whose local copy is gone.
         $sidecar = $this->sidecar($target, 'p/' . $b->getId() . '.tar.gz');
         self::assertSame($b->getId(), $sidecar['chain']['chain_id']);
-        $next = IncrementalOptions::fromParentMeta($b->getId(), $sidecar['chain']);
+        // PP-M5: the sidecar stays small (no manifest); continuing a chain whose local copy is gone reads the archive.
+        self::assertArrayNotHasKey('file_manifest', $sidecar['chain']);
+        self::assertSame($b->getMeta()['file_manifest_sha256'], $sidecar['chain']['file_manifest_sha256']);
+        self::assertGreaterThan(0, $sidecar['chain']['file_manifest_bytes']);
+        $parent = $this->archiver->readArchiveMeta($b->getAbsolutePath());
+        self::assertSame($b->getId(), $parent['id']);
+        $next = IncrementalOptions::fromParentMeta($parent['id'], $parent['meta']);
         self::assertSame($b->getMeta()['file_manifest_sha256'], $next->baseManifest?->sha256());
         $b1 = $this->publish($publisher, $target, $this->archiver->create($next));
         self::assertArrayNotHasKey('chain', $publisher->sidecar($this->archiver->create()));

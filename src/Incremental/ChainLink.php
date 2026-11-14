@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\Incremental;
 
 use DateTimeImmutable;
+use Nowo\SiteBackupBundle\Enum\ArchiveFormat;
 use Nowo\SiteBackupBundle\Model\BackupArtifact;
 
 use function is_array;
@@ -24,6 +25,8 @@ final readonly class ChainLink
 
     /**
      * @param list<array{name: string, sha256: string, size: int}> $binlogFiles
+     * @param array{path: string, sha256: string, size: int}|null $binlogEvents filtered captures: the schema-only events
+     * @param string $storage how the archive is stored: format, encryption and key id (one per chain, PP-L10)
      */
     public function __construct(
         public string $id,
@@ -41,6 +44,10 @@ final readonly class ChainLink
         public ?string $baseManifestSha256,
         public ?DateTimeImmutable $firstEventAt = null,
         public ?DateTimeImmutable $lastEventAt = null,
+        public ?string $binlogCapture = null,
+        public ?array $binlogEvents = null,
+        public ?DateTimeImmutable $snapshotAt = null,
+        public string $storage = '',
     ) {
     }
 
@@ -75,7 +82,28 @@ final readonly class ChainLink
             baseManifestSha256: self::string($meta, 'base_manifest_sha256'),
             firstEventAt: self::date($meta, 'first_event_at'),
             lastEventAt: self::date($meta, 'last_event_at'),
+            binlogCapture: self::string($meta, 'binlog_capture'),
+            binlogEvents: self::events($meta),
+            snapshotAt: self::date($meta, 'snapshot_at'),
+            // A sql.gz full backup continues as tar.gz (same container family and encryption).
+            storage: ($artifact->getFormat() === ArchiveFormat::SqlGz ? ArchiveFormat::TarGz->value : $artifact->getFormat()->value)
+                . ($artifact->isEncrypted() ? ' encrypted, key id "' . (string) ($meta['key_id'] ?? '') . '"' : ' plaintext'),
         );
+    }
+
+    /**
+     * @param array<string, mixed> $meta
+     *
+     * @return array{path: string, sha256: string, size: int}|null
+     */
+    private static function events(array $meta): ?array
+    {
+        $events = $meta['binlog_events'] ?? null;
+        if (!is_array($events) || !is_string($events['path'] ?? null) || !is_string($events['sha256'] ?? null) || !is_int($events['size'] ?? null)) {
+            return null;
+        }
+
+        return ['path' => $events['path'], 'sha256' => $events['sha256'], 'size' => $events['size']];
     }
 
     public function isIncremental(): bool

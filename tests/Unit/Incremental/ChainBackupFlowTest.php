@@ -117,7 +117,7 @@ final class ChainBackupFlowTest extends TestCase
         self::assertSame('incremental', $i1->getMeta()['type']);
         self::assertSame($full->getId(), $i1->getMeta()['parent_id']);
         self::assertSame($meta['file_manifest_sha256'], $i1->getMeta()['base_manifest_sha256']);
-        self::assertSame(['DELETED.json', 'config/app.yaml', 'public/new.txt'], $this->sorted(array_keys($i1->getChecksums())));
+        self::assertSame(['.nowo-site-backup/DELETED.json', 'config/app.yaml', 'public/new.txt'], $this->sorted(array_keys($i1->getChecksums())));
         self::assertSame(1, $i1->getMeta()['files_deleted']);
         self::assertSame(2, $i1->getMeta()['files_changed']);
         $this->assertEntries(['config/app.yaml', 'public/index.php', 'public/new.txt'], $i1);
@@ -126,7 +126,7 @@ final class ChainBackupFlowTest extends TestCase
         $this->clock->sleep(3600);
         $this->put('public/new.txt', 'newer');
         $i2 = $manager->createBackup($manager->incrementalOptions($i1->getId()));
-        self::assertSame(['DELETED.json', 'public/new.txt'], $this->sorted(array_keys($i2->getChecksums())));
+        self::assertSame(['.nowo-site-backup/DELETED.json', 'public/new.txt'], $this->sorted(array_keys($i2->getChecksums())));
         self::assertSame($i1->getMeta()['file_manifest']['entries']['public/index.php'], $i2->getMeta()['file_manifest']['entries']['public/index.php']);
 
         try {
@@ -257,7 +257,7 @@ final class ChainBackupFlowTest extends TestCase
         self::assertSame(['binlog.000002', 'binlog.000003'], array_column($i1->getMeta()['binlog_files'], 'name'));
         self::assertSame('binlog.000003', $i1->getMeta()['binlog_file']);
         self::assertSame(['binlog_file' => 'binlog.000002', 'binlog_position' => 1480, 'server_uuid' => ChainFixtures::UUID, 'gtid_executed' => 'x:1-11'], $i1->getMeta()['binlog_from']);
-        self::assertArrayHasKey('binlog/binlog.000003', $i1->getChecksums());
+        self::assertArrayHasKey('.nowo-site-backup/binlog/binlog.000003', $i1->getChecksums());
         self::assertSame('database_files', $i1->getMeta()['content']);
         self::assertSame([], glob($this->root . '/captures/*') ?: [], 'the capture directory outlived the backup');
 
@@ -269,8 +269,9 @@ final class ChainBackupFlowTest extends TestCase
         self::assertSame("import\nreplay\n", file_get_contents($tools . '/order'));
         self::assertStringContainsString('CREATE TABLE t', (string) file_get_contents($tools . '/imported.sql'));
         $decodeArgs = (string) file_get_contents($tools . '/binlog-args');
-        self::assertStringContainsString('--skip-gtids --database=app --start-position=1480 --stop-datetime=2026-11-01 01:30:01', $decodeArgs);
-        self::assertStringContainsString('binlog/binlog.000004', $decodeArgs);
+        self::assertStringContainsString('--skip-gtids --start-position=1480 --stop-datetime=2026-11-01 01:30:01', $decodeArgs);
+        self::assertStringContainsString('.nowo-site-backup/binlog/binlog.000004', $decodeArgs);
+        self::assertStringNotContainsString('--database', $decodeArgs);
         self::assertSame(
             ['database_dump:applied', 'binlog:applied', 'files:applied', 'files:skipped', 'deletions:applied'],
             array_map(static fn (ChainRestoreStep $s): string => $s->part . ':' . $s->status, $report->steps),
@@ -455,7 +456,7 @@ final class ChainBackupFlowTest extends TestCase
             {
             }
 
-            public function capture(BinlogCoordinates $from, string $database): IncrementalArtifact
+            public function capture(BinlogCoordinates $from, string $database, ?callable $tick = null): IncrementalArtifact
             {
                 $work  = $this->dir . '/' . $from->sequence();
                 $next  = 'binlog.' . sprintf('%06d', $from->sequence() + 1);

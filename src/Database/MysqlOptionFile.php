@@ -28,8 +28,9 @@ final class MysqlOptionFile
 {
     /**
      * @param array{database: string, host: ?string, port: int, socket: ?string, user: string, pass: string} $connection
+     * @param list<string> $tlsOptions extra client options; only `--ssl-*` / `--tls-*` are used
      */
-    public static function contents(#[SensitiveParameter] array $connection): string
+    public static function contents(#[SensitiveParameter] array $connection, array $tlsOptions = []): string
     {
         $lines = ['[client]', 'user=' . self::quote($connection['user'])];
         if ($connection['pass'] !== '') {
@@ -41,6 +42,10 @@ final class MysqlOptionFile
             $lines[] = 'host=' . self::quote((string) $connection['host']);
             $lines[] = sprintf('port=%d', $connection['port']);
         }
+        // 1.36+ (PP-L6): the TLS settings of backup.database.extra_options (`--ssl-*` / `--tls-*`) apply to the tools too.
+        foreach (self::tlsOptions($tlsOptions) as $name => $value) {
+            $lines[] = $value === null ? $name : $name . '=' . self::quote($value);
+        }
 
         return implode("\n", $lines) . "\n";
     }
@@ -48,11 +53,13 @@ final class MysqlOptionFile
     /**
      * Writes `<directory>/client.cnf` (0600) for $databaseUrl and returns its path.
      *
+     * @param list<string> $tlsOptions see {@see self::contents()}
+     *
      * @throws InvalidArgumentException when the URL is not usable
      */
-    public static function write(#[SensitiveParameter] string $databaseUrl, string $directory): string
+    public static function write(#[SensitiveParameter] string $databaseUrl, string $directory, array $tlsOptions = []): string
     {
-        $contents = self::contents(MysqlDumpCommandFactory::connection($databaseUrl));
+        $contents = self::contents(MysqlDumpCommandFactory::connection($databaseUrl), $tlsOptions);
         $path     = $directory . '/client.cnf';
         $handle   = @fopen($path, 'x');
         if ($handle === false) {
@@ -67,6 +74,26 @@ final class MysqlOptionFile
         }
 
         return $path;
+    }
+
+    /**
+     * The `--ssl-*` / `--tls-*` long options of a list (others ignored), as option-file names and values.
+     *
+     * @param list<string> $options e.g. `--ssl-mode=VERIFY_IDENTITY`, `--ssl-ca=/etc/mysql/ca.pem`
+     *
+     * @return array<string, ?string>
+     */
+    public static function tlsOptions(array $options): array
+    {
+        $tls = [];
+        foreach ($options as $option) {
+            if (preg_match('/^--((?:ssl|tls)-[a-z0-9-]+)(?:=(.*))?$/s', $option, $m) !== 1) {
+                continue;
+            }
+            $tls[$m[1]] = isset($m[2]) ? $m[2] : null;
+        }
+
+        return $tls;
     }
 
     /**

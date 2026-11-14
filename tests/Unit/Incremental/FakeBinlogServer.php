@@ -22,7 +22,7 @@ final class FakeBinlogServer implements BinlogServerInterface
      * @param list<array{name: string, size: int}> $logs
      * @param list<array{name: string, size: int}>|null $afterFlush
      */
-    public function __construct(private array $logs, private readonly string $uuid, private readonly string $version, private readonly ?array $afterFlush)
+    public function __construct(private array $logs, private readonly string $uuid, private readonly string $version, private readonly ?array $afterFlush, private readonly string $format = 'ROW')
     {
     }
 
@@ -38,7 +38,12 @@ final class FakeBinlogServer implements BinlogServerInterface
 
     public function variables(array $names): array
     {
-        return [];
+        return ['binlog_format' => $this->format];
+    }
+
+    public function schemas(): array
+    {
+        return ['app', 'mysql', 'sys'];
     }
 
     public function flushBinaryLogs(): void

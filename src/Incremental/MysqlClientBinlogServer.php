@@ -37,6 +37,9 @@ final class MysqlClientBinlogServer implements BinlogServerInterface
 {
     private const VARIABLE_NAME = '/^[a-z_]{1,64}$/';
 
+    /**
+     * @param list<string> $tlsOptions `--ssl-*` / `--tls-*` options for the option file (PP-L6)
+     */
     public function __construct(
         #[SensitiveParameter]
         private readonly ?string $databaseUrl,
@@ -44,6 +47,7 @@ final class MysqlClientBinlogServer implements BinlogServerInterface
         private readonly int $timeoutSeconds = 120,
         private readonly ?string $workDir = null,
         private readonly Filesystem $filesystem = new Filesystem(),
+        private readonly array $tlsOptions = [],
     ) {
     }
 
@@ -113,6 +117,70 @@ final class MysqlClientBinlogServer implements BinlogServerInterface
         ];
     }
 
+    public function schemas(): array
+    {
+        $schemas = [];
+        foreach ($this->query('SHOW DATABASES') as $row) {
+            $schemas[] = $row[0];
+        }
+
+        return $schemas;
+    }
+
+    /**
+     * The objects of a schema as `TYPE name` (TABLE, VIEW, TRIGGER, PROCEDURE, FUNCTION, EVENT), null when the schema
+     * does not exist (1.36+, PP-H1 pre-flight of a chain restore).
+     *
+     * @return list<string>|null
+     */
+    public function schemaObjects(string $schema): ?array
+    {
+        $schema = self::schemaName($schema);
+        if ($this->query("SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = '" . $schema . "'") === []) {
+            return null;
+        }
+
+        $objects = [];
+        foreach ($this->query(
+            "SELECT IF(TABLE_TYPE = 'VIEW', 'VIEW', 'TABLE'), TABLE_NAME FROM information_schema.TABLES WHERE TABLE_SCHEMA = '" . $schema . "'"
+            . " UNION ALL SELECT 'TRIGGER', TRIGGER_NAME FROM information_schema.TRIGGERS WHERE TRIGGER_SCHEMA = '" . $schema . "'"
+            . " UNION ALL SELECT ROUTINE_TYPE, ROUTINE_NAME FROM information_schema.ROUTINES WHERE ROUTINE_SCHEMA = '" . $schema . "'"
+            . " UNION ALL SELECT 'EVENT', EVENT_NAME FROM information_schema.EVENTS WHERE EVENT_SCHEMA = '" . $schema . "'",
+        ) as $row) {
+            if (count($row) >= 2) {
+                $objects[] = $row[0] . ' ' . $row[1];
+            }
+        }
+
+        return $objects;
+    }
+
+    /**
+     * Creates the schema; with $replace, drops it first and keeps its character set and collation (1.36+,
+     * `--recreate-database`).
+     */
+    public function createSchema(string $schema, bool $replace = false): void
+    {
+        $schema  = self::schemaName($schema);
+        $options = '';
+        if ($replace) {
+            $rows = $this->query("SELECT DEFAULT_CHARACTER_SET_NAME, DEFAULT_COLLATION_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = '" . $schema . "'");
+            if ($rows !== [] && count($rows[0]) >= 2 && preg_match('/^[A-Za-z0-9_]+$/', $rows[0][0] . $rows[0][1]) === 1) {
+                $options = ' CHARACTER SET ' . $rows[0][0] . ' COLLATE ' . $rows[0][1];
+            }
+        }
+        $this->query(($replace ? 'DROP DATABASE IF EXISTS `' . $schema . '`; ' : '') . 'CREATE DATABASE `' . $schema . '`' . $options);
+    }
+
+    private static function schemaName(string $schema): string
+    {
+        if (preg_match('/^[A-Za-z0-9_]{1,64}$/', $schema) !== 1) {
+            throw new InvalidArgumentException('Schema names must match [A-Za-z0-9_]{1,64}.');
+        }
+
+        return $schema;
+    }
+
     public function grants(): array
     {
         $grants = [];
@@ -150,11 +218,11 @@ final class MysqlClientBinlogServer implements BinlogServerInterface
      */
     private function query(string $sql): array
     {
-        $dir = PrivateTempDirectory::create('nowo-site-backup-mysql-', $this->workDir);
+        $dir = PrivateTempDirectory::createOwned('nowo-site-backup-mysql-', $this->workDir);
 
         try {
             try {
-                $optionFile = MysqlOptionFile::write((string) $this->databaseUrl, $dir);
+                $optionFile = MysqlOptionFile::write((string) $this->databaseUrl, $dir, $this->tlsOptions);
             } catch (InvalidArgumentException $e) {
                 throw new BinlogUnavailableException('Binary log tools: ' . $e->getMessage(), 0, $e);
             }

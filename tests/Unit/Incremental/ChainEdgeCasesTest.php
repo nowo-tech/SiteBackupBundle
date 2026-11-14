@@ -22,6 +22,7 @@ use Nowo\SiteBackupBundle\Incremental\BinlogCoordinates;
 use Nowo\SiteBackupBundle\Incremental\BinlogEventTimes;
 use Nowo\SiteBackupBundle\Incremental\BinlogPrerequisites;
 use Nowo\SiteBackupBundle\Incremental\BinlogReplayer;
+use Nowo\SiteBackupBundle\Incremental\ChainPaths;
 use Nowo\SiteBackupBundle\Incremental\ChainRestoreStep;
 use Nowo\SiteBackupBundle\Incremental\FileManifest;
 use Nowo\SiteBackupBundle\Incremental\MysqlBinlogTool;
@@ -105,19 +106,19 @@ final class ChainEdgeCasesTest extends TestCase
 
         $cases = [
             'no DELETED.json' => [static function (string $dir, array &$sums): void {
-                unset($sums['DELETED.json']);
+                unset($sums[ChainPaths::DELETED]);
             }, 'has no DELETED.json'],
             'DELETED.json not json' => [static function (string $dir, array &$sums): void {
-                file_put_contents($dir . '/DELETED.json', '{nope');
-                $sums['DELETED.json'] = (string) hash_file('sha256', $dir . '/DELETED.json');
+                file_put_contents($dir . '/' . ChainPaths::DELETED, '{nope');
+                $sums[ChainPaths::DELETED] = (string) hash_file('sha256', $dir . '/' . ChainPaths::DELETED);
             }, 'not a list of paths'],
             'DELETED.json unsafe path' => [static function (string $dir, array &$sums): void {
-                file_put_contents($dir . '/DELETED.json', '["../../etc/passwd"]');
-                $sums['DELETED.json'] = (string) hash_file('sha256', $dir . '/DELETED.json');
+                file_put_contents($dir . '/' . ChainPaths::DELETED, '["../../etc/passwd"]');
+                $sums[ChainPaths::DELETED] = (string) hash_file('sha256', $dir . '/' . ChainPaths::DELETED);
             }, 'unsafe path'],
             'DELETED.json not strings' => [static function (string $dir, array &$sums): void {
-                file_put_contents($dir . '/DELETED.json', '[1]');
-                $sums['DELETED.json'] = (string) hash_file('sha256', $dir . '/DELETED.json');
+                file_put_contents($dir . '/' . ChainPaths::DELETED, '[1]');
+                $sums[ChainPaths::DELETED] = (string) hash_file('sha256', $dir . '/' . ChainPaths::DELETED);
             }, 'unsafe path'],
             'file not in manifest' => [static function (string $dir, array &$sums): void {
                 file_put_contents($dir . '/config/extra.yaml', 'x');
@@ -213,13 +214,13 @@ final class ChainEdgeCasesTest extends TestCase
         }
 
         $this->sidecar($dbInc, static function (array &$meta): void {
-            $meta['binlog_files'][0]['sha256'] = hash('sha256', 'other');
+            $meta['binlog_events']['sha256'] = hash('sha256', 'other');
         });
         try {
             $manager->restoreChain($dbInc->getId());
             self::fail('a binlog that does not match its meta was replayed');
         } catch (ChainBrokenException $e) {
-            self::assertStringContainsString('does not match its meta', $e->getMessage());
+            self::assertStringContainsString('events do not match their meta', $e->getMessage());
         }
 
         $this->rewrite($archiver, $dbOnly, static function (string $dir, array &$sums): void {
@@ -412,7 +413,7 @@ final class ChainEdgeCasesTest extends TestCase
         $restorer = new ChainRestorer($archiver, RestorePathGuard::fromArchiver($this->project, [], $archiver), $this->project, new DumpImporter($url, BinlogFakes::mysqlClient($this->tools)), $this->replayer());
 
         // The fake mysqlbinlog copies <tools>/server/<name>; event times come from <tools>/decoded.
-        file_put_contents($this->tools . '/decoded', "#261101  0:30:00 server id 1  end_log_pos 2 CRC32 0x1 \tQuery\n");
+        file_put_contents($this->tools . '/decoded', "DELIMITER /*!*/;\n# at 4\n#261101  0:30:00 server id 1  end_log_pos 2 CRC32 0x1 \tQuery\tthread_id=1\nBEGIN\n/*!*/;\n# End of log file\n");
 
         return [$this->manager($archiver, $restorer), $archiver];
     }

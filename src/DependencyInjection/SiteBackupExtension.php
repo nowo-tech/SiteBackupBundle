@@ -518,7 +518,8 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
                 ->setArgument('$timeoutSeconds', $timeout)
                 ->setArgument('$schemaInspector', new Reference(SchemaInspectorInterface::class))
                 ->setArgument('$requiredTables', array_values($database['required_tables']))
-                ->setArgument('$migrationsTable', (string) $database['migrations_table']);
+                ->setArgument('$migrationsTable', (string) $database['migrations_table'])
+                ->setArgument('$binlogDatabaseUrl', is_string($database['binlog_url']) && $database['binlog_url'] !== '' ? $database['binlog_url'] : null);
         }
 
         $age = $backup['encryption']['age'];
@@ -580,7 +581,9 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
 
         $container->register(RemoteBackupPublisher::class, RemoteBackupPublisher::class)
             ->setArgument('$eventDispatcher', new Reference('event_dispatcher', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
-            ->setArgument('$signer', new Reference(BackupSigner::class));
+            ->setArgument('$signer', new Reference(BackupSigner::class))
+            ->setArgument('$logger', new Reference('logger', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
+            ->addTag('monolog.logger', ['channel' => 'site_backup']);
 
         $this->configureIncremental($container, $config);
 
@@ -656,12 +659,18 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
         $timeout  = (int) $config['process_timeout'];
         $url      = (string) $database['url'];
         $workDir  = (string) $backup['work_dir'];
+        // PP-M4: dedicated accounts for captures and restores; both default to backup.database.url.
+        $binlogUrl  = is_string($database['binlog_url']) && $database['binlog_url'] !== '' ? $database['binlog_url'] : $url;
+        $restoreUrl = is_string($database['restore_url']) && $database['restore_url'] !== '' ? $database['restore_url'] : $url;
+        // PP-L6: the TLS settings of extra_options reach the option files of the binlog tools.
+        $tls = array_values(array_filter($database['extra_options'], static fn ($o): bool => is_string($o) && preg_match('/^--(?:ssl|tls)-/', $o) === 1));
 
         $container->register(MysqlClientBinlogServer::class, MysqlClientBinlogServer::class)
-            ->setArgument('$databaseUrl', $url)
+            ->setArgument('$databaseUrl', $binlogUrl)
             ->setArgument('$clientBinary', (string) $database['client_binary'])
             ->setArgument('$timeoutSeconds', $timeout)
-            ->setArgument('$workDir', $workDir);
+            ->setArgument('$workDir', $workDir)
+            ->setArgument('$tlsOptions', $tls);
         $container->setAlias(BinlogServerInterface::class, MysqlClientBinlogServer::class)->setPublic(false);
 
         $container->register(MysqlBinlogTool::class, MysqlBinlogTool::class)
@@ -670,10 +679,12 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
 
         $container->register(BinlogCapture::class, BinlogCapture::class)
             ->setArgument('$server', new Reference(BinlogServerInterface::class))
-            ->setArgument('$databaseUrl', $url)
+            ->setArgument('$databaseUrl', $binlogUrl)
             ->setArgument('$tool', new Reference(MysqlBinlogTool::class))
             ->setArgument('$workDir', $workDir)
-            ->setArgument('$clock', new Reference(ClockInterface::class, ContainerBuilder::IGNORE_ON_INVALID_REFERENCE));
+            ->setArgument('$clock', new Reference(ClockInterface::class, ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
+            ->setArgument('$mode', (string) $database['binlog_capture'])
+            ->setArgument('$tlsOptions', $tls);
         $container->setAlias(BinlogCaptureInterface::class, BinlogCapture::class)->setPublic(false);
 
         $container->register(BinlogPrerequisites::class, BinlogPrerequisites::class)
@@ -683,11 +694,14 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
                 'mysql'       => (string) $database['client_binary'],
                 'mysqlbinlog' => (string) $database['mysqlbinlog_binary'],
             ])
-            ->setArgument('$minExpirySeconds', (int) $database['binlog_min_expiry_seconds']);
+            ->setArgument('$minExpirySeconds', (int) $database['binlog_min_expiry_seconds'])
+            ->setArgument('$database', $url)
+            ->setArgument('$captureMode', (string) $database['binlog_capture']);
         $container->setAlias(BinlogPrerequisitesInterface::class, BinlogPrerequisites::class)->setPublic(false);
 
         $container->register(BinlogReplayer::class, BinlogReplayer::class)
-            ->setArgument('$databaseUrl', $url)
+            ->setArgument('$databaseUrl', $restoreUrl)
+            ->setArgument('$tlsOptions', $tls)
             ->setArgument('$tool', new Reference(MysqlBinlogTool::class))
             ->setArgument('$clientBinary', (string) $database['client_binary'])
             ->setArgument('$timeoutSeconds', $timeout)
@@ -695,7 +709,7 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
 
         // The chain restore holds the operation lock itself: its importer must not take it again.
         $container->register('nowo_site_backup.chain.importer', DumpImporter::class)
-            ->setArgument('$databaseUrl', $url)
+            ->setArgument('$databaseUrl', $restoreUrl)
             ->setArgument('$clientBinary', (string) $database['client_binary'])
             ->setArgument('$skipSslVerifyServerCert', (bool) $database['skip_ssl_verify_server_cert'])
             ->setArgument('$timeoutSeconds', $timeout);

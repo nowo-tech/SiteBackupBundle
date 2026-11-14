@@ -327,10 +327,11 @@ final class BinlogToolsTest extends TestCase
         $decoded  = $this->dir . '/replay.sql';
 
         self::assertSame('app', $replayer->databaseName());
-        $replayer->decode([$this->dir . '/binlog.000002', $this->dir . '/binlog.000003'], new BinlogCoordinates('binlog.000002', 1480, ChainFixtures::UUID), 'app', new DateTimeImmutable('2026-11-01 10:00:00 UTC'), $decoded);
+        $replayer->decode([$this->dir . '/binlog.000002', $this->dir . '/binlog.000003'], new BinlogCoordinates('binlog.000002', 1480, ChainFixtures::UUID), new DateTimeImmutable('2026-11-01 10:00:00 UTC'), $decoded);
+        self::assertStringNotContainsString('--database', self::lastLine($this->dir . '/binlog-args'), 'PP-M1: replays are never filtered by the default database');
         self::assertStringContainsString('--start-position=1480 --stop-datetime=2026-11-01 10:00:01', (string) file_get_contents($this->dir . '/binlog-args'));
 
-        $replayer->decode([$this->dir . '/binlog.000003'], new BinlogCoordinates('binlog.000002', 1480, ChainFixtures::UUID), 'app', null, $decoded);
+        $replayer->decode([$this->dir . '/binlog.000003'], new BinlogCoordinates('binlog.000002', 1480, ChainFixtures::UUID), null, $decoded);
         self::assertStringNotContainsString('--start-position', $this->lastLine($this->dir . '/binlog-args'));
 
         file_put_contents($decoded, "BINLOG 'abc'/*!*/;\n" . str_repeat('x', 10));
@@ -383,7 +384,7 @@ final class BinlogToolsTest extends TestCase
         $checks = (new BinlogPrerequisites($this->prereqServer('9.7.2', $vars, $grants), ['mysqldump' => $dump, 'mysql' => $client, 'mysqlbinlog' => $binlog]))->check();
 
         self::assertTrue(Check::allPass($checks));
-        self::assertSame(['binaries', 'server', 'log_bin', 'binlog_format', 'binlog_row_image', 'expiry', 'grants', 'gtid_mode'], array_map(static fn (Check $c): string => $c->name, $checks));
+        self::assertSame(['binaries', 'server', 'log_bin', 'binlog_format', 'binlog_row_image', 'expiry', 'grants', 'schemas', 'gtid_mode'], array_map(static fn (Check $c): string => $c->name, $checks));
         self::assertSame(Check::OK, $checks[5]->status);
 
         $bad = (new BinlogPrerequisites(
@@ -394,17 +395,18 @@ final class BinlogToolsTest extends TestCase
         foreach ($bad as $check) {
             $status[$check->name] = $check->status;
         }
-        self::assertSame(['binaries' => 'fail', 'server' => 'fail', 'log_bin' => 'fail', 'binlog_format' => 'fail', 'binlog_row_image' => 'warning', 'expiry' => 'fail', 'grants' => 'fail', 'gtid_mode' => 'ok'], $status);
+        self::assertSame(['binaries' => 'fail', 'server' => 'fail', 'log_bin' => 'fail', 'binlog_format' => 'fail', 'binlog_row_image' => 'warning', 'expiry' => 'fail', 'grants' => 'fail', 'schemas' => 'warning', 'gtid_mode' => 'ok'], $status);
 
         $soso   = (new BinlogPrerequisites($this->prereqServer('8.4.6', ['log_bin' => '1', 'binlog_format' => 'MIXED', 'binlog_expire_logs_seconds' => '7200'], ['GRANT ALL PRIVILEGES ON *.* TO `root`@`%`']), []))->check();
         $status = [];
         foreach ($soso as $check) {
             $status[$check->name] = $check->status;
         }
-        self::assertSame('warning', $status['binlog_format']);
+        // PP-L4: MIXED fails; PP-M4: ALL on *.* works but is a warning.
+        self::assertSame('fail', $status['binlog_format']);
         self::assertSame('warning', $status['expiry']);
         self::assertSame('warning', $status['binlog_row_image']);
-        self::assertSame('ok', $status['grants']);
+        self::assertSame('warning', $status['grants']);
         self::assertSame('ok', $status['log_bin']);
 
         foreach ([['0', 'ok'], ['x', 'warning']] as [$expiry, $expected]) {
@@ -422,21 +424,41 @@ final class BinlogToolsTest extends TestCase
         self::assertTrue($noVars[2]->isFailure());
         $noGrants = (new BinlogPrerequisites($this->prereqServer('9.7.2', [], null), []))->check();
         self::assertTrue($noGrants[6]->isFailure());
+        self::assertSame(Check::WARNING, $noGrants[7]->status, 'SHOW DATABASES failing is a warning');
+
+        // PP-M3: other application schemas: fine when filtered, a warning with raw captures.
+        $shared   = $this->prereqServer('9.7.2', [], [], ['app', 'mysql', 'sys', 'information_schema', 'performance_schema', 'tenant2', 'crm']);
+        $filtered = (new BinlogPrerequisites($shared, [], 604800, 30, 'mysql://bk@db/app'))->check();
+        self::assertSame(Check::OK, $filtered[7]->status);
+        self::assertStringContainsString('2 other schema(s)', $filtered[7]->detail);
+        $raw = (new BinlogPrerequisites($shared, [], 604800, 30, 'mysql://bk@db/app', 'raw'))->check();
+        self::assertSame(Check::WARNING, $raw[7]->status);
+        $alone = (new BinlogPrerequisites($this->prereqServer('9.7.2', [], [], ['app', 'mysql']), [], 604800, 30, 'nope'))->check();
+        self::assertStringContainsString('1 other schema', $alone[7]->detail, 'an unparsable URL counts its schema as another one');
+        $only = (new BinlogPrerequisites($this->prereqServer('9.7.2', [], [], ['app', 'mysql']), [], 604800, 30, 'mysql://bk@db/app'))->check();
+        self::assertStringContainsString('No other', $only[7]->detail);
     }
 
     /**
      * @param array<string, string>|null $variables null = the statement fails
      * @param list<string>|null $grants null = the statement fails
+     * @param list<string>|null $schemas null = the statement fails
      */
-    private function prereqServer(?string $version, ?array $variables, ?array $grants): BinlogServerInterface
+    private function prereqServer(?string $version, ?array $variables, ?array $grants, ?array $schemas = null): BinlogServerInterface
     {
-        return new class($version, $variables, $grants) implements BinlogServerInterface {
+        return new class($version, $variables, $grants, $schemas) implements BinlogServerInterface {
             /**
              * @param array<string, string>|null $variables
              * @param list<string>|null $grants
+             * @param list<string>|null $schemas
              */
-            public function __construct(private readonly ?string $version, private readonly ?array $variables, private readonly ?array $grants)
+            public function __construct(private readonly ?string $version, private readonly ?array $variables, private readonly ?array $grants, private readonly ?array $schemas)
             {
+            }
+
+            public function schemas(): array
+            {
+                return $this->schemas ?? throw new BinlogUnavailableException('no');
             }
 
             public function version(): string
@@ -475,9 +497,9 @@ final class BinlogToolsTest extends TestCase
         };
     }
 
-    private function capture(BinlogServerInterface $server): BinlogCapture
+    private function capture(BinlogServerInterface $server, string $mode = IncrementalArtifact::RAW): BinlogCapture
     {
-        return new BinlogCapture($server, $this->url, new MysqlBinlogTool(BinlogFakes::mysqlbinlog($this->dir)), $this->work, new MockClock('2026-11-01 12:00:00 UTC'));
+        return new BinlogCapture($server, $this->url, new MysqlBinlogTool(BinlogFakes::mysqlbinlog($this->dir)), $this->work, new MockClock('2026-11-01 12:00:00 UTC'), mode: $mode);
     }
 
     private function serverFile(string $name, int $size): void

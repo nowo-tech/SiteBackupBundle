@@ -38,4 +38,16 @@ final class PrivateTempDirectory
 
         throw new RuntimeException('Unable to create a private temporary directory for the backup staging tree.');
     }
+
+    /**
+     * {@see self::create()} plus the `.owner` tag (host + pid) that lets the next backup / cleanup remove the directory
+     * at once when this process died (1.36+, PP-L5: option files of a killed worker do not wait for the age limit).
+     */
+    public static function createOwned(string $prefix, ?string $baseDir = null): string
+    {
+        $path = self::create($prefix, $baseDir);
+        @file_put_contents($path . '/.owner', gethostname() . ' ' . getmypid());
+
+        return $path;
+    }
 }

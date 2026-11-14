@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Incremental;
 
+use Nowo\SiteBackupBundle\Exception\BinlogFilterException;
 use Nowo\SiteBackupBundle\Exception\BinlogGapException;
 use Nowo\SiteBackupBundle\Exception\BinlogUnavailableException;
 
@@ -17,12 +18,14 @@ interface BinlogCaptureInterface
      * Closes the current binary log (`FLUSH BINARY LOGS`) and copies every closed log from `$from` to the newly closed
      * one, verbatim (`mysqlbinlog --read-from-remote-server --raw`).
      *
-     * @param string $database the schema the backups cover (replays filter on it); [A-Za-z0-9_]{1,64}
+     * @param string $database the schema the backups cover; [A-Za-z0-9_]{1,64}
+     * @param (callable(): void)|null $tick called while the tools run (operation lock refresh)
      *
      * @throws BinlogGapException when `$from` is no longer on the server or belongs to another server: take a full backup
      * @throws BinlogUnavailableException when the server or the tools fail
+     * @throws BinlogFilterException when an event cannot be attributed to $database (filtered captures; nothing archived)
      */
-    public function capture(BinlogCoordinates $from, string $database): IncrementalArtifact;
+    public function capture(BinlogCoordinates $from, string $database, ?callable $tick = null): IncrementalArtifact;
 
     /**
      * Removes the directory of a capture (call it in a `finally` once the files are archived).

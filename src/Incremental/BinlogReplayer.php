@@ -25,14 +25,17 @@ use function sprintf;
 /**
  * Replays captured binary logs into the configured database (1.36+, chain restores).
  *
- * 1. {@see self::decode()}: `mysqlbinlog --skip-gtids --database=<db> --start-position=<full backup position>
- *    [--stop-datetime=<until + 1 s>]` over the local files, `TZ=UTC`, into a staging file (nothing touches the
- *    database yet);
+ * 1. {@see self::decode()} (raw captures): `mysqlbinlog --skip-gtids --start-position=<full backup position>
+ *    [--stop-datetime=<until + 1 s>]` over the local files, `TZ=UTC`, into a staging file — no `--database`: the
+ *    chain restore checks every event with {@see BinlogSchemaFilter} instead (PP-M1 / PP-M2);
  * 2. {@see self::apply()}: the `mysql` client with `--binary-mode` (row images may hold any byte; it also disables the
  *    client commands but `delimiter` / `charset`), credentials in an option file, the decoded file on stdin.
  */
 final class BinlogReplayer
 {
+    /**
+     * @param list<string> $tlsOptions `--ssl-*` / `--tls-*` options for the option file (PP-L6)
+     */
     public function __construct(
         #[SensitiveParameter]
         private readonly ?string $databaseUrl,
@@ -41,7 +44,31 @@ final class BinlogReplayer
         private readonly int $timeoutSeconds = 600,
         private readonly ?string $workDir = null,
         private readonly Filesystem $filesystem = new Filesystem(),
+        private readonly array $tlsOptions = [],
     ) {
+    }
+
+    /**
+     * The objects of the target schema (`TYPE name`), null when it does not exist (PP-H1 pre-flight).
+     *
+     * @return list<string>|null
+     */
+    public function schemaObjects(): ?array
+    {
+        return $this->server()->schemaObjects($this->databaseName());
+    }
+
+    /**
+     * Creates the target schema; with $replace, drops and re-creates it (`--recreate-database`).
+     */
+    public function createSchema(bool $replace): void
+    {
+        $this->server()->createSchema($this->databaseName(), $replace);
+    }
+
+    private function server(): MysqlClientBinlogServer
+    {
+        return new MysqlClientBinlogServer($this->databaseUrl, $this->clientBinary, $this->timeoutSeconds, $this->workDir, $this->filesystem, $this->tlsOptions);
     }
 
     /**
@@ -57,16 +84,16 @@ final class BinlogReplayer
     }
 
     /**
-     * @param list<string> $files local binary logs, oldest first
+     * @param list<string> $files local binary logs (raw captures), oldest first
      * @param BinlogCoordinates $start where the full backup's snapshot ends; applies when the first file is its file
      * @param DateTimeImmutable|null $until last second to replay (inclusive); null = everything
      * @param (callable(): void)|null $tick
      */
-    public function decode(array $files, BinlogCoordinates $start, string $database, ?DateTimeImmutable $until, string $target, ?callable $tick = null): void
+    public function decode(array $files, BinlogCoordinates $start, ?DateTimeImmutable $until, string $target, ?callable $tick = null): void
     {
         $this->tool->assertUsable();
         $position = $files !== [] && basename($files[0]) === $start->file ? $start->position : null;
-        $this->tool->decode($files, $target, $position, $database, $until?->modify('+1 second'), false, $tick);
+        $this->tool->decode($files, $target, $position, null, $until?->modify('+1 second'), false, $tick);
     }
 
     /**
@@ -77,12 +104,12 @@ final class BinlogReplayer
     public function apply(string $decodedFile, ?callable $tick = null): void
     {
         $database = $this->databaseName();
-        $dir      = PrivateTempDirectory::create('nowo-site-backup-replay-', $this->workDir);
+        $dir      = PrivateTempDirectory::createOwned('nowo-site-backup-replay-', $this->workDir);
         $input    = null;
 
         try {
             try {
-                $optionFile = MysqlOptionFile::write((string) $this->databaseUrl, $dir);
+                $optionFile = MysqlOptionFile::write((string) $this->databaseUrl, $dir, $this->tlsOptions);
             } catch (InvalidArgumentException $e) {
                 throw new BinlogUnavailableException('Binary log replay: ' . $e->getMessage(), 0, $e);
             }

@@ -199,6 +199,12 @@ final class RemotePublisherTest extends TestCase
 
         $report = $publisher->prune($target, 'b/', new RetentionPolicy(keepLast: 2), $ids[3]);
 
+        // 1.36+ (PP-M5): an unreadable sidecar is reported, never skipped silently; nothing tells whether that archive
+        // starts a chain (no bundle metadata on it), so nothing is pruned until it is fixed or removed.
+        self::assertSame([], $report->deletedKeys);
+        self::assertSame(['b/broken.tar.gz.backup.json' => 'UnreadableSidecar'], $report->errors);
+        $target->delete('b/broken.tar.gz.backup.json');
+        $report = $publisher->prune($target, 'b/', new RetentionPolicy(keepLast: 2), $ids[3]);
         self::assertSame(['b/' . $ids[0] . '.tar.gz', 'b/' . $ids[1] . '.tar.gz'], $report->deletedKeys);
         self::assertSame([], $report->errors);
         $left = array_map(static fn (RemoteObject $o) => $o->key, iterator_to_array($target->list(''), false));
@@ -214,7 +220,7 @@ final class RemotePublisherTest extends TestCase
         self::assertSame(['b/' . $ids[2] . '.tar.gz'], $publisher->prune($target, 'b/', new RetentionPolicy(keepLast: 0), $ids[3])->deletedKeys);
 
         $orphans = array_map(static fn (RemoteObject $o) => $o->key, $publisher->orphans($target, 'b/', 0));
-        self::assertSame(['b/foreign.bin', 'b/orphan.tar.gz'], $orphans);
+        self::assertEqualsCanonicalizing(['b/foreign.bin', 'b/orphan.tar.gz', 'b/broken.tar.gz'], $orphans);
         self::assertSame([], $publisher->orphans($target, 'b/', 999_999_999));
     }
 

@@ -13,11 +13,16 @@ use Nowo\SiteBackupBundle\Database\DumpImporter;
 use Nowo\SiteBackupBundle\Exception\ChainBrokenException;
 use Nowo\SiteBackupBundle\Exception\ChainRestoreException;
 use Nowo\SiteBackupBundle\Incremental\BackupChain;
+use Nowo\SiteBackupBundle\Incremental\BinlogCoordinates;
 use Nowo\SiteBackupBundle\Incremental\BinlogReplayer;
+use Nowo\SiteBackupBundle\Incremental\BinlogSchemaFilter;
+use Nowo\SiteBackupBundle\Incremental\ChainPaths;
 use Nowo\SiteBackupBundle\Incremental\ChainRestoreReport;
 use Nowo\SiteBackupBundle\Incremental\ChainRestoreStep;
 use Nowo\SiteBackupBundle\Incremental\ChainVerifier;
+use Nowo\SiteBackupBundle\Incremental\DumpObjects;
 use Nowo\SiteBackupBundle\Incremental\FileManifest;
+use Nowo\SiteBackupBundle\Incremental\IncrementalArtifact;
 use Nowo\SiteBackupBundle\Log\SecretRedactor;
 use Nowo\SiteBackupBundle\Model\ArchivePassword;
 use Nowo\SiteBackupBundle\Model\BackupArtifact;
@@ -28,6 +33,7 @@ use Throwable;
 
 use function array_key_first;
 use function array_key_last;
+use function array_slice;
 use function array_splice;
 use function array_values;
 use function count;
@@ -44,7 +50,6 @@ use function is_string;
 use function json_decode;
 use function rtrim;
 use function sprintf;
-use function str_starts_with;
 use function unlink;
 
 use const DATE_ATOM;
@@ -70,8 +75,6 @@ use const JSON_THROW_ON_ERROR;
  */
 final class ChainRestorer
 {
-    private const SPECIAL = ['MANIFEST.json', 'DELETED.json'];
-
     public function __construct(
         private readonly BackupArchiver $archiver,
         private readonly RestorePathGuard $guard,
@@ -86,17 +89,21 @@ final class ChainRestorer
     /**
      * @param DateTimeImmutable|null $until last second to restore (inclusive); null = the head of the chain
      * @param (Closure(): void)|null $heartbeat called regularly (the manager refreshes the operation lock)
+     * @param bool $recreateDatabase drop and re-create the target schema before the dump import (PP-H1 opt-in);
+     *                               by default a target holding objects the dump does not re-create is refused
      *
      * @throws ChainBrokenException when the chain cannot be restored (nothing changed)
      * @throws ChainRestoreException when applying failed (the report says what was applied)
      */
-    public function restore(BackupChain $chain, ?DateTimeImmutable $until = null, #[SensitiveParameter] ?ArchivePassword $password = null, ?Closure $heartbeat = null): ChainRestoreReport
+    public function restore(BackupChain $chain, ?DateTimeImmutable $until = null, #[SensitiveParameter] ?ArchivePassword $password = null, ?Closure $heartbeat = null, bool $recreateDatabase = false): ChainRestoreReport
     {
         $links = $chain->links;
         ChainVerifier::assertValid($links);
         $root = $links[0];
-        if ($until instanceof DateTimeImmutable && $until < $root->createdAt) {
-            throw new ChainBrokenException([sprintf('--until (%s) is before the full backup %s was taken (%s): nothing to restore to.', $until->format(DATE_ATOM), $root->id, $root->createdAt->format(DATE_ATOM))]);
+        // PP-L8: the dump's snapshot is at most as recent as `snapshot_at` (recorded right after the dump).
+        $floor = $root->snapshotAt ?? $root->createdAt;
+        if ($until instanceof DateTimeImmutable && $until < $floor) {
+            throw new ChainBrokenException([sprintf('--until (%s) is before the full backup %s was taken (%s): nothing to restore to.', $until->format(DATE_ATOM), $root->id, $floor->format(DATE_ATOM))]);
         }
 
         [$steps, $notes, $binlogLinks, $fileLinks] = $this->plan($chain, $until);
@@ -108,6 +115,12 @@ final class ChainRestorer
         }
         if ($root->hasDump && !$this->importer instanceof DumpImporter) {
             throw new ChainBrokenException(['The chain has a database dump but no SQL importer is configured (backup.database.url).']);
+        }
+        if ($root->hasDump && $root->database !== null && $this->importer?->databaseName() !== $root->database) {
+            throw new ChainBrokenException([sprintf('The chain backed up database "%s"; the restore connection names another one.', $root->database)]);
+        }
+        if ($recreateDatabase && (!$root->hasDump || !$this->replayer instanceof BinlogReplayer)) {
+            throw new ChainBrokenException(['--recreate-database needs a chain with a database dump and the restore connection.']);
         }
 
         $staging  = $this->archiver->createPrivateWorkDirectory('chain-' . $root->id . '-');
@@ -124,34 +137,29 @@ final class ChainRestorer
                 $dirs[$i] = $staging . '/' . $i;
                 $this->archiver->extractTo($artifact, $dirs[$i], $tick, $password);
             }
-            $dump                = $root->hasDump ? $this->stagedFile($chain->root(), $dirs[0], 'database/dump.sql') : null;
+            $dump                = $root->hasDump ? $this->stagedFile($chain->root(), $dirs[0], ChainPaths::DUMP) : null;
             [$files, $deletions] = $this->foldFiles($chain, $dirs, $fileLinks);
-
-            $decoded = null;
-            if ($binlogLinks !== [] && $this->replayer instanceof BinlogReplayer && $root->end !== null) {
-                $binlogs = [];
-                foreach ($binlogLinks as $i => $_) {
-                    foreach ($links[$i]->binlogFiles as $file) {
-                        $binlogs[] = $this->stagedFile($chain->artifacts[$i], $dirs[$i], 'binlog/' . $file['name']);
-                    }
-                }
-                if ($binlogs !== []) {
-                    $decoded = $staging . '/replay.sql';
-                    $this->replayer->decode($binlogs, $root->end, (string) $root->database, $until, $decoded, $tick);
-                }
-            }
+            $schemaMissing       = $dump !== null && !$recreateDatabase && $this->preflightSchema($dump);
+            $decoded             = $binlogLinks !== [] ? $this->replayFile($chain, $dirs, $binlogLinks, $staging, $until, $tick) : null;
 
             // 3. Apply, step by step.
             foreach ($steps as $index => $step) {
                 if ($step->status === ChainRestoreStep::SKIPPED) {
                     continue;
                 }
-                $position      = $index;
-                $touched       = true;
-                $steps[$index] = $step->with(ChainRestoreStep::APPLIED, $this->apply($step, $dump, $decoded, $files, $deletions, $tick));
+                $position          = $index;
+                $touched           = true;
+                [$status, $detail] = $this->apply($step, $dump, $decoded, $files, $deletions, $tick, $recreateDatabase, $schemaMissing);
+                $steps[$index]     = $step->with($status, $detail);
             }
 
-            return new ChainRestoreReport($chain->ids(), $steps, true, $until, null, $notes);
+            // PP-L7: files that could not be written make the restore incomplete (not failed: nothing to roll back).
+            $complete = true;
+            foreach ($steps as $step) {
+                $complete = $complete && $step->status !== ChainRestoreStep::INCOMPLETE;
+            }
+
+            return new ChainRestoreReport($chain->ids(), $steps, $complete, $until, $complete ? null : 'Some files could not be written (see the files step).', $notes, $this->databaseAt($chain, $binlogLinks, $until), $this->filesAsOf($chain, $fileLinks));
         } catch (ChainBrokenException $e) {
             if (!$touched) {
                 throw $e;
@@ -245,6 +253,107 @@ final class ChainRestorer
         return [$steps, $notes, $binlogLinks, $fileLinks];
     }
 
+    /**
+     * PP-H1: the target schema must hold nothing the dump does not re-create (a table, view or trigger created after
+     * the full backup would make the replay fail half-way, after the dump import). Nothing is changed here.
+     *
+     * @return bool true when the schema does not exist yet (the dump step creates it)
+     */
+    private function preflightSchema(string $dump): bool
+    {
+        if (!$this->replayer instanceof BinlogReplayer) {
+            return false;
+        }
+        $objects = $this->replayer->schemaObjects();
+        if ($objects === null) {
+            return true;
+        }
+        $known = DumpObjects::parse($dump);
+        $extra = [];
+        foreach ($objects as $object) {
+            if (!isset($known[$object])) {
+                $extra[] = $object;
+            }
+        }
+        if ($extra !== []) {
+            throw new ChainBrokenException([sprintf('The target schema holds %d object(s) the full backup does not re-create (%s%s): restore into an empty schema or server, or pass --recreate-database to drop and re-create the schema first (stored routines and events are not in the dump and are dropped too).', count($extra), implode(', ', array_slice($extra, 0, 20)), count($extra) > 20 ? ', …' : '')]);
+        }
+
+        return false;
+    }
+
+    /**
+     * The replay file, checked event by event (PP-M1 / PP-M2): filtered captures are concatenated (and cut at
+     * `--until`), raw captures are decoded without `--database`; any event outside the schema refuses the restore.
+     *
+     * @param array<int, string> $dirs
+     * @param array<int, true> $binlogLinks
+     */
+    private function replayFile(BackupChain $chain, array $dirs, array $binlogLinks, string $staging, ?DateTimeImmutable $until, Closure $tick): ?string
+    {
+        $root  = $chain->links[0];
+        $mode  = $chain->links[(int) array_key_first($binlogLinks)]->binlogCapture ?? IncrementalArtifact::RAW;
+        $paths = [];
+        foreach ($binlogLinks as $i => $_) {
+            $link = $chain->links[$i];
+            if ($mode === IncrementalArtifact::FILTERED) {
+                $paths[] = $this->stagedFile($chain->artifacts[$i], $dirs[$i], ChainPaths::EVENTS);
+                continue;
+            }
+            foreach ($link->binlogFiles as $file) {
+                $paths[] = $this->stagedFile($chain->artifacts[$i], $dirs[$i], ChainPaths::BINLOG_DIRECTORY . $file['name']);
+            }
+        }
+        if (!$this->replayer instanceof BinlogReplayer || !$root->end instanceof BinlogCoordinates) {
+            return null;
+        }
+
+        $stopAt = $until?->modify('+1 second');
+        if ($mode === IncrementalArtifact::RAW) {
+            $decoded = $staging . '/decoded.sql';
+            $this->replayer->decode($paths, $root->end, $until, $decoded, $tick);
+            $paths  = [$decoded];
+            $stopAt = null;
+        }
+        $replay = $staging . '/replay.sql';
+        $result = BinlogSchemaFilter::run($paths, $replay, (string) $root->database, BinlogSchemaFilter::CHECK, $stopAt);
+        if (!$result->isClean()) {
+            throw new ChainBrokenException([sprintf('The binary logs hold %d event(s) outside schema %s or that cannot be attributed to it; nothing was applied: %s', $result->problemCount, (string) $root->database, implode('; ', $result->problems))]);
+        }
+
+        return $replay;
+    }
+
+    /**
+     * @param array<int, true> $binlogLinks
+     */
+    private function databaseAt(BackupChain $chain, array $binlogLinks, ?DateTimeImmutable $until): ?DateTimeImmutable
+    {
+        $root = $chain->links[0];
+        if (!$root->hasDump) {
+            return null;
+        }
+        if ($binlogLinks === []) {
+            return $root->snapshotAt ?? $root->createdAt;
+        }
+        $last = $chain->links[(int) array_key_last($binlogLinks)];
+        $head = $last->lastEventAt ?? $last->createdAt;
+
+        return $until instanceof DateTimeImmutable && $until < $head ? $until : $head;
+    }
+
+    /**
+     * @param array<int, true> $fileLinks
+     */
+    private function filesAsOf(BackupChain $chain, array $fileLinks): ?DateTimeImmutable
+    {
+        if (!$this->hasFiles($chain->root())) {
+            return null;
+        }
+
+        return $chain->links[$fileLinks === [] ? 0 : (int) array_key_last($fileLinks)]->createdAt;
+    }
+
     private function hasFiles(BackupArtifact $artifact): bool
     {
         foreach ($artifact->getChecksums() as $path => $_) {
@@ -258,13 +367,7 @@ final class ChainRestorer
 
     private function isSpecial(string $path): bool
     {
-        foreach (self::SPECIAL as $special) {
-            if ($path === $special) {
-                return true;
-            }
-        }
-
-        return str_starts_with($path, 'database/') || str_starts_with($path, 'binlog/');
+        return ChainPaths::isReserved($path);
     }
 
     /**
@@ -281,15 +384,22 @@ final class ChainRestorer
                 continue;
             }
             $link = $chain->links[$i];
-            foreach ($link->binlogFiles as $file) {
-                if (($result['checksums']['binlog/' . $file['name']] ?? null) !== $file['sha256']) {
-                    $problems[] = sprintf('Archive %s: binary log %s does not match its meta.', $artifact->getId(), $file['name']);
+            if ($link->binlogCapture === IncrementalArtifact::FILTERED) {
+                $events = $link->binlogEvents;
+                if ($link->binlogFiles !== [] && ($events === null || $events['path'] !== ChainPaths::EVENTS || ($result['checksums'][ChainPaths::EVENTS] ?? null) !== $events['sha256'])) {
+                    $problems[] = sprintf('Archive %s: the binary log events do not match their meta.', $artifact->getId());
+                }
+            } else {
+                foreach ($link->binlogFiles as $file) {
+                    if (($result['checksums'][ChainPaths::BINLOG_DIRECTORY . $file['name']] ?? null) !== $file['sha256']) {
+                        $problems[] = sprintf('Archive %s: binary log %s does not match its meta.', $artifact->getId(), $file['name']);
+                    }
                 }
             }
-            if ($link->baseManifestSha256 !== null && !isset($result['checksums']['DELETED.json'])) {
+            if ($link->baseManifestSha256 !== null && !isset($result['checksums'][ChainPaths::DELETED])) {
                 $problems[] = sprintf('Archive %s: the file delta has no DELETED.json.', $artifact->getId());
             }
-            if ($link->hasDump && !isset($result['checksums']['database/dump.sql'])) {
+            if ($link->hasDump && !isset($result['checksums'][ChainPaths::DUMP])) {
                 $problems[] = sprintf('Archive %s: the database dump is missing.', $artifact->getId());
             }
         }
@@ -361,7 +471,7 @@ final class ChainRestorer
      */
     private function deletedList(BackupArtifact $artifact, string $dir): array
     {
-        $path = $this->stagedFile($artifact, $dir, 'DELETED.json');
+        $path = $this->stagedFile($artifact, $dir, ChainPaths::DELETED);
         try {
             $list = json_decode((string) file_get_contents($path), true, 4, JSON_THROW_ON_ERROR);
         } catch (JsonException) {
@@ -413,22 +523,29 @@ final class ChainRestorer
     /**
      * @param array<string, string> $files
      * @param array<string, true> $deletions
+     *
+     * @return array{0: string, 1: string} status, detail
      */
-    private function apply(ChainRestoreStep $step, ?string $dump, ?string $decoded, array $files, array $deletions, Closure $tick): string
+    private function apply(ChainRestoreStep $step, ?string $dump, ?string $decoded, array $files, array $deletions, Closure $tick, bool $recreate, bool $schemaMissing): array
     {
         return match ($step->part) {
-            ChainRestoreStep::PART_DATABASE_DUMP => $this->importDump((string) $dump, $tick),
-            ChainRestoreStep::PART_BINLOG        => $this->replay($decoded, $tick),
+            ChainRestoreStep::PART_DATABASE_DUMP => [ChainRestoreStep::APPLIED, $this->importDump((string) $dump, $tick, $recreate, $schemaMissing)],
+            ChainRestoreStep::PART_BINLOG        => [ChainRestoreStep::APPLIED, $this->replay($decoded, $tick)],
             ChainRestoreStep::PART_FILES         => $this->writeFiles($files, $tick),
-            default                              => $this->deleteFiles($deletions),
+            default                              => [ChainRestoreStep::APPLIED, $this->deleteFiles($deletions)],
         };
     }
 
-    private function importDump(string $dump, Closure $tick): string
+    private function importDump(string $dump, Closure $tick, bool $recreate, bool $schemaMissing): string
     {
+        $prefix = '';
+        if ($recreate || $schemaMissing) {
+            $this->replayer?->createSchema($recreate);
+            $prefix = $recreate ? 'schema dropped and re-created, ' : 'schema created, ';
+        }
         $this->importer?->import($dump, $tick);
 
-        return sprintf('dump imported (%d bytes)', (int) filesize($dump));
+        return sprintf('%sdump imported (%d bytes)', $prefix, (int) filesize($dump));
     }
 
     private function replay(?string $decoded, Closure $tick): string
@@ -440,34 +557,72 @@ final class ChainRestorer
     }
 
     /**
+     * Protected, secret and runtime paths are skipped by design; a link / directory in the way or a parent leaving the
+     * project leaves the step INCOMPLETE (PP-L7).
+     *
      * @param array<string, string> $files
+     *
+     * @return array{0: string, 1: string}
      */
-    private function writeFiles(array $files, Closure $tick): string
+    private function writeFiles(array $files, Closure $tick): array
     {
-        $project = rtrim($this->projectDir, '/\\');
-        $written = 0;
-        $skipped = [];
+        $project    = rtrim($this->projectDir, '/\\');
+        $written    = 0;
+        $skipped    = [];
+        $notWritten = [];
         foreach ($files as $relative => $staged) {
             $relative = (string) $relative;
-            $refusal  = $this->guard->refusal($relative) ?? ($this->guard->parentStaysInside($relative) ? null : 'parent outside the project');
+            $refusal  = $this->guard->refusal($relative);
             if ($refusal !== null) {
                 $skipped[] = $relative . ' (' . $refusal . ')';
                 continue;
             }
             $dest = $project . '/' . $relative;
-            if (is_link($dest) || is_dir($dest)) {
-                $skipped[] = $relative . ' (a link or directory is in the way)';
+            if (!$this->guard->parentStaysInside($relative) || is_link($dest) || is_dir($dest)) {
+                $notWritten[] = $relative . (is_link($dest) || is_dir($dest) ? ' (a link or directory is in the way)' : ' (parent outside the project)');
                 continue;
             }
             $this->filesystem->mkdir(dirname($dest));
-            $tmp = $dest . '.nowo-restore-tmp';
-            $this->filesystem->copy($staged, $tmp, true);
-            $this->filesystem->rename($tmp, $dest, true);
+            $this->writeFile($staged, $dest);
             ++$written;
             $tick();
         }
 
-        return sprintf('%d file(s) written%s', $written, $skipped === [] ? '' : '; skipped: ' . implode(', ', $skipped));
+        $detail = sprintf('%d file(s) written', $written)
+            . ($skipped === [] ? '' : '; skipped: ' . implode(', ', $skipped))
+            . ($notWritten === [] ? '' : '; NOT written: ' . implode(', ', $notWritten));
+
+        return [$notWritten === [] ? ChainRestoreStep::APPLIED : ChainRestoreStep::INCOMPLETE, $detail];
+    }
+
+    /**
+     * PP-L3: the copy goes to a fresh, unpredictable file created with `x` (never through a planted link) next to the
+     * destination, then replaces it with rename() (which replaces a link, never follows it).
+     */
+    private function writeFile(string $staged, string $dest): void
+    {
+        $tmp = dirname($dest) . '/.nowo-restore-' . bin2hex(random_bytes(12));
+        $out = @fopen($tmp, 'x');
+        if ($out === false) {
+            throw new ChainBrokenException([sprintf('Unable to write %s.', $dest)]);
+        }
+        try {
+            // $staged was re-hashed by stagedFile(): a readable regular file.
+            $in = @fopen($staged, 'r') ?: throw new ChainBrokenException([sprintf('Unable to read the staged copy of %s.', $dest)]);
+            try {
+                stream_copy_to_stream($in, $out);
+            } finally {
+                fclose($in);
+            }
+        } finally {
+            fclose($out);
+        }
+        @chmod($tmp, (fileperms($staged) & 0o777) | 0o600);
+        if (!@rename($tmp, $dest)) {
+            @unlink($tmp);
+
+            throw new ChainBrokenException([sprintf('Unable to write %s.', $dest)]);
+        }
     }
 
     /**

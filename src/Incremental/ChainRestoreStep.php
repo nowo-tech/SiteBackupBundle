@@ -29,6 +29,8 @@ final readonly class ChainRestoreStep
     public const FAILED = 'failed';
     /** Left out on purpose (after `--until`, or nothing to do). */
     public const SKIPPED = 'skipped';
+    /** Done, but some files could not be written (a link or directory in the way…): the site is not as backed up. */
+    public const INCOMPLETE = 'incomplete';
 
     public function __construct(
         public string $backupId,
@@ -37,7 +39,7 @@ final readonly class ChainRestoreStep
         public string $detail = '',
     ) {
         if (!in_array($part, [self::PART_DATABASE_DUMP, self::PART_BINLOG, self::PART_FILES, self::PART_DELETIONS], true)
-            || !in_array($status, [self::APPLIED, self::NOT_APPLIED, self::FAILED, self::SKIPPED], true)) {
+            || !in_array($status, [self::APPLIED, self::NOT_APPLIED, self::FAILED, self::SKIPPED, self::INCOMPLETE], true)) {
             throw new InvalidArgumentException('Unknown chain restore part or status.');
         }
     }

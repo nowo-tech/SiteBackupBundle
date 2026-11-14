@@ -127,20 +127,20 @@ final class ChainRetentionAndOptionsTest extends TestCase
     public function testIncrementalOptionsFromAFullBackup(): void
     {
         $full    = ChainFixtures::full();
-        $options = IncrementalOptions::fromParentMeta('full', $full->getMeta(), new BackupOptions(format: ArchiveFormat::Zip, label: 'nightly'));
+        $options = IncrementalOptions::fromParentMeta('full', $full->getMeta(), new BackupOptions(format: ArchiveFormat::TarGz, label: 'nightly'));
 
         self::assertTrue($options->isIncremental());
         self::assertTrue($options->isChainMember());
         self::assertSame('full', $options->chainId);
         self::assertSame('full', $options->parentId);
         self::assertSame(['config'], $options->includePaths);
-        self::assertSame(ArchiveFormat::Zip, $options->format);
+        self::assertSame(ArchiveFormat::TarGz, $options->format);
         self::assertSame('nightly', $options->label);
         self::assertTrue($options->binlogFrom?->equals(new BinlogCoordinates('binlog.000002', 1480, ChainFixtures::UUID)));
         self::assertSame($full->getMeta()['file_manifest_sha256'], $options->baseManifest?->sha256());
         self::assertSame('incremental', $options->toLoggableArray()['type']);
 
-        $dbOnly = IncrementalOptions::fromParentMeta('full', ['file_manifest' => null] + $full->getMeta());
+        $dbOnly = IncrementalOptions::fromParentMeta('full', ['file_manifest' => null, 'file_manifest_sha256' => null] + $full->getMeta());
         self::assertFalse($dbOnly->includeFiles);
         $filesOnly = IncrementalOptions::fromParentMeta('full', ['binlog_file' => null, 'database_dump' => null] + $full->getMeta());
         self::assertFalse($filesOnly->includeDatabase);
@@ -156,7 +156,8 @@ final class ChainRetentionAndOptionsTest extends TestCase
         yield 'broken coordinates' => [['binlog_position' => 'x'], 'unreadable'];
         yield 'broken manifest' => [['file_manifest' => ['scope' => 'x']], 'file manifest of backup full is unreadable'];
         yield 'manifest hash' => [['file_manifest_sha256' => 'x'], 'does not match'];
-        yield 'nothing to continue' => [['binlog_file' => null, 'database_dump' => null, 'file_manifest' => null, 'binlog_position' => null], 'neither binlog coordinates nor'];
+        yield 'nothing to continue' => [['binlog_file' => null, 'database_dump' => null, 'file_manifest' => null, 'file_manifest_sha256' => null, 'binlog_position' => null], 'neither binlog coordinates nor'];
+        yield 'manifest only in the archive' => [['file_manifest' => null], 'use incrementalOptionsFromArchive()'];
     }
 
     /**

@@ -48,7 +48,8 @@ final class RestoreChainCommand extends Command
             ->addOption('until', null, InputOption::VALUE_REQUIRED, 'Restore the database up to this time, inclusive (ISO 8601; no offset = UTC)')
             ->addOption('actor', null, InputOption::VALUE_REQUIRED, 'Who triggered the restore', 'cli')
             ->addOption('check', null, InputOption::VALUE_NONE, 'Only resolve and check the chain metadata; change nothing')
-            ->addOption('force', null, InputOption::VALUE_NONE, 'Required to restore: the database and the files are overwritten');
+            ->addOption('force', null, InputOption::VALUE_NONE, 'Required to restore: the database and the files are overwritten')
+            ->addOption('recreate-database', null, InputOption::VALUE_NONE, 'Drop and re-create the target schema before the dump import (needed when it holds objects the full backup does not re-create, e.g. the live schema after a migration)');
         PasswordInput::configure($this);
     }
 
@@ -94,7 +95,7 @@ final class RestoreChainCommand extends Command
         }
 
         try {
-            $report = $this->manager->restoreChain($head, $until, (string) $input->getOption('actor'), $password);
+            $report = $this->manager->restoreChain($head, $until, (string) $input->getOption('actor'), $password, (bool) $input->getOption('recreate-database'));
         } catch (ChainRestoreException $e) {
             $this->render($io, $e->getReport());
             $io->error('The restore STOPPED half-way: the site is NOT consistent. ' . SecretRedactor::redact((string) $e->getReport()->error));
@@ -109,6 +110,11 @@ final class RestoreChainCommand extends Command
         }
 
         $this->render($io, $report);
+        if (!$report->complete) {
+            $io->warning('The restore is INCOMPLETE: some files were not written (see the files step). ' . (string) $report->error);
+
+            return Command::FAILURE;
+        }
         $io->success(sprintf('Chain restored%s. Clear the cache and restart the PHP workers.', $until instanceof DateTimeImmutable ? ' up to ' . $until->format(DATE_ATOM) : ''));
 
         return Command::SUCCESS;
@@ -121,6 +127,13 @@ final class RestoreChainCommand extends Command
             $rows[] = [$step->backupId, $step->part, $step->status, $step->detail];
         }
         $io->table(['Backup', 'Part', 'Status', 'Detail'], $rows);
+        // Beacon FR-043: both instants, explicitly.
+        if ($report->databaseAt instanceof DateTimeImmutable) {
+            $io->writeln('Database at ' . $report->databaseAt->format(DATE_ATOM) . '.');
+        }
+        if ($report->filesAsOf instanceof DateTimeImmutable) {
+            $io->writeln('Files as of ' . $report->filesAsOf->format(DATE_ATOM) . '.');
+        }
         foreach ($report->notes as $note) {
             $io->note($note);
         }

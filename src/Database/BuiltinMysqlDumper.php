@@ -13,6 +13,7 @@ use Nowo\SiteBackupBundle\Incremental\DumpCoordinatesParser;
 use Nowo\SiteBackupBundle\Incremental\MysqlToolVersion;
 use Nowo\SiteBackupBundle\Log\SecretRedactor;
 use Nowo\SiteBackupBundle\Process\ProcessDeadline;
+use SensitiveParameter;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Process\Exception\ProcessTimedOutException;
 use Symfony\Component\Process\Process;
@@ -73,6 +74,8 @@ final class BuiltinMysqlDumper
         private readonly array $requiredTables = [],
         private readonly string $migrationsTable = TableSafetyChecker::DEFAULT_MIGRATIONS_TABLE,
         private readonly Filesystem $filesystem = new Filesystem(),
+        #[SensitiveParameter]
+        private readonly ?string $binlogDatabaseUrl = null,
     ) {
     }
 
@@ -92,9 +95,15 @@ final class BuiltinMysqlDumper
             throw new InvalidBackupOptionsException('recordBinlogCoordinates cannot be combined with table rules: a binlog replay needs every table.');
         }
 
+        // 1.36+ (PP-M4): a dump that records binlog coordinates needs RELOAD + REPLICATION CLIENT: it runs with the
+        // dedicated backup.database.binlog_url account when one is configured, never widening the app's account.
+        $url = $recordBinlogCoordinates && $this->binlogDatabaseUrl !== null && $this->binlogDatabaseUrl !== '' ? $this->binlogDatabaseUrl : (string) $this->databaseUrl;
         try {
-            $spec     = MysqlDumpCommandFactory::fromDatabaseUrl((string) $this->databaseUrl, $this->skipSslVerifyServerCert, $this->binary, $this->extraOptions);
-            $database = MysqlDumpCommandFactory::databaseName((string) $this->databaseUrl);
+            $spec     = MysqlDumpCommandFactory::fromDatabaseUrl($url, $this->skipSslVerifyServerCert, $this->binary, $this->extraOptions);
+            $database = MysqlDumpCommandFactory::databaseName($url);
+            if ($database !== MysqlDumpCommandFactory::databaseName((string) $this->databaseUrl)) {
+                throw new InvalidArgumentException('backup.database.binlog_url must name the same database as backup.database.url.');
+            }
         } catch (InvalidArgumentException $e) {
             throw new DumpFailedException('Database dump: ' . $e->getMessage(), 0, $e);
         }
