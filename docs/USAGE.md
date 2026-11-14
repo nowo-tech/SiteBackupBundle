@@ -410,6 +410,12 @@ restore account (the usual case: the app creates them), the dump import and the 
 GRANT SET_ANY_DEFINER ON *.* TO 'restore'@'%';   -- only when the schema has views / triggers / routines / events
 ```
 
+**Triggers and stored functions on a target with binary logging.** With `log_bin` on and
+`log_bin_trust_function_creators` OFF (the MySQL default), only an account with `SUPER` may create triggers and stored
+functions (`ERROR 1419`). A chain restore whose dump or events create them checks this first and refuses before
+touching anything; set `SET GLOBAL log_bin_trust_function_creators = ON` on the target server for the restore (an
+administrator; the variable is deprecated but still enforced in 9.7), or restore with an account that has `SUPER`.
+
 `SYSTEM_VARIABLES_ADMIN` is **not** needed (verified against MySQL 9.7). Keep the restore account limited to the
 chain's schema: replays never need another one. `REPLICATION SLAVE` is spelled `REPLICATION REPLICA` from 8.0.26 on
 (same privilege). Both URLs must name the same database as `backup.database.url`.

@@ -20,7 +20,9 @@ use Symfony\Component\Process\Process;
 use function basename;
 use function fclose;
 use function fopen;
+use function preg_match;
 use function sprintf;
+use function strtoupper;
 
 /**
  * Replays captured binary logs into the configured database (1.36+, chain restores).
@@ -56,6 +58,28 @@ final class BinlogReplayer
     public function schemaObjects(): ?array
     {
         return $this->server()->schemaObjects($this->databaseName());
+    }
+
+    /**
+     * Why the restore account cannot create triggers or stored functions on the target server, or null (1.36+).
+     *
+     * With binary logging on and `log_bin_trust_function_creators` OFF, `CREATE TRIGGER` / `CREATE FUNCTION` need
+     * `SUPER` (ERROR 1419): the dump import would stop half-way. A server without that variable has no such rule.
+     */
+    public function storedProgramsRefusal(): ?string
+    {
+        $server    = $this->server();
+        $variables = $server->variables(['log_bin', 'log_bin_trust_function_creators']);
+        if (strtoupper($variables['log_bin'] ?? 'OFF') !== 'ON' || strtoupper($variables['log_bin_trust_function_creators'] ?? 'ON') === 'ON') {
+            return null;
+        }
+        foreach ($server->grants() as $grant) {
+            if (preg_match('/^GRANT\s+(?:ALL PRIVILEGES|[^`]*\bSUPER\b[^`]*)\s+ON\s+\*\.\*/i', $grant) === 1) {
+                return null;
+            }
+        }
+
+        return 'binary logging is on and log_bin_trust_function_creators is OFF on the target server, and the restore account has no SUPER: MySQL refuses to create triggers and stored functions (ERROR 1419). Set log_bin_trust_function_creators=ON on the target server for the restore, or restore with an account that has SUPER';
     }
 
     /**

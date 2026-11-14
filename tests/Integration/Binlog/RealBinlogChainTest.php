@@ -237,6 +237,25 @@ final class RealBinlogChainTest extends TestCase
         $this->app('INSERT INTO pitr VALUES (2)');
         $i1 = $manager->createBackup($manager->incrementalOptions($full->getId()));
 
+        // Binary logging on the target and log_bin_trust_function_creators OFF (the default) without SUPER: MySQL would
+        // stop the dump import at the first trigger (ERROR 1419). Refused before anything is touched.
+        try {
+            $manager->restoreChain($i1->getId(), null, 'ci');
+            self::fail('a restore that stops at ERROR 1419 was attempted');
+        } catch (ChainBrokenException $e) {
+            self::assertStringContainsString('log_bin_trust_function_creators', $e->getMessage());
+        }
+        self::assertSame('2', trim($this->app('SELECT COUNT(*) FROM audit')), 'the refused restore changed the database');
+        $this->admin('SET GLOBAL log_bin_trust_function_creators = ON');
+        try {
+            $this->restoreTriggersChain($manager, $i1);
+        } finally {
+            $this->admin('SET GLOBAL log_bin_trust_function_creators = OFF');
+        }
+    }
+
+    private function restoreTriggersChain(SiteBackupManager $manager, BackupArtifact $i1): void
+    {
         // The schema's own triggers, routine and event are in the dump: the pre-flight lets a plain restore through.
         $report = $manager->restoreChain($i1->getId(), null, 'ci');
         self::assertTrue($report->complete, (string) json_encode($report));

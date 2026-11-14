@@ -34,14 +34,18 @@ use Throwable;
 
 use function array_key_first;
 use function array_key_last;
+use function array_keys;
 use function array_slice;
 use function array_splice;
 use function array_values;
 use function basename;
 use function count;
 use function dirname;
+use function fclose;
+use function fgets;
 use function file_get_contents;
 use function filesize;
+use function fopen;
 use function hash_file;
 use function implode;
 use function is_array;
@@ -51,8 +55,10 @@ use function is_int;
 use function is_link;
 use function is_string;
 use function json_decode;
+use function preg_match;
 use function rtrim;
 use function sprintf;
+use function str_starts_with;
 use function unlink;
 
 use const DATE_ATOM;
@@ -144,6 +150,7 @@ final class ChainRestorer
             [$files, $deletions] = $this->foldFiles($chain, $dirs, $fileLinks);
             $schemaMissing       = $dump !== null && !$recreateDatabase && $this->preflightSchema($dump);
             $decoded             = $binlogLinks !== [] ? $this->replayFile($chain, $dirs, $binlogLinks, $staging, $until, $tick) : null;
+            $this->preflightStoredPrograms($dump, $decoded);
 
             // 3. Apply, step by step.
             foreach ($steps as $index => $step) {
@@ -254,6 +261,52 @@ final class ChainRestorer
         }
 
         return [$steps, $notes, $binlogLinks, $fileLinks];
+    }
+
+    /**
+     * Triggers, stored functions (and routines) in the dump need an account that MySQL lets create them on a server with
+     * binary logging; refused before anything is touched (otherwise the dump import stops half-way).
+     */
+    private function preflightStoredPrograms(?string $dump, ?string $decoded): void
+    {
+        if (!$this->replayer instanceof BinlogReplayer) {
+            return;
+        }
+        $programs = [];
+        foreach (array_keys($dump !== null ? DumpObjects::parse($dump) : []) as $object) {
+            if (str_starts_with($object, 'TRIGGER ') || str_starts_with($object, 'FUNCTION ') || str_starts_with($object, 'PROCEDURE ')) {
+                $programs[] = $object;
+            }
+        }
+        if ($decoded !== null && self::createsStoredPrograms($decoded)) {
+            $programs[] = 'CREATE TRIGGER / FUNCTION in the binary logs';
+        }
+        if ($programs === []) {
+            return;
+        }
+        $refusal = $this->replayer->storedProgramsRefusal();
+        if ($refusal !== null) {
+            throw new ChainBrokenException([sprintf('The chain re-creates triggers or routines (%s) but %s.', implode(', ', array_slice($programs, 0, 10)), $refusal)]);
+        }
+    }
+
+    private static function createsStoredPrograms(string $decoded): bool
+    {
+        $handle = @fopen($decoded, 'r');
+        if ($handle === false) {
+            return false;
+        }
+        try {
+            while (($line = fgets($handle, 1 << 20)) !== false) {
+                if (preg_match('/^\s*CREATE\b.*\b(?:TRIGGER|FUNCTION)\b/i', $line) === 1) {
+                    return true;
+                }
+            }
+        } finally {
+            fclose($handle);
+        }
+
+        return false;
     }
 
     /**

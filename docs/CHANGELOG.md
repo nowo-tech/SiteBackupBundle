@@ -163,6 +163,9 @@ opt-in: existing options, defaults, archives, sidecars and events are unchanged.
   - `nowo:site-backup:create` exits 3 on `BinlogFilterException` (PP-D1-L2).
   - Opt-in `BackupOptions::$dumpRoutines` / `--routines` dumps stored routines and events (`--routines --events`) in a
     chain's full backup; meta `dump_routines` (PP-D1-L3). Triggers are kept as before and verified in CI.
+  - A chain restore that re-creates triggers or stored functions on a target with binary logging,
+    `log_bin_trust_function_creators` OFF and no `SUPER` is refused before anything is touched (MySQL would stop the
+    dump import with ERROR 1419); the restore account for routine dumps needs `SHOW_ROUTINE` on the dump side.
   - `RemoteBackupPublisher::prune()` keeps the 1.35 behaviour for prefixes without any chain sidecar (an unreadable
     sidecar is still reported); it fails closed only where chains exist.
 

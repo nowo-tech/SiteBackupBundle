@@ -266,6 +266,18 @@ final class ChainBackupFlowTest extends TestCase
         file_put_contents($tools . '/decoded.3', "DELIMITER /*!*/;\n" . FakeBinlog::start(127) . FakeBinlog::event(1480, 2000, "Query\tthread_id=1", "use `app`/*!*/;\nBEGIN\n/*!*/;\n")
             . FakeBinlog::start(4) . FakeBinlog::event(127, 900, 'Xid = 1', "COMMIT/*!*/;\n")
             . FakeBinlog::start(4) . FakeBinlog::event(127, 900, "Query\tthread_id=1", "use `app`/*!*/;\nCREATE TABLE later (id INT)\n/*!*/;\n", '261101  1:45:00') . "# End of log file\n");
+        // A target server where the restore account cannot create triggers: refused before anything is touched.
+        touch($tools . '/untrusted');
+        try {
+            $manager->restoreChain($i2->getId(), new DateTimeImmutable('2026-11-01 01:30:00 UTC'));
+            self::fail('a restore that would stop at ERROR 1419 was attempted');
+        } catch (ChainBrokenException $e) {
+            self::assertStringContainsString('TRIGGER trg', $e->getMessage());
+            self::assertStringContainsString('log_bin_trust_function_creators', $e->getMessage());
+        }
+        self::assertFileDoesNotExist($tools . '/order');
+        file_put_contents($tools . '/grants', "GRANT SUPER ON *.* TO `rs`@`%`\n");
+
         $report = $manager->restoreChain($i2->getId(), new DateTimeImmutable('2026-11-01 01:30:00 UTC'));
         self::assertTrue($report->complete);
         self::assertSame("import\nreplay\n", file_get_contents($tools . '/order'));
@@ -497,6 +509,7 @@ final class ChainBackupFlowTest extends TestCase
             echo "/* SET @@GLOBAL.GTID_PURGED='+x:1-11';*/"
             echo "-- CHANGE REPLICATION SOURCE TO SOURCE_LOG_FILE='binlog.000002', SOURCE_LOG_POS=1480;"
             echo "CREATE TABLE t (id INT);"
+            echo '/*!50003 CREATE*/ /*!50017 DEFINER=`root`@`%`*/ /*!50003 TRIGGER `trg` BEFORE INSERT ON `t` FOR EACH ROW SET @x = 1 */;;'
             SH);
     }
 

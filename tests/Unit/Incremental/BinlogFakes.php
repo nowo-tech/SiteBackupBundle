@@ -31,11 +31,11 @@ final class BinlogFakes
               *"SHOW DATABASES"*) printf 'app\\nmysql\\n';;
               *"SELECT VERSION()"*) echo "{$version}";;
               *"server_uuid"*) echo "3E11FA47-71CA-11E1-9E33-C80AA9429562";;
-              *"SHOW GLOBAL VARIABLES"*) printf 'log_bin\\tON\\nbinlog_format\\tROW\\nbinlog_row_image\\tFULL\\nunrelated\\tx\\n';;
+              *"SHOW GLOBAL VARIABLES"*) printf 'log_bin\\tON\\nbinlog_format\\tROW\\nbinlog_row_image\\tFULL\\nunrelated\\tx\\n'; if [ -f "{$dir}/untrusted" ]; then printf 'log_bin_trust_function_creators\\tOFF\\n'; fi;;
               *"FLUSH BINARY LOGS"*) touch "{$dir}/flushed";;
               *"SHOW BINARY LOGS"*) cat "{$dir}/logs";;
               *"SHOW BINARY LOG STATUS"*|*"SHOW MASTER STATUS"*) printf 'binlog.000004\\t198\\t\\t\\tuuid-a:1-13,\\\\nuuid-b:1-2\\n';;
-              *"SHOW GRANTS"*) printf 'GRANT RELOAD, REPLICATION SLAVE ON *.* TO `bk`@`%%`\\n';;
+              *"SHOW GRANTS"*) if [ -f "{$dir}/grants" ]; then cat "{$dir}/grants"; else printf 'GRANT RELOAD, REPLICATION SLAVE ON *.* TO `bk`@`%%`\\n'; fi;;
               *"--binary-mode"*) cat > "{$dir}/replayed.sql"; echo replay >> "{$dir}/order";;
               *"--commands=OFF"*) cat > "{$dir}/imported.sql"; echo import >> "{$dir}/order";;
             esac

@@ -10,9 +10,11 @@ use Nowo\SiteBackupBundle\Exception\BinlogFilterException;
 use Nowo\SiteBackupBundle\Exception\InvalidBackupOptionsException;
 use Nowo\SiteBackupBundle\Incremental\BinlogBoundaries;
 use Nowo\SiteBackupBundle\Incremental\BinlogFilterResult;
+use Nowo\SiteBackupBundle\Incremental\BinlogReplayer;
 use Nowo\SiteBackupBundle\Incremental\BinlogSchemaFilter;
 use Nowo\SiteBackupBundle\Incremental\BinlogStatementClassifier as C;
 use Nowo\SiteBackupBundle\Incremental\DumpObjects;
+use Nowo\SiteBackupBundle\Incremental\MysqlBinlogTool;
 use Nowo\SiteBackupBundle\Model\BackupOptions;
 use Nowo\SiteBackupBundle\Service\SiteBackupManagerInterface;
 use Nowo\SiteBackupBundle\Tests\Unit\Engine\EngineFixtures;
@@ -26,6 +28,7 @@ use Symfony\Component\Filesystem\Filesystem;
 use function file_get_contents;
 use function file_put_contents;
 use function implode;
+use function touch;
 
 /**
  * Audit PP, delta 1 (SiteBackup PR #62 at 00d01ea): red-first tests.
@@ -210,6 +213,22 @@ final class PpDelta1FixesTest extends TestCase
             '/*!50106 CREATE*/ /*!50117 DEFINER=`root`@`%`*/ /*!50106 EVENT `e1` ON SCHEDULE EVERY 1 DAY DO DELETE FROM t */ ;;',
         ]));
         self::assertSame(['TABLE t' => true, 'TRIGGER wtr_no_update' => true, 'PROCEDURE p1' => true, 'FUNCTION f1' => true, 'EVENT e1' => true], DumpObjects::parse($this->dir . '/dump.sql'));
+    }
+
+    public function testTriggerCreationNeedsTrustOrSuperOnABinlogTarget(): void
+    {
+        $tools = $this->dir . '/tools';
+        (new Filesystem())->mkdir([$this->dir . '/work', $tools]);
+        $replayer = new BinlogReplayer('mysql://rs@127.0.0.1:3306/app', new MysqlBinlogTool(BinlogFakes::mysqlbinlog($tools)), BinlogFakes::mysqlClient($tools), 30, $this->dir . '/work');
+        self::assertNull($replayer->storedProgramsRefusal(), 'no log_bin_trust_function_creators variable: no rule');
+        touch($tools . '/untrusted');
+        self::assertStringContainsString('ERROR 1419', (string) $replayer->storedProgramsRefusal());
+        file_put_contents($tools . '/grants', "GRANT USAGE ON *.* TO `rs`@`%`\nGRANT ALL PRIVILEGES ON `app`.* TO `rs`@`%`\n");
+        self::assertNotNull($replayer->storedProgramsRefusal(), 'ALL on the schema is not SUPER');
+        file_put_contents($tools . '/grants', "GRANT ALL PRIVILEGES ON *.* TO `root`@`%`\n");
+        self::assertNull($replayer->storedProgramsRefusal());
+        file_put_contents($tools . '/grants', "GRANT SELECT, SUPER, RELOAD ON *.* TO `rs`@`%`\n");
+        self::assertNull($replayer->storedProgramsRefusal());
     }
 
     /**
