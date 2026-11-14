@@ -19,6 +19,12 @@
   - [Retention](#retention)
   - [Large databases](#large-databases)
   - [Restore drill (1.29+)](#restore-drill-129)
+- [Incremental backups (1.36+)](#incremental-backups-136)
+  - [Prerequisites](#prerequisites)
+  - [MySQL grants](#mysql-grants)
+  - [Taking a chain](#taking-a-chain)
+  - [Chain restore](#chain-restore)
+  - [Import, retention and remote copies](#import-retention-and-remote-copies)
 - [Built-in database dumper](#built-in-database-dumper)
 - [Database import note](#database-import-note)
 - [Standard host and DDD host](#standard-host-and-ddd-host)
@@ -332,6 +338,121 @@ drops the schema. Exit 0 when the drill passes, 1 when tables differ, 2 on error
   schema, and a missing one fails with `ERROR 1049`. Point the URL at an existing database the account may use
   (`mysql://drill:…@db/nowo_backup_drill_home` above); the drill schema itself must not exist (it is created, never
   reused).
+
+## Incremental backups (1.36+)
+
+A **chain** is one full backup followed by incrementals. The database part of an incremental is the MySQL binary logs
+written since the previous backup; its file part is the files that changed (size, mtime, SHA-256) plus `DELETED.json`.
+A chain restores to its head or to any second in between (`--until`). Everything is opt-in: backups that do not ask for
+it are exactly as before.
+
+### Prerequisites
+
+- **MySQL 8.0.26+** (8.4 LTS, 9.x) with `log_bin` on, `binlog_format=ROW`, `binlog_row_image=FULL` (recommended),
+  and `binlog_expire_logs_seconds` comfortably longer than the interval between two backups (a log that expires before
+  the next incremental makes that run a gap). MariaDB servers are not supported for incrementals.
+- **The Oracle MySQL client tools 8.0.26+**: `mysqldump` (`backup.database.binary`), `mysql`
+  (`backup.database.client_binary`) and `mysqlbinlog` (`backup.database.mysqlbinlog_binary`). The MariaDB client
+  cannot read MySQL binlog coordinates nor binary logs: hosts that only take full backups may keep it. On the official
+  `mysql` server images `mysqlbinlog` is missing: install the `mysql-community-client` package (or copy its
+  `mysqlbinlog`).
+- `backup.database.dumper: builtin` (the dumper's URL is the database of the chain).
+- Check it all with `bin/console nowo:site-backup:binlog-check` (exit 0 when nothing fails; warnings are allowed).
+
+Credentials: the binlog tools read them from an option file (`--defaults-file`, mode 0600, in a private directory
+under `backup.work_dir`, deleted in a `finally`), never from argv. The dump keeps using `MYSQL_PWD` as before.
+
+### MySQL grants
+
+```sql
+-- the account of backup.database.url
+GRANT RELOAD, REPLICATION CLIENT, REPLICATION SLAVE ON *.* TO 'backup'@'%';   -- FLUSH BINARY LOGS, SHOW BINARY LOGS, mysqlbinlog --read-from-remote-server, the dump's read lock
+GRANT ALL ON app.* TO 'backup'@'%';                                           -- the dump and the restore
+-- chain restores replay binlog events (BINLOG statements, session variables):
+GRANT REPLICATION_APPLIER, SESSION_VARIABLES_ADMIN, SYSTEM_VARIABLES_ADMIN ON *.* TO 'backup'@'%';
+```
+
+`REPLICATION SLAVE` is spelled `REPLICATION REPLICA` from 8.0.26 on (same privilege). Use a separate restore account if
+you prefer not to keep the replay privileges on the backup account.
+
+### Taking a chain
+
+```php
+// Full backup that starts a chain: binlog coordinates of the dump's snapshot + the file manifest.
+$full = $manager->createBackup(new BackupOptions(recordBinlogCoordinates: true, recordFileManifest: true));
+
+// Later: the next incremental after the head of the chain (format, password, label come from $base).
+$next = $manager->incrementalOptions($head->getId(), new BackupOptions(format: ArchiveFormat::TarGz));
+try {
+    $head = $manager->createBackup($next);
+} catch (BinlogGapException $e) {
+    // $e->getReason(): expired | server_changed | position_invalid — start a new chain with a full backup.
+}
+```
+
+```bash
+bin/console nowo:site-backup:create --record-binlog --record-file-manifest
+bin/console nowo:site-backup:create --incremental-of=<head id>   # exit 3 = binlog gap: take a full backup
+```
+
+- `recordBinlogCoordinates` runs the dump with `--source-data=2` (and `--set-gtid-purged=COMMENTED`, 8.0.32+) and
+  records `binlog_file`, `binlog_position`, `gtid_executed`, `server_uuid` and `binlog_database`. It cannot be combined
+  with table rules (a replay needs every table).
+- An incremental runs `FLUSH BINARY LOGS` and copies, verbatim, every closed binary log from where the parent ends to
+  the log just closed; its meta records `binlog_from`, the end coordinates, `binlog_files` (name, size, SHA-256) and the
+  first / last event time.
+- The file part compares every collected file with the parent's manifest: same size and mtime = unchanged (not read);
+  otherwise it is hashed and archived only when the content changed. Files modified within two seconds of the start
+  are marked untrusted (mtime `-1`) and re-hashed next time. Paths of the parent missing now go to `DELETED.json`.
+- The include paths and exclude patterns must be the ones of the full backup (`incrementalOptions()` reuses its include
+  paths; a changed `exclude_patterns` is refused: start a new chain).
+- One incremental per parent: `incrementalOptions()` refuses a parent that already has one (continue from the head).
+- Incrementals are `tar.gz` or `zip` (with or without a password); `sql.gz` cannot hold binary logs.
+
+Meta of a chain backup (besides the usual keys): `type` (`full` / `incremental`), `chain_id`, `parent_id`,
+`file_manifest` (`{"scope": …, "entries": {"path": [size, mtime, sha256]}}`), `file_manifest_sha256`,
+`base_manifest_sha256`, `files_changed`, `files_deleted`, `binlog_*`, `gtid_executed`, `server_uuid`.
+
+### Chain restore
+
+```bash
+bin/console nowo:site-backup:restore-chain <head id> --check                            # metadata only, changes nothing
+bin/console nowo:site-backup:restore-chain <head id> --force                            # to the head
+bin/console nowo:site-backup:restore-chain <head id> --until="2026-11-14 09:30:00" --force   # UTC unless an offset is given
+```
+
+1. **Verify, touching nothing.** Every parent present, every link of the same chain, binary logs contiguous from the
+   full backup's coordinates on one `server_uuid`, manifest links (`base_manifest_sha256` = parent's
+   `file_manifest_sha256`), `--until` not before the full backup, every archive's SHA-256 / signature / MANIFEST, the
+   binlog hashes of the meta against the archive, the configured database = the chain's database.
+2. **Prepare, touching nothing.** Extract every archive, re-hash what will be used, fold the file deltas into the final
+   file set and check it file by file against the manifest of the last applied incremental, decode the binary logs
+   (`mysqlbinlog --skip-gtids --database=<db> --start-position=<full> --stop-datetime=<until + 1 s>`).
+3. **Apply.** Import the full backup's dump, replay the binary logs (`mysql --binary-mode`), write the files, delete
+   the deleted ones (protected paths, runtime state and the secrets floor are never touched).
+
+A failure in 1–2 is a `ChainBrokenException`: nothing changed. A failure in 3 is a `ChainRestoreException` whose
+report (also printed by the command) lists every step as applied, failed (may be partly applied), not applied or
+skipped: the site is then **not** consistent; restore again before serving it. `--until` is inclusive (to the end of
+that second); the database is restored to `--until`, the files to the last incremental taken at or before it. After a
+restore: clear the cache and restart the PHP workers. The panel restores single backups only (chains: CLI).
+
+`restore()` / `nowo:site-backup:restore` refuse an incremental alone, and `deleteBackup()` refuses a backup that an
+incremental depends on (delete chains from their head).
+
+### Import, retention and remote copies
+
+- `nowo:site-backup:import <full> <inc1> <inc2> …` (or `importArchive([$full, $inc1, …])`, `importChain()`) imports a
+  chain made elsewhere, oldest first: each link must continue the previous one, the parents are relinked to the new
+  ids, and the chain is verified; on any problem every archive of that call is removed again. An incremental imported
+  alone is refused. The links keep their original creation times (they decide what `--until` applies). Chains need
+  `tar.gz` / `zip` archives (the `MANIFEST.json` carries the chain metadata).
+- `RetentionPlanner` prunes whole chains: a kept backup keeps its whole chain and every ancestor, so a full backup a
+  kept incremental depends on is never deleted. `backup.retention` deletes newest first; remote pruning
+  (`RemoteBackupPublisher::prune()`) keeps a chain whole when one of its sidecars is untrusted.
+- Remote sidecars of chain backups carry a `chain` block (chain ids, end coordinates, file manifest): when the local
+  copy is gone, build the next incremental with `IncrementalOptions::fromParentMeta($sidecar['id'], $sidecar['chain'],
+  $base)`.
 
 ## Built-in database dumper
 

@@ -78,6 +78,59 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Target: **1.36.0** (minor). Incremental backups (Beacon request 2026-11-04, block E0 items 9–11). Everything is
+opt-in: existing options, defaults, archives, sidecars and events are unchanged.
+
+### Added
+
+- **Binlog coordinates in the full dump (item 9).** `BackupOptions::$recordBinlogCoordinates` runs the data pass of the
+  built-in dumper with `--source-data=2` (and `--set-gtid-purged=COMMENTED` from 8.0.32) and records `binlog_file`,
+  `binlog_position`, `gtid_executed` and `server_uuid` (plus `binlog_database`) in the meta; the backup starts a chain
+  (`type: full`, `chain_id`). Needs `backup.database.dumper: builtin` and the **Oracle** MySQL client tools 8.0.26+
+  (the MariaDB tools cannot read MySQL binlog coordinates; full-only hosts keep using them). Refused with table rules.
+  CLI: `nowo:site-backup:create --record-binlog`.
+- **Binlog capture (item 10).** `BinlogCaptureInterface` / `BinlogCapture::capture(BinlogCoordinates $from, string
+  $database): IncrementalArtifact`: `FLUSH BINARY LOGS`, then `mysqlbinlog --read-from-remote-server --raw` of every
+  closed log from `$from` to the one just closed (whole files, checked against the server's sizes, SHA-256), the
+  end coordinates and the first / last event time (`TZ=UTC`). A typed `BinlogGapException` (`expired`,
+  `server_changed`, `position_invalid`) when `$from` left the server or belongs to another server: take a full backup
+  (`nowo:site-backup:create` exits 3). `BinlogPrerequisitesInterface` / `BinlogPrerequisites::check(): list<Check>`
+  (binaries, server, `log_bin`, `binlog_format`, `binlog_row_image`, expiry, grants, `gtid_mode`) and
+  `nowo:site-backup:binlog-check`. Credentials reach the tools only through a 0600 option file
+  (`--defaults-file`, private directory, removed in a `finally`), never argv. New `BinlogServerInterface` SPI.
+- **File deltas and chains (item 11).** `BackupOptions::$recordFileManifest` records the full file manifest (path →
+  size, mtime, SHA-256; `file_manifest` + `file_manifest_sha256`). `BackupOptions::$baseManifest` (with `$parentId`,
+  `$chainId` and, for the database, `$binlogFrom`) creates an incremental: only changed files, plus `DELETED.json`,
+  plus the binary logs since the parent; the meta gains `type`, `chain_id`, `parent_id`, `base_manifest_sha256`,
+  `binlog_from`, `binlog_files`, `first_event_at`, `last_event_at` and the full manifest for the next delta.
+  `IncrementalOptions::fromParentMeta()` and `SiteBackupManager::incrementalOptions($parentId)` build the next
+  incremental's options (the remote sidecar's new `chain` block is enough when the local copy is gone). CLI:
+  `--record-file-manifest`, `--incremental-of=<id>`.
+- **Chain restore.** `SiteBackupManager::restoreChain($headId, ?DateTimeImmutable $until)` / `ChainRestorer` /
+  `nowo:site-backup:restore-chain <head> [--until=…] [--check] --force`: verifies the whole chain before touching
+  anything (`ChainVerifier`: parents present, contiguous binlogs, one `server_uuid`, manifest links; every archive's
+  SHA-256 / signature / MANIFEST; binlog hashes; the final file set against the last manifest), decodes the binlogs
+  (`--skip-gtids --database --start-position --stop-datetime`), then imports the dump, replays the binlogs
+  (`mysql --binary-mode`), writes the folded file set and deletes the deleted files. `ChainBrokenException` = nothing
+  changed; `ChainRestoreException` carries a `ChainRestoreReport` that lists every step as applied / failed / not
+  applied / skipped.
+- **Chain import.** `importArchive()` accepts a list of paths (full first) and `importChain()` returns the imported
+  chain; parents are relinked to the new ids, the chain is verified and removed again on any problem. An incremental
+  imported alone is refused.
+- **Chain-aware retention.** `RetentionItem` gains `chainId` / `parentId` (`RetentionItem::fromMeta()`);
+  `RetentionPlanner` prunes whole chains only and never returns an ancestor of a kept backup. Local retention deletes
+  newest first; remote retention keeps a chain whole when one of its sidecars is untrusted.
+- `IncrementalBackupManagerInterface` (new port, implemented by `SiteBackupManager`; `SiteBackupManagerInterface` is
+  unchanged). Config: `backup.database.mysqlbinlog_binary`, `backup.database.binlog_min_expiry_seconds`.
+- CI: job "Binlog incrementals (MySQL 9)": MySQL 9.7 with binary logs, the Oracle `mysqlbinlog` 9.7.2 (from the
+  pinned client RPM): full → writes → incrementals → point-in-time restore, gap detection, password absent from argv
+  and logs.
+
+### Changed
+
+- `nowo:site-backup:restore` / `restore()` refuse an incremental backup (restore its chain), and `deleteBackup()`
+  refuses a backup an incremental depends on (delete the chain from its head). Neither existed before 1.36.
+
 ### Documentation
 
 - `docs/SECURITY.md`: replace the "re-audit pending" checklist cell with the recorded audits (Appendices CG, IR, KH, KZ, LX, MJ) and their dates (REQ-SEC-004).

@@ -130,6 +130,20 @@
 
 ## Unreleased
 
+Target: **1.36.0** (minor). `composer update nowo-tech/site-backup-bundle`. No configuration change is needed and
+nothing changes until a backup asks for binlog coordinates, a file manifest or an incremental.
+
+- To use incrementals: `backup.database.dumper: builtin`, the **Oracle** MySQL client tools 8.0.26+ (`mysqldump`,
+  `mysql`, `mysqlbinlog`; set `backup.database.mysqlbinlog_binary` when it is not on `PATH`), the grants in
+  [USAGE.md](USAGE.md#incremental-backups-136), then `nowo:site-backup:binlog-check`. Hosts on the MariaDB client keep
+  taking full backups as before.
+- Hosts that implement `SiteBackupManagerInterface` themselves: nothing to do (chains live on the new
+  `IncrementalBackupManagerInterface`). Hosts that call `RetentionPlanner::plan()` with their own `RetentionItem`s:
+  pass `chainId` / `parentId` (or use `RetentionItem::fromMeta()`) for chain backups, so chains are pruned whole.
+- `restore()` refuses an incremental and `deleteBackup()` refuses a backup that an incremental depends on; neither
+  can exist before 1.36.
+- Remote sidecars of chain backups carry a `chain` block (absent for other backups).
+
 ## To 1.35.2
 
 From **1.35.1**:

@@ -73,6 +73,7 @@ Worker demo: `demo/symfony8/docker/frankenphp/Caddyfile` runs `php_server` with 
 | `Security\PanelRequestContextFactory` (static factory, no state), `Security\HttpFoundationPanelSession` (1.35) | no — a context and a session adapter are built per call from the `Request` | per-call only | ✅ | ✅ |
 | `DependencyInjection\Compiler\SetupStepsPass` (1.35) | build time only | n/a | ✅ | ✅ |
 | `Backup\BackupArchiver` | yes | none (`readonly` config + `Filesystem`) | ✅ | ✅ |
+| `Incremental\BinlogCapture`, `Incremental\BinlogPrerequisites`, `Incremental\BinlogReplayer`, `Incremental\MysqlClientBinlogServer`, `Incremental\MysqlBinlogTool`, `Restore\ChainRestorer` (1.36) | yes | none (`readonly` config); option files, captures, staging and decoded logs live in per-call private directories removed in a `finally` | ✅ | ✅ |
 | `Restore\RestoreOrchestrator` | yes | none; progress lives in storage; raises the worker restart signal after applying files | ✅ (W-01 signal) | ✅ (W-01 signal) |
 | `Storage\FilesystemRestoreProgressStorage`, `Storage\FilesystemBackupHistoryStorage` | yes | none; read/write files per call | ✅ | ✅ |
 | `Setup\Storage\FilesystemSetupProgressStorage`, `CacheSetupProgressStorage`, `ChainSetupProgressStorage`, `CacheDoctrineSetupProgressStorage` | yes | none | ✅ | ✅ |
