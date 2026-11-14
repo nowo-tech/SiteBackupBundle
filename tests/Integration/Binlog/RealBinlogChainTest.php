@@ -280,7 +280,7 @@ final class RealBinlogChainTest extends TestCase
             // X10: a table renamed across schemas.
             'rename into app' => ['ALTER TABLE other.mv RENAME TO app.mv', null, 'across several databases'],
             // X5: a view of the app that reads another schema.
-            'cross-schema view' => ['CREATE VIEW app.v_leak AS SELECT * FROM other.victim', null, 'another database'],
+            'cross-schema view' => ['CREATE VIEW v_leak AS SELECT * FROM other.victim', 'app', 'refers to another database'],
         ];
         foreach ($attacks as $case => [$sql, $database, $expected]) {
             $full    = $manager->createBackup(new BackupOptions(includeFiles: false, recordBinlogCoordinates: true));

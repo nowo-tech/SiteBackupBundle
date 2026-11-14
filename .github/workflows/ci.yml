@@ -226,6 +226,7 @@ jobs:
             CREATE USER 'app'@'%' IDENTIFIED BY '$PWA'; GRANT ALL ON app.* TO 'app'@'%';
             CREATE USER 'bk'@'%' IDENTIFIED BY '$PWB'; GRANT RELOAD, REPLICATION CLIENT, REPLICATION SLAVE ON *.* TO 'bk'@'%';
             GRANT SELECT, SHOW VIEW, TRIGGER, LOCK TABLES, EVENT ON app.* TO 'bk'@'%';
+            GRANT SHOW_ROUTINE ON *.* TO 'bk'@'%';
             CREATE USER 'rs'@'%' IDENTIFIED BY '$PWR'; GRANT ALL ON app.* TO 'rs'@'%';
             GRANT REPLICATION_APPLIER, SESSION_VARIABLES_ADMIN, SET_ANY_DEFINER ON *.* TO 'rs'@'%';"
           # The server image ships mysql and mysqldump but not mysqlbinlog: take it from the matching Oracle client RPM

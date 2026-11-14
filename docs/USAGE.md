@@ -394,6 +394,7 @@ nowo_site_backup:
 CREATE USER 'backup'@'%' IDENTIFIED BY '…';
 GRANT RELOAD, REPLICATION CLIENT, REPLICATION SLAVE ON *.* TO 'backup'@'%';
 GRANT SELECT, SHOW VIEW, TRIGGER, LOCK TABLES, EVENT ON app.* TO 'backup'@'%';
+GRANT SHOW_ROUTINE ON *.* TO 'backup'@'%';   -- only with --routines / dumpRoutines (8.0.20+)
 
 -- restore_url: re-creates the schema, imports the dump, replays the events
 CREATE USER 'restore'@'%' IDENTIFIED BY '…';
@@ -485,7 +486,9 @@ bin/console nowo:site-backup:create --record-binlog --routines   # opt-in: store
   in the incrementals (`CREATE` / `DROP TRIGGER`).
 - **Stored routines and events** are dumped only on request: `BackupOptions(recordBinlogCoordinates: true,
   dumpRoutines: true)` / `--routines` runs the chain's dump with `--routines --events` (meta `dump_routines`). The
-  dump account needs `EVENT` on the schema (above) and the restore account `SET_ANY_DEFINER` when another account
+  dump account (`binlog_url`) needs `EVENT` on the schema and the global `SHOW_ROUTINE` (8.0.20+): without it
+  `mysqldump` silently leaves out the routines another account created, and the restore pre-flight then refuses the
+  schema (or `--recreate-database` drops them). The restore account needs `SET_ANY_DEFINER` when another account
   created them.
 
 - `recordBinlogCoordinates` runs the dump with `--source-data=2` (and `--set-gtid-purged=COMMENTED`, 8.0.32+) with the
