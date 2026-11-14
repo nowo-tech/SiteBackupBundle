@@ -264,11 +264,15 @@ final class RealBinlogChainTest extends TestCase
         self::assertSame("1\n2", trim($this->app('SELECT id FROM audit ORDER BY id')));
         self::assertSame("EVENT e_noop\nPROCEDURE p_count\nTRIGGER trg_audit", $this->objects());
 
+        // A restore onto the live server is itself written to the binary log: the old chain would carry it. Start a new
+        // chain after a restore (as documented).
+        $full2 = $manager->createBackup(new BackupOptions(includeFiles: false, recordBinlogCoordinates: true, dumpRoutines: true));
+
         // Trigger DDL after the full backup (Beacon's immutable-row shape, a create then drop).
         $this->admin("CREATE DEFINER=`app`@`%` TRIGGER trg_immutable BEFORE UPDATE ON audit FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'immutable';"
             . ' CREATE DEFINER=`app`@`%` TRIGGER trg_tmp BEFORE DELETE ON pitr FOR EACH ROW SET @x = 1; DROP TRIGGER trg_tmp', 'app');
         $this->app('INSERT INTO pitr VALUES (3)');
-        $i2 = $manager->createBackup($manager->incrementalOptions($i1->getId()));
+        $i2 = $manager->createBackup($manager->incrementalOptions($full2->getId()));
         self::assertStringContainsString('TRIGGER trg_immutable', $this->extract($i2, ChainPaths::EVENTS));
 
         $report = $manager->restoreChain($i2->getId(), null, 'ci', null, true);

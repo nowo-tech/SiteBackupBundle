@@ -564,7 +564,9 @@ complete and the command exits 1.
   created later stay on disk: a restore never deletes files outside what the chain recorded as deleted.
 - An imported chain keeps the original creation times; the full backup's `snapshot_at` bounds `--until` on both paths.
 
-After a restore: clear the cache and restart the PHP workers. The panel restores single backups only (chains: CLI).
+After a restore: clear the cache and restart the PHP workers, and **take a new full backup** before the next
+incremental: the restore itself is written to the server's binary log, so an incremental of the old chain would carry
+the restore's writes (replaying such a chain can fail with duplicate keys). The panel restores single backups only (chains: CLI).
 `restore()` / `nowo:site-backup:restore` refuse an incremental alone, and `deleteBackup()` refuses a backup that an
 incremental depends on (delete chains from their head).
 
