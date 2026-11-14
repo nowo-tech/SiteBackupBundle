@@ -142,7 +142,17 @@ nothing changes until a backup asks for binlog coordinates, a file manifest or a
   pass `chainId` / `parentId` (or use `RetentionItem::fromMeta()`) for chain backups, so chains are pruned whole.
 - `restore()` refuses an incremental and `deleteBackup()` refuses a backup that an incremental depends on; neither
   can exist before 1.36.
-- Remote sidecars of chain backups carry a `chain` block (absent for other backups).
+- Remote sidecars of chain backups carry a small `chain` block (absent for other backups): ids, coordinates,
+  `file_manifest_sha256`, `file_manifest_entries`, `file_manifest_bytes`, format, encryption, key id — never the file
+  manifest itself, which stays in the archive's `MANIFEST.json`. `extra_meta` and the signature fields are unchanged.
+  Chain archives also carry the object metadata `nowo-chain-id`.
+- `RemoteBackupPublisher::prune()` now reports an unreadable or oversized sidecar in `PruneReport::$errors`
+  (`UnreadableSidecar`) and keeps its chain, or prunes nothing in that run when the chain is unknown (1.35 skipped it
+  silently). `orphans()` never returns chain members.
+- Local `backup.retention` order is unchanged for hosts without chains (oldest first); with chains, deletions go
+  newest first.
+- Shared MySQL server: keep the default `binlog_capture: filtered`; use separate `binlog_url` / `restore_url`
+  accounts (USAGE "Accounts and MySQL grants").
 
 ## To 1.35.2
 

@@ -119,12 +119,36 @@ opt-in: existing options, defaults, archives, sidecars and events are unchanged.
   imported alone is refused.
 - **Chain-aware retention.** `RetentionItem` gains `chainId` / `parentId` (`RetentionItem::fromMeta()`);
   `RetentionPlanner` prunes whole chains only and never returns an ancestor of a kept backup. Local retention deletes
-  newest first; remote retention keeps a chain whole when one of its sidecars is untrusted.
+  chains newest first (non-chain hosts keep the 1.35 order); remote retention keeps a chain whole when one of its sidecars is untrusted.
 - `IncrementalBackupManagerInterface` (new port, implemented by `SiteBackupManager`; `SiteBackupManagerInterface` is
   unchanged). Config: `backup.database.mysqlbinlog_binary`, `backup.database.binlog_min_expiry_seconds`.
 - CI: job "Binlog incrementals (MySQL 9)": MySQL 9.7 with binary logs, the Oracle `mysqlbinlog` 9.7.2 (from the
   pinned client RPM): full → writes → incrementals → point-in-time restore, gap detection, password absent from argv
   and logs.
+
+- **Audit PP (before the tag).**
+  - **Shared servers (PP-M3, Beacon FR-043):** `backup.database.binlog_capture: filtered` (default) archives only the
+    backed-up schema's events: captures are decoded and filtered event by event (`BinlogSchemaFilter`,
+    `BinlogStatementClassifier`) and fail closed (`BinlogFilterException`) on any event that cannot be attributed;
+    `raw` (opt-in, dedicated servers) keeps the old whole-file capture. `binlog-check` reports other schemas.
+  - **Target-schema pre-flight (PP-H1):** a chain restore compares the target schema with the dump before touching
+    anything and refuses objects the dump does not re-create; `--recreate-database` / `restoreChain(…,
+    recreateDatabase: true)` drops and re-creates the schema first; a missing schema is created.
+  - **Cross-schema replays (PP-M1, PP-M2):** replays no longer use `mysqlbinlog --database`; every event is checked
+    against the schema before anything is applied (any other schema's event refuses the restore), and kept statements
+    run under `use <schema>`.
+  - **Accounts (PP-M4):** `backup.database.binlog_url` and `backup.database.restore_url` (default `url`);
+    `SYSTEM_VARIABLES_ADMIN` dropped from the documented grants; `binlog-check` warns about `ALL` / `SUPER` /
+    `SYSTEM_VARIABLES_ADMIN` on `*.*`.
+  - **Remote sidecars (PP-M5):** the `chain` block no longer carries the file manifest (only its SHA-256, entries and
+    bytes); `incrementalOptionsFromArchive()` reads it from the parent archive; `prune()` reports unreadable or
+    oversized sidecars, keeps their chain (object metadata `nowo-chain-id`) or prunes nothing; `orphans()` never returns
+    a chain member (PP-L11).
+  - Lows: random `O_EXCL` temp files for restored files (L3), non-ROW `binlog_format` refused at capture (L4),
+    owner-tagged work directories swept after a crash (L5), `--ssl-*` / `--tls-*` options in the tools' option files
+    (L6), files not written make the restore incomplete (L7), `snapshot_at` bounds `--until` (L8), payload paths
+    reserved under `.nowo-site-backup/` (L9), one chain = one format and key, checked at capture and restore (L10).
+    The restore prints "Database at" and "Files as of".
 
 ### Changed
 
