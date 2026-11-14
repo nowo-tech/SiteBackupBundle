@@ -155,13 +155,15 @@ final class RealBinlogChainTest extends TestCase
         try {
             $report = $manager->restoreChain($i2->getId(), $until, 'ci', null, true);
         } catch (\Nowo\SiteBackupBundle\Exception\ChainRestoreException $e) {
-            // Diagnostics for CI: the schema-only events (test data only), numbered like the replay file.
+            // Diagnostics for CI: the schema-only events of i1 (test data only), numbered.
             $lines = explode("\n", $this->extract($i1, ChainPaths::EVENTS));
+            $dump  = '';
             foreach ($lines as $n => $line) {
-                fwrite(STDERR, sprintf("%4d %s\n", $n + 1, mb_substr($line, 0, 160)));
+                if (!str_starts_with($line, 'BINLOG') && preg_match('/^[A-Za-z0-9+\/=]{20,}$/', $line) !== 1) {
+                    $dump .= sprintf("%4d %s\n", $n + 1, mb_substr($line, 0, 160));
+                }
             }
-
-            throw $e;
+            self::fail($e->getMessage() . "\n" . $dump);
         }
         self::assertTrue($report->complete, (string) json_encode($report));
         self::assertSame("1\t00FF275C0D0A\t7\n2\t62\t7", trim($this->app('SELECT id, HEX(v), w FROM pitr ORDER BY id')));
