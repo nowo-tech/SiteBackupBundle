@@ -227,7 +227,7 @@ jobs:
             CREATE USER 'bk'@'%' IDENTIFIED BY '$PWB'; GRANT RELOAD, REPLICATION CLIENT, REPLICATION SLAVE ON *.* TO 'bk'@'%';
             GRANT SELECT, SHOW VIEW, TRIGGER, LOCK TABLES, EVENT ON app.* TO 'bk'@'%';
             CREATE USER 'rs'@'%' IDENTIFIED BY '$PWR'; GRANT ALL ON app.* TO 'rs'@'%';
-            GRANT REPLICATION_APPLIER, SESSION_VARIABLES_ADMIN ON *.* TO 'rs'@'%';"
+            GRANT REPLICATION_APPLIER, SESSION_VARIABLES_ADMIN, SET_ANY_DEFINER ON *.* TO 'rs'@'%';"
           # The server image ships mysql and mysqldump but not mysqlbinlog: take it from the matching Oracle client RPM
           # (sha256 = repo.mysql.com digest) and run it in the same image (same glibc and libraries).
           curl -fsSL -o "$RUNNER_TEMP/client.rpm" https://repo.mysql.com/yum/mysql-9.7-community/el/9/x86_64/mysql-community-client-9.7.2-1.el9.x86_64.rpm

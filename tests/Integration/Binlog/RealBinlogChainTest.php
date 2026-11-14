@@ -57,7 +57,7 @@ use function trim;
  * - SBB_BINLOG_BACKUP_URL: backup.database.binlog_url (RELOAD, REPLICATION CLIENT, REPLICATION SLAVE on *.*; read on
  *   the schema);
  * - SBB_BINLOG_RESTORE_URL: backup.database.restore_url (ALL on the schema, REPLICATION_APPLIER,
- *   SESSION_VARIABLES_ADMIN — no SYSTEM_VARIABLES_ADMIN, PP-M4);
+ *   SESSION_VARIABLES_ADMIN, SET_ANY_DEFINER for the app's views — no SYSTEM_VARIABLES_ADMIN, PP-M4);
  * - SBB_BINLOG_ADMIN_URL: an administrator (other schemas, accounts, DDL without a default database, PURGE);
  * - SBB_BINLOG_SHARED_DIR (mounted at the same path by the tool wrappers, which append their argv to
  *   `<shared>/argv.log`), SBB_BINLOG_MYSQL / SBB_BINLOG_MYSQLDUMP / SBB_BINLOG_MYSQLBINLOG.
@@ -152,19 +152,7 @@ final class RealBinlogChainTest extends TestCase
         self::assertSame($before, $this->app('SELECT COUNT(*) FROM pitr'), 'the refused restore changed the database');
 
         // Point in time T, with --recreate-database: rows and columns as of T, files as of the full backup.
-        try {
-            $report = $manager->restoreChain($i2->getId(), $until, 'ci', null, true);
-        } catch (\Nowo\SiteBackupBundle\Exception\ChainRestoreException $e) {
-            // Diagnostics for CI: the schema-only events of i1 (test data only), numbered.
-            $lines = explode("\n", $this->extract($i1, ChainPaths::EVENTS));
-            $dump  = '';
-            foreach ($lines as $n => $line) {
-                if (!str_starts_with($line, 'BINLOG') && preg_match('/^[A-Za-z0-9+\/=]{20,}$/', $line) !== 1) {
-                    $dump .= sprintf("%4d %s\n", $n + 1, mb_substr($line, 0, 160));
-                }
-            }
-            self::fail($e->getMessage() . "\n" . $dump);
-        }
+        $report = $manager->restoreChain($i2->getId(), $until, 'ci', null, true);
         self::assertTrue($report->complete, (string) json_encode($report));
         self::assertSame("1\t00FF275C0D0A\t7\n2\t62\t7", trim($this->app('SELECT id, HEX(v), w FROM pitr ORDER BY id')));
         self::assertSame('', trim($this->app("SHOW TABLES LIKE 'newt'")));

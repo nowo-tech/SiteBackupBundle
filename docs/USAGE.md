@@ -401,6 +401,14 @@ GRANT ALL ON app.* TO 'restore'@'%';
 GRANT REPLICATION_APPLIER, SESSION_VARIABLES_ADMIN ON *.* TO 'restore'@'%';
 ```
 
+Views, triggers, stored routines and events carry the account that created them (`DEFINER`). When that is not the
+restore account (the usual case: the app creates them), the dump import and the replay need `SET_ANY_DEFINER` (8.2+;
+`SET_USER_ID` on 8.0) on the restore account — otherwise they stop with `ERROR 1227`:
+
+```sql
+GRANT SET_ANY_DEFINER ON *.* TO 'restore'@'%';   -- only when the schema has views / triggers / routines / events
+```
+
 `SYSTEM_VARIABLES_ADMIN` is **not** needed (verified against MySQL 9.7). Keep the restore account limited to the
 chain's schema: replays never need another one. `REPLICATION SLAVE` is spelled `REPLICATION REPLICA` from 8.0.26 on
 (same privilege). Both URLs must name the same database as `backup.database.url`.
