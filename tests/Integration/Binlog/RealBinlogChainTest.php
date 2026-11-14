@@ -226,10 +226,12 @@ final class RealBinlogChainTest extends TestCase
     public function testTriggersRoutinesAndEventsSurviveTheChain(): void
     {
         [$manager] = $this->stack(IncrementalArtifact::FILTERED);
+        // Created by an administrator for the app's account (Beacon's shape: DEFINER = the app). A DEFINER holding
+        // SYSTEM_USER (root) would need SYSTEM_USER on the restore account too.
         $this->admin("CREATE TABLE pitr (id INT PRIMARY KEY); CREATE TABLE audit (id INT PRIMARY KEY, note VARCHAR(16) NOT NULL DEFAULT 'new');"
-            . ' CREATE TRIGGER trg_audit AFTER INSERT ON pitr FOR EACH ROW INSERT INTO audit (id) VALUES (NEW.id);'
-            . ' CREATE PROCEDURE p_count() SELECT COUNT(*) FROM pitr;'
-            . ' CREATE EVENT e_noop ON SCHEDULE EVERY 1 DAY DISABLE DO DELETE FROM audit WHERE id < 0;'
+            . ' CREATE DEFINER=`app`@`%` TRIGGER trg_audit AFTER INSERT ON pitr FOR EACH ROW INSERT INTO audit (id) VALUES (NEW.id);'
+            . ' CREATE DEFINER=`app`@`%` PROCEDURE p_count() SELECT COUNT(*) FROM pitr;'
+            . ' CREATE DEFINER=`app`@`%` EVENT e_noop ON SCHEDULE EVERY 1 DAY DISABLE DO DELETE FROM audit WHERE id < 0;'
             . ' INSERT INTO pitr VALUES (1)', 'app');
         $full = $manager->createBackup(new BackupOptions(includeFiles: false, recordBinlogCoordinates: true, dumpRoutines: true));
         self::assertTrue($full->getMeta()['dump_routines']);
@@ -263,8 +265,8 @@ final class RealBinlogChainTest extends TestCase
         self::assertSame("EVENT e_noop\nPROCEDURE p_count\nTRIGGER trg_audit", $this->objects());
 
         // Trigger DDL after the full backup (Beacon's immutable-row shape, a create then drop).
-        $this->admin("CREATE TRIGGER trg_immutable BEFORE UPDATE ON audit FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'immutable';"
-            . ' CREATE TRIGGER trg_tmp BEFORE DELETE ON pitr FOR EACH ROW SET @x = 1; DROP TRIGGER trg_tmp', 'app');
+        $this->admin("CREATE DEFINER=`app`@`%` TRIGGER trg_immutable BEFORE UPDATE ON audit FOR EACH ROW SIGNAL SQLSTATE '45000' SET MESSAGE_TEXT = 'immutable';"
+            . ' CREATE DEFINER=`app`@`%` TRIGGER trg_tmp BEFORE DELETE ON pitr FOR EACH ROW SET @x = 1; DROP TRIGGER trg_tmp', 'app');
         $this->app('INSERT INTO pitr VALUES (3)');
         $i2 = $manager->createBackup($manager->incrementalOptions($i1->getId()));
         self::assertStringContainsString('TRIGGER trg_immutable', $this->extract($i2, ChainPaths::EVENTS));

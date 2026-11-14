@@ -410,6 +410,9 @@ restore account (the usual case: the app creates them), the dump import and the 
 GRANT SET_ANY_DEFINER ON *.* TO 'restore'@'%';   -- only when the schema has views / triggers / routines / events
 ```
 
+A `DEFINER` that holds `SYSTEM_USER` (such as `root`) can only be re-created by an account that also holds
+`SYSTEM_USER` (`ERROR 1227` otherwise): keep the schema's objects defined by the application's account.
+
 **Triggers and stored functions on a target with binary logging.** With `log_bin` on and
 `log_bin_trust_function_creators` OFF (the MySQL default), only an account with `SUPER` may create triggers and stored
 functions (`ERROR 1419`). A chain restore whose dump or events create them checks this first and refuses before
