@@ -325,6 +325,8 @@ final class Configuration implements ConfigurationInterface
                                 ->end()
                                 ->scalarNode('binary')->info('mysqldump / mariadb-dump binary.')->defaultValue('mysqldump')->cannotBeEmpty()->end()
                                 ->scalarNode('client_binary')->info('mysql / mariadb client binary (schema inspection, sql_file importer: client, nowo:site-backup:db-import).')->defaultValue('mysql')->cannotBeEmpty()->end()
+                                ->scalarNode('mysqlbinlog_binary')->info('1.36+: Oracle mysqlbinlog 8.0.26+ (binary log incrementals: capture and point-in-time replay). Only used by chain backups.')->defaultValue('mysqlbinlog')->cannotBeEmpty()->end()
+                                ->integerNode('binlog_min_expiry_seconds')->info('1.36+: nowo:site-backup:binlog-check warns when binlog_expire_logs_seconds is below this (default 7 days).')->defaultValue(604800)->min(3600)->end()
                                 ->booleanNode('skip_ssl_verify_server_cert')->info('MariaDB client only: keep TLS but skip server certificate verification.')->defaultFalse()->end()
                                 ->arrayNode('extra_options')
                                     ->info('Extra mysqldump long options (e.g. --column-statistics=0). Options that write elsewhere or read credentials are refused.')

@@ -7,6 +7,7 @@ namespace Nowo\SiteBackupBundle\Backup;
 use Closure;
 use Composer\InstalledVersions;
 use DeflateContext;
+use InvalidArgumentException;
 use JsonException;
 use Nowo\SiteBackupBundle\Crypto\AgeBinaryEncryptor;
 use Nowo\SiteBackupBundle\Crypto\ArchiveEncryptorInterface;
@@ -21,6 +22,12 @@ use Nowo\SiteBackupBundle\Exception\InsufficientDiskException;
 use Nowo\SiteBackupBundle\Exception\InvalidBackupOptionsException;
 use Nowo\SiteBackupBundle\Exception\UnsafeArchiveException;
 use Nowo\SiteBackupBundle\Exception\WrongPasswordException;
+use Nowo\SiteBackupBundle\Incremental\BinlogCapture;
+use Nowo\SiteBackupBundle\Incremental\BinlogCaptureInterface;
+use Nowo\SiteBackupBundle\Incremental\BinlogCoordinates;
+use Nowo\SiteBackupBundle\Incremental\BinlogServerInterface;
+use Nowo\SiteBackupBundle\Incremental\ChainLink;
+use Nowo\SiteBackupBundle\Incremental\FileManifest;
 use Nowo\SiteBackupBundle\Log\SecretRedactor;
 use Nowo\SiteBackupBundle\Model\ArchivePassword;
 use Nowo\SiteBackupBundle\Model\BackupArtifact;
@@ -42,6 +49,7 @@ use Throwable;
 use ZipArchive;
 
 use function array_filter;
+use function array_key_exists;
 use function array_keys;
 use function array_merge;
 use function array_pop;
@@ -120,6 +128,7 @@ use const GLOB_ONLYDIR;
 use const JSON_PRETTY_PRINT;
 use const JSON_THROW_ON_ERROR;
 use const JSON_UNESCAPED_SLASHES;
+use const PHP_INT_MAX;
 use const PHP_VERSION;
 use const ZLIB_ENCODING_GZIP;
 use const ZLIB_FINISH;
@@ -161,6 +170,13 @@ final class BackupArchiver
 
     private const ID_PATTERN = '/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/';
 
+    /** 1.36+: chain metadata kept by an import. */
+    private const CHAIN_META_KEYS = [
+        'type', 'chain_id', 'parent_id', 'binlog_file', 'binlog_position', 'server_uuid', 'gtid_executed', 'binlog_database',
+        'binlog_from', 'binlog_files', 'first_event_at', 'last_event_at', 'binlog_captured_at', 'file_manifest',
+        'file_manifest_sha256', 'base_manifest_sha256', 'files_changed', 'files_deleted',
+    ];
+
     /** @var array{max_bytes: int, max_entries: int, max_ratio: int} */
     private readonly array $extractLimits;
 
@@ -198,6 +214,8 @@ final class BackupArchiver
         private readonly ?BackupSigner $signer = null,
         private readonly ?TableStatsCollector $statsCollector = null,
         array $extractLimits = [],
+        private readonly ?BinlogCaptureInterface $binlogCapture = null,
+        private readonly ?BinlogServerInterface $binlogServer = null,
     ) {
         $this->extractLimits = [
             'max_bytes'   => (int) ($extractLimits['max_bytes'] ?? self::DEFAULT_EXTRACT_LIMITS['max_bytes']),
@@ -270,8 +288,17 @@ final class BackupArchiver
             $skipped  = 0;
             $outside  = 0;
 
-            $includes  = $options->includePaths ?? $this->includePaths;
-            $checksums = $options->includeFiles ? $this->copyIncludedPaths($payloadDir, $includes, $skipped, $outside, $beat) : [];
+            $includes = $options->includePaths ?? $this->includePaths;
+            // 1.36+: chain backups track every collected file (size, mtime, SHA-256); an incremental archives the delta.
+            $track   = $options->includeFiles && ($options->recordFileManifest || $options->baseManifest instanceof FileManifest);
+            $scope   = FileManifest::scopeOf(array_values($includes), array_values($this->excludePatterns));
+            $entries = [];
+            if ($options->baseManifest instanceof FileManifest && $options->baseManifest->scope !== $scope) {
+                throw new InvalidBackupOptionsException('The include paths or exclude patterns changed since the base manifest: take a full backup.');
+            }
+            // Files modified from 2 s before the start on may change again within the same mtime second: not trusted.
+            $racyFrom  = $this->clock->now()->getTimestamp() - 2;
+            $checksums = $options->includeFiles ? $this->copyIncludedPaths($payloadDir, $includes, $skipped, $outside, $beat, $track ? $options->baseManifest : null, $track, $entries, $racyFrom) : [];
             $meta      = [
                 'project_dir'       => $this->projectDir,
                 'includes'          => $options->includeFiles ? array_values($includes) : [],
@@ -293,8 +320,21 @@ final class BackupArchiver
                 $meta['extra'] = $options->extraMeta;
             }
 
-            $hasDump = false;
-            if ($options->includeDatabase && $this->hasDatabaseDumper()) {
+            if ($options->isChainMember()) {
+                $meta['type']      = $options->isIncremental() ? ChainLink::TYPE_INCREMENTAL : ChainLink::TYPE_FULL;
+                $meta['chain_id']  = $options->chainId ?? $id;
+                $meta['parent_id'] = $options->parentId;
+            }
+            if ($track) {
+                $meta += $this->recordFiles($payloadDir, new FileManifest($entries, $scope), $options->baseManifest, $checksums);
+            }
+
+            $hasDump   = false;
+            $hasBinlog = false;
+            if ($options->includeDatabase && $options->binlogFrom instanceof BinlogCoordinates) {
+                $meta += $this->captureBinlogs($payloadDir, $options->binlogFrom, $checksums, $beat);
+                $hasBinlog = true;
+            } elseif ($options->includeDatabase && $this->hasDatabaseDumper()) {
                 $dumpRelative = 'database/dump.sql';
                 $dumpAbsolute = $payloadDir . '/' . $dumpRelative;
                 $this->filesystem->mkdir(dirname($dumpAbsolute), 0o700);
@@ -302,6 +342,9 @@ final class BackupArchiver
                 if ($report instanceof DumpReport) {
                     $meta['dump'] = $report->toManifest();
                     $warnings     = array_merge($warnings, $report->warnings);
+                    if ($report->binlogCoordinates !== null) {
+                        $meta += $this->dumpCoordinates($report->binlogCoordinates);
+                    }
                 }
                 $beat(BackupProgress::PHASE_HASHING);
                 $checksums[$dumpRelative] = $this->hashFile($dumpAbsolute, static fn () => $beat());
@@ -309,10 +352,11 @@ final class BackupArchiver
                 $hasDump                  = true;
             }
 
+            $hasDatabase     = $hasDump || $hasBinlog;
             $meta['content'] = match (true) {
-                $hasDump && $options->includeFiles => 'database_files',
-                $hasDump                           => 'database',
-                default                            => 'files',
+                $hasDatabase && $options->includeFiles => 'database_files',
+                $hasDatabase                           => 'database',
+                default                                => 'files',
             };
             if ($hasDump && $options->recordTableStats && $this->statsCollector instanceof TableStatsCollector) {
                 $meta['table_stats'] = self::expectedTableStats($this->statsCollector->collect(), $options->tableRuleValues());
@@ -396,7 +440,13 @@ final class BackupArchiver
      *
      * @throws CorruptArchiveException|FormatUnavailableException|UnsafeArchiveException|WrongPasswordException
      */
-    public function import(string $path, #[SensitiveParameter] ?ArchivePassword $password = null, ?string $createdBy = null, ?ImportOptions $options = null): BackupArtifact
+    /**
+     * @param array{original_parent_id: string, parent_id: string}|null $chainLink 1.36+: the archive is the next
+     *                                                                             incremental of a chain being imported:
+     *                                                                             its original parent and the new id of
+     *                                                                             that parent here
+     */
+    public function import(string $path, #[SensitiveParameter] ?ArchivePassword $password = null, ?string $createdBy = null, ?ImportOptions $options = null, ?array $chainLink = null): BackupArtifact
     {
         $options ??= new ImportOptions();
         if (!is_file($path) || !is_readable($path)) {
@@ -472,6 +522,7 @@ final class BackupArchiver
             if (is_array($original['table_stats'] ?? null)) {
                 $meta['table_stats'] = $original['table_stats'];
             }
+            $meta = $this->importedChainMeta($original, $chainLink) + $meta;
 
             $this->secretPolicy->assertNoSecrets(array_keys($checksums));
             $this->writeManifest($payloadDir, $id, $checksums, $meta);
@@ -506,6 +557,48 @@ final class BackupArchiver
         } finally {
             $this->filesystem->remove($workDir);
         }
+    }
+
+    /**
+     * 1.36+: the chain metadata of an imported archive. A full backup keeps it as is; an incremental is only accepted as
+     * the next link of a chain being imported ($chainLink), and its parent id is rewritten to the new id.
+     *
+     * @param array<string, mixed> $original MANIFEST meta of the archive
+     * @param array{original_parent_id: string, parent_id: string}|null $chainLink
+     *
+     * @return array<string, mixed>
+     */
+    private function importedChainMeta(array $original, ?array $chainLink): array
+    {
+        $type = $original['type'] ?? null;
+        if ($type !== ChainLink::TYPE_FULL && $type !== ChainLink::TYPE_INCREMENTAL) {
+            if ($chainLink !== null) {
+                throw new CorruptArchiveException('This archive is not an incremental backup: it cannot continue the chain.');
+            }
+
+            return [];
+        }
+        if ($type === ChainLink::TYPE_INCREMENTAL && $chainLink === null) {
+            throw new InvalidBackupOptionsException('An incremental backup is imported together with its chain: pass the full backup and every incremental, oldest first.');
+        }
+        if ($type === ChainLink::TYPE_FULL && $chainLink !== null) {
+            throw new CorruptArchiveException('A full backup cannot continue a chain.');
+        }
+        if ($chainLink !== null && ($original['parent_id'] ?? null) !== $chainLink['original_parent_id']) {
+            throw new CorruptArchiveException('This incremental backup does not continue the previous archive of the chain.');
+        }
+
+        $meta = [];
+        foreach (self::CHAIN_META_KEYS as $key) {
+            if (array_key_exists($key, $original)) {
+                $meta[$key] = $original[$key];
+            }
+        }
+        if ($chainLink !== null) {
+            $meta['parent_id'] = $chainLink['parent_id'];
+        }
+
+        return $meta;
     }
 
     /**
@@ -1133,6 +1226,129 @@ final class BackupArchiver
         if ($options->recordTableStats && (!$this->statsCollector instanceof TableStatsCollector || !$options->includeDatabase)) {
             throw new InvalidBackupOptionsException('recordTableStats needs the database and the table statistics collector (backup.database.url).');
         }
+
+        // 1.36+: binlog coordinates and captures need the built-in dumper (its database URL) and the binlog services.
+        if ($options->recordBinlogCoordinates) {
+            $this->binlogServer();
+        }
+        if ($options->binlogFrom instanceof BinlogCoordinates) {
+            $this->binlogCapture();
+        }
+    }
+
+    private function binlogServer(): BinlogServerInterface
+    {
+        if (!$this->binlogServer instanceof BinlogServerInterface || !$this->builtinDumper instanceof BuiltinMysqlDumper) {
+            throw new InvalidBackupOptionsException('recordBinlogCoordinates needs backup.database.dumper: builtin.');
+        }
+
+        return $this->binlogServer;
+    }
+
+    private function binlogCapture(): BinlogCaptureInterface
+    {
+        if (!$this->binlogCapture instanceof BinlogCaptureInterface || !$this->builtinDumper instanceof BuiltinMysqlDumper) {
+            throw new InvalidBackupOptionsException('Binary log incrementals need backup.database.dumper: builtin.');
+        }
+
+        return $this->binlogCapture;
+    }
+
+    /**
+     * The chain's database: the built-in dumper's (checked by binlogServer() / binlogCapture()).
+     */
+    private function databaseName(): string
+    {
+        return (string) $this->builtinDumper?->databaseName();
+    }
+
+    /**
+     * 1.36+: `file_manifest` (+ `DELETED.json` and the delta counters for an incremental) of a chain backup.
+     *
+     * @param array<string, string> $checksums files archived so far; `DELETED.json` is added
+     *
+     * @return array<string, mixed>
+     */
+    private function recordFiles(string $payloadDir, FileManifest $manifest, ?FileManifest $base, array &$checksums): array
+    {
+        $meta = ['file_manifest' => $manifest->toArray(), 'file_manifest_sha256' => $manifest->sha256()];
+        if (!$base instanceof FileManifest) {
+            return $meta;
+        }
+
+        $deleted = $base->deletedIn($manifest);
+        $file    = $payloadDir . '/DELETED.json';
+        try {
+            file_put_contents($file, json_encode($deleted, JSON_THROW_ON_ERROR | JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+        } catch (JsonException $e) {
+            throw new RuntimeException('Unable to write DELETED.json.', 0, $e);
+        }
+        $this->filesystem->chmod($file, 0o600);
+        $checksums['DELETED.json'] = $this->hashFile($file, null);
+
+        return $meta + [
+            'base_manifest_sha256' => $base->sha256(),
+            'files_changed'        => count($checksums) - 1,
+            'files_deleted'        => count($deleted),
+        ];
+    }
+
+    /**
+     * 1.36+: the coordinates `--source-data=2` recorded, with this server's UUID, as the start of a chain.
+     *
+     * @param array{file: string, position: int, gtid: ?string} $parsed
+     *
+     * @return array<string, mixed>
+     */
+    private function dumpCoordinates(array $parsed): array
+    {
+        try {
+            $coordinates = new BinlogCoordinates($parsed['file'], $parsed['position'], $this->binlogServer()->serverUuid(), $parsed['gtid']);
+        } catch (InvalidArgumentException $e) {
+            throw new DumpFailedException('The dump recorded unusable binlog coordinates: ' . $e->getMessage(), 0, $e);
+        }
+
+        return $coordinates->toArray() + ['binlog_database' => $this->databaseName()];
+    }
+
+    /**
+     * 1.36+: the database part of an incremental: the binary logs since $from, under `binlog/` in the payload.
+     *
+     * @param array<string, string> $checksums
+     * @param Closure(string=): void $beat
+     *
+     * @return array<string, mixed>
+     */
+    private function captureBinlogs(string $payloadDir, BinlogCoordinates $from, array &$checksums, Closure $beat): array
+    {
+        $capture = $this->binlogCapture();
+        $beat(BackupProgress::PHASE_DUMPING);
+        $database = $this->databaseName();
+        $captured = $capture instanceof BinlogCapture
+            ? $capture->capture($from, $database, static fn () => $beat())
+            : $capture->capture($from, $database);
+
+        try {
+            $this->filesystem->mkdir($payloadDir . '/binlog', 0o700);
+            $files = [];
+            foreach ($captured->files as $file) {
+                $relative = 'binlog/' . $file->name;
+                $this->filesystem->rename($file->path, $payloadDir . '/' . $relative);
+                $checksums[$relative] = $file->sha256;
+                $files[]              = ['name' => $file->name, 'sha256' => $file->sha256, 'size' => $file->sizeBytes];
+            }
+        } finally {
+            $capture->discard($captured);
+        }
+
+        return $captured->to->toArray() + [
+            'binlog_from'        => $captured->from->toArray(),
+            'binlog_database'    => $database,
+            'binlog_files'       => $files,
+            'first_event_at'     => $captured->firstEventAt?->format(DATE_ATOM),
+            'last_event_at'      => $captured->lastEventAt?->format(DATE_ATOM),
+            'binlog_captured_at' => $captured->capturedAt?->format(DATE_ATOM),
+        ];
     }
 
     /**
@@ -1315,16 +1531,19 @@ final class BackupArchiver
     /**
      * @param list<string> $includePaths
      * @param Closure(string=): void $beat
+     * @param FileManifest|null $base 1.36+: files unchanged since this manifest are not copied
+     * @param bool $track 1.36+: record every collected file in $entries (size, mtime, SHA-256)
+     * @param array<string, array{0: int, 1: int, 2: string}> $entries
+     * @param int $racyFrom mtimes from this timestamp on are recorded as untrusted
      *
-     * @return array<string, string>
+     * @return array<string, string> path => SHA-256 of the files copied into the payload
      */
-    private function copyIncludedPaths(string $payloadDir, array $includePaths, int &$skipped, int &$outside, Closure $beat): array
+    private function copyIncludedPaths(string $payloadDir, array $includePaths, int &$skipped, int &$outside, Closure $beat, ?FileManifest $base = null, bool $track = false, array &$entries = [], int $racyFrom = PHP_INT_MAX): array
     {
         $checksums = [];
         $project   = rtrim($this->projectDir, '/\\');
         $verdicts  = ['secret' => 0, 'outside' => 0];
         $floor     = null;
-        $hash      = '';
         $beat(BackupProgress::PHASE_COPYING);
 
         foreach ($this->resolveIncludePaths($includePaths) as $relative) {
@@ -1338,12 +1557,7 @@ final class BackupArchiver
                 if ($this->isExcludedRelative($relative)) {
                     continue;
                 }
-                $verdict = $this->copyVerified($relative, $source, $payloadDir . '/' . $relative, $floor, $hash);
-                if ($verdict !== null) {
-                    ++$verdicts[$verdict];
-                    continue;
-                }
-                $checksums[$relative] = $hash;
+                $this->collect($relative, $source, $payloadDir, $floor, $verdicts, $checksums, $base, $track, $entries, $racyFrom);
                 continue;
             }
 
@@ -1364,12 +1578,7 @@ final class BackupArchiver
                 if ($this->isExcludedRelative($relPath)) {
                     continue;
                 }
-                $verdict = $this->copyVerified($relPath, $full, $payloadDir . '/' . $relPath, $floor, $hash);
-                if ($verdict !== null) {
-                    ++$verdicts[$verdict];
-                    continue;
-                }
-                $checksums[$relPath] = $hash;
+                $this->collect($relPath, $full, $payloadDir, $floor, $verdicts, $checksums, $base, $track, $entries, $racyFrom);
                 $beat();
             }
         }
@@ -1378,6 +1587,62 @@ final class BackupArchiver
         $outside += $verdicts['outside'];
 
         return $checksums;
+    }
+
+    /**
+     * Copies one collected file into the payload (or, 1.36+, skips it when the base manifest says it is unchanged).
+     *
+     * Unchanged = same size and mtime as in $base (an untrusted mtime never matches); a file whose content hashes the
+     * same as in $base is recorded but not archived. size / mtime are read before the copy: a file that changes while
+     * it is copied gets a newer mtime and is collected again next time.
+     *
+     * @param array<string, true>|null $floor
+     * @param array<string, int> $verdicts
+     * @param array<string, string> $checksums
+     * @param array<string, array{0: int, 1: int, 2: string}> $entries
+     */
+    private function collect(string $relative, string $absolute, string $payloadDir, ?array &$floor, array &$verdicts, array &$checksums, ?FileManifest $base, bool $track, array &$entries, int $racyFrom): void
+    {
+        $known = null;
+        $size  = 0;
+        $mtime = FileManifest::UNTRUSTED_MTIME;
+        if ($track) {
+            $verdict = $this->classify($relative, $absolute, $floor);
+            if ($verdict !== null) {
+                ++$verdicts[$verdict];
+
+                return;
+            }
+            // classify() resolved the path; a file gone since then fails the copy below.
+            $stat  = @stat($absolute) ?: ['size' => 0, 'mtime' => PHP_INT_MAX];
+            $size  = (int) $stat['size'];
+            $mtime = (int) $stat['mtime'] >= $racyFrom ? FileManifest::UNTRUSTED_MTIME : (int) $stat['mtime'];
+            $known = $base?->get($relative);
+            if ($known !== null && $mtime !== FileManifest::UNTRUSTED_MTIME && $known[0] === $size && $known[1] === $mtime) {
+                $entries[$relative] = $known;
+
+                return;
+            }
+        }
+
+        $hash    = '';
+        $dest    = $payloadDir . '/' . $relative;
+        $verdict = $this->copyVerified($relative, $absolute, $dest, $floor, $hash);
+        if ($verdict !== null) {
+            ++$verdicts[$verdict];
+
+            return;
+        }
+        if ($track) {
+            $entries[$relative] = [$size, $mtime, $hash];
+            if ($known !== null && $known[2] === $hash) {
+                // Touched, same content: part of the manifest, not of the delta.
+                $this->filesystem->remove($dest);
+
+                return;
+            }
+        }
+        $checksums[$relative] = $hash;
     }
 
     /**
@@ -1577,7 +1842,7 @@ final class BackupArchiver
         $tick = static fn () => $beat();
 
         if ($this->builtinDumper instanceof BuiltinMysqlDumper) {
-            return $this->builtinDumper->dump($dumpAbsolute, $options->tableRules, $options->allowUnsafeTableRules, $tick);
+            return $this->builtinDumper->dump($dumpAbsolute, $options->tableRules, $options->allowUnsafeTableRules, $tick, $options->recordBinlogCoordinates);
         }
 
         $command = (string) $this->databaseDumpCommand;

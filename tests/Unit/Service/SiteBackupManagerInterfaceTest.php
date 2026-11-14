@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Tests\Unit\Service;
 
+use Nowo\SiteBackupBundle\Incremental\IncrementalBackupManagerInterface;
 use Nowo\SiteBackupBundle\Service\SiteBackupManager;
 use Nowo\SiteBackupBundle\Service\SiteBackupManagerInterface;
 use PHPUnit\Framework\TestCase;
@@ -21,12 +22,18 @@ final class SiteBackupManagerInterfaceTest extends TestCase
 
     public function testEveryPublicManagerMethodIsOnTheInterface(): void
     {
-        $interface = new ReflectionClass(SiteBackupManagerInterface::class);
+        $interface   = new ReflectionClass(SiteBackupManagerInterface::class);
+        $incremental = new ReflectionClass(IncrementalBackupManagerInterface::class);
+        self::assertContains(IncrementalBackupManagerInterface::class, class_implements(SiteBackupManager::class));
         foreach ((new ReflectionClass(SiteBackupManager::class))->getMethods() as $method) {
             if (!$method->isPublic() || $method->isConstructor()) {
                 continue;
             }
-            self::assertTrue($interface->hasMethod($method->getName()), $method->getName());
+            // 1.36+: chain operations live on their own port so implementations of the 1.x interface keep working.
+            self::assertTrue($interface->hasMethod($method->getName()) || $incremental->hasMethod($method->getName()), $method->getName());
+        }
+        foreach ($incremental->getMethods() as $method) {
+            self::assertFalse($interface->hasMethod($method->getName()), $method->getName());
         }
     }
 }

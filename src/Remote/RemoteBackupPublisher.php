@@ -9,6 +9,7 @@ use JsonException;
 use Nowo\SiteBackupBundle\Event\RemoteBackupPrunedEvent;
 use Nowo\SiteBackupBundle\Event\RemoteBackupUploadedEvent;
 use Nowo\SiteBackupBundle\Exception\RemoteTargetException;
+use Nowo\SiteBackupBundle\Incremental\IncrementalOptions;
 use Nowo\SiteBackupBundle\Log\SecretRedactor;
 use Nowo\SiteBackupBundle\Model\BackupArtifact;
 use Nowo\SiteBackupBundle\Retention\RetentionItem;
@@ -20,6 +21,7 @@ use Psr\EventDispatcher\EventDispatcherInterface;
 use Symfony\Component\Clock\NativeClock;
 use Throwable;
 
+use function array_key_exists;
 use function fclose;
 use function feof;
 use function fopen;
@@ -169,11 +171,16 @@ final class RemoteBackupPublisher
             }
             $id        = (string) $sidecar['id'];
             $createdAt = DateTimeImmutable::createFromFormat(DATE_ATOM, (string) $sidecar['created_at']);
+            $chain     = is_array($sidecar['chain'] ?? null) ? $sidecar['chain'] : [];
             if ($createdAt === false || $createdAt->getTimestamp() > $latest || !$this->trusted($archiveKey, $id, $sidecar, $object, $required)) {
+                // 1.36+: an untrusted member of a chain is never deleted and keeps its whole chain (fail safe).
+                if ($chain !== [] && preg_match(self::ID_PATTERN, $id) === 1) {
+                    $items[] = RetentionItem::fromMeta($id, $this->clock->now(), $chain, false);
+                }
                 continue;
             }
             $keysById[$id] = $archiveKey;
-            $items[]       = new RetentionItem($id, $createdAt);
+            $items[]       = RetentionItem::fromMeta($id, $createdAt, $chain);
         }
 
         $deleted = [];
@@ -253,7 +260,31 @@ final class RemoteBackupPublisher
             'checksums_sha256'  => BackupSigner::checksumsDigest($artifact->getChecksums()),
             'signature'         => is_string($meta['signature'] ?? null) ? $meta['signature'] : null,
             'signing_key_id'    => is_string($meta['signing_key_id'] ?? null) ? $meta['signing_key_id'] : null,
-        ];
+        ] + $this->chainSidecar($meta);
+    }
+
+    /**
+     * 1.36+: the `chain` block of a chain backup's remote sidecar (absent for other backups): what retention needs to
+     * prune whole chains, and what {@see IncrementalOptions::fromParentMeta()} needs to build the next incremental when
+     * the local copy is gone.
+     *
+     * @param array<string, mixed> $meta
+     *
+     * @return array{chain?: array<string, mixed>}
+     */
+    private function chainSidecar(array $meta): array
+    {
+        if (!is_string($meta['chain_id'] ?? null) || !is_string($meta['type'] ?? null)) {
+            return [];
+        }
+        $chain = [];
+        foreach (IncrementalOptions::PARENT_META_KEYS as $key) {
+            if (array_key_exists($key, $meta)) {
+                $chain[$key] = $meta[$key];
+            }
+        }
+
+        return ['chain' => $chain];
     }
 
     /**

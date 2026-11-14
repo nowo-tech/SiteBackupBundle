@@ -1,0 +1,33 @@
+<?php
+
+declare(strict_types=1);
+
+namespace Nowo\SiteBackupBundle\Exception;
+
+use RuntimeException;
+
+/**
+ * A binary log capture cannot continue from the given coordinates (1.36+): the next backup of the plan must be a full
+ * one. `getReason()` tells why.
+ */
+final class BinlogGapException extends RuntimeException implements SiteBackupException
+{
+    /** The start file is no longer on the server (binlog_expire_logs_seconds, PURGE BINARY LOGS, RESET). */
+    public const EXPIRED = 'expired';
+
+    /** The server is another one (`server_uuid` differs: failover, restore from another host, new data directory). */
+    public const SERVER_CHANGED = 'server_changed';
+
+    /** The start position is beyond the end of its file (the log was reset or the coordinates are not this server's). */
+    public const POSITION_INVALID = 'position_invalid';
+
+    public function __construct(private readonly string $reason, string $message)
+    {
+        parent::__construct($message);
+    }
+
+    public function getReason(): string
+    {
+        return $this->reason;
+    }
+}

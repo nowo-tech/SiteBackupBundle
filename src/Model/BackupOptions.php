@@ -9,6 +9,8 @@ use LogicException;
 use Nowo\SiteBackupBundle\Enum\ArchiveFormat;
 use Nowo\SiteBackupBundle\Enum\TableRule;
 use Nowo\SiteBackupBundle\Exception\InvalidBackupOptionsException;
+use Nowo\SiteBackupBundle\Incremental\BinlogCoordinates;
+use Nowo\SiteBackupBundle\Incremental\FileManifest;
 use Nowo\SiteBackupBundle\Service\SiteBackupManager;
 use SensitiveParameter;
 
@@ -49,6 +51,17 @@ final readonly class BackupOptions
      * @param string|null $keyId 1.29+: opaque id of the password in the host's key ring, recorded in the meta
      * @param bool $recordTableStats 1.29+: record row counts and CHECKSUM TABLE values right after the dump
      *                               (`table_stats` in the meta) for restore drills
+     * @param bool $recordBinlogCoordinates 1.36+: the dump records the binlog coordinates of its snapshot (`--source-data=2`)
+     *                                      and the backup starts a chain (`type: full`, `chain_id`); needs the
+     *                                      built-in dumper and the Oracle MySQL client tools 8.0.26+
+     * @param bool $recordFileManifest 1.36+: record the full file manifest (size, mtime, SHA-256) so incrementals can
+     *                                 archive only changed files; the backup starts a chain
+     * @param FileManifest|null $baseManifest 1.36+ (incremental): archive only files that differ from this manifest, plus
+     *                                        `DELETED.json`; usually the parent's `file_manifest`
+     * @param BinlogCoordinates|null $binlogFrom 1.36+ (incremental): capture the binary logs from these coordinates
+     *                                           instead of dumping the database; usually where the parent ends
+     * @param string|null $parentId 1.36+ (incremental): the backup this one continues
+     * @param string|null $chainId 1.36+ (incremental): the chain of the parent
      */
     public function __construct(
         public bool $includeDatabase = true,
@@ -66,8 +79,31 @@ final readonly class BackupOptions
         public ?ArchivePassword $password = null,
         public ?string $keyId = null,
         public bool $recordTableStats = false,
+        public bool $recordBinlogCoordinates = false,
+        public bool $recordFileManifest = false,
+        public ?FileManifest $baseManifest = null,
+        public ?BinlogCoordinates $binlogFrom = null,
+        public ?string $parentId = null,
+        public ?string $chainId = null,
     ) {
         $this->validate();
+        $this->validateChain();
+    }
+
+    /**
+     * 1.36+: true for an incremental backup (it continues the chain of $parentId).
+     */
+    public function isIncremental(): bool
+    {
+        return $this->parentId !== null;
+    }
+
+    /**
+     * 1.36+: true when the backup carries chain metadata (a chain's full backup or an incremental).
+     */
+    public function isChainMember(): bool
+    {
+        return $this->isIncremental() || $this->recordBinlogCoordinates || $this->recordFileManifest;
     }
 
     /**
@@ -153,7 +189,14 @@ final readonly class BackupOptions
             'allow_unsafe'      => $this->allowUnsafeTableRules,
             'encrypted'         => $this->password !== null,
             'key_id'            => $this->keyId,
-        ];
+        ] + ($this->isChainMember() ? [
+            // 1.36+: only for chain backups, so the payload of other backups stays as it was.
+            'type'                      => $this->isIncremental() ? 'incremental' : 'full',
+            'chain_id'                  => $this->chainId,
+            'parent_id'                 => $this->parentId,
+            'record_binlog_coordinates' => $this->recordBinlogCoordinates,
+            'record_file_manifest'      => $this->recordFileManifest,
+        ] : []);
     }
 
     /**
@@ -192,6 +235,13 @@ final readonly class BackupOptions
             'password'              => $this->password,
             'keyId'                 => $this->keyId,
             'recordTableStats'      => $this->recordTableStats,
+            // 1.36+
+            'recordBinlogCoordinates' => $this->recordBinlogCoordinates,
+            'recordFileManifest'      => $this->recordFileManifest,
+            'baseManifest'            => $this->baseManifest,
+            'binlogFrom'              => $this->binlogFrom,
+            'parentId'                => $this->parentId,
+            'chainId'                 => $this->chainId,
         ];
 
         /* @phpstan-ignore argument.type (keys are the constructor's parameter names) */
@@ -251,6 +301,51 @@ final readonly class BackupOptions
             if (is_string($value) && mb_strlen($value) > 255) {
                 throw new InvalidBackupOptionsException('extraMeta values must be at most 255 characters.');
             }
+        }
+    }
+
+    private function validateChain(): void
+    {
+        if ($this->recordBinlogCoordinates && !$this->includeDatabase) {
+            throw new InvalidBackupOptionsException('recordBinlogCoordinates needs includeDatabase.');
+        }
+        if ($this->recordBinlogCoordinates && $this->tableRules !== []) {
+            throw new InvalidBackupOptionsException('recordBinlogCoordinates cannot be combined with table rules: a binlog replay needs every table.');
+        }
+        if ($this->recordFileManifest && !$this->includeFiles) {
+            throw new InvalidBackupOptionsException('recordFileManifest needs includeFiles.');
+        }
+        if (($this->parentId === null) !== ($this->chainId === null)) {
+            throw new InvalidBackupOptionsException('parentId and chainId go together (an incremental continues the chain of its parent).');
+        }
+        foreach ([$this->parentId, $this->chainId] as $id) {
+            if ($id !== null && preg_match('/^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$/', $id) !== 1) {
+                throw new InvalidBackupOptionsException('parentId and chainId are backup ids ([A-Za-z0-9._-], 1-128 chars).');
+            }
+        }
+
+        if (!$this->isIncremental()) {
+            if ($this->baseManifest instanceof FileManifest || $this->binlogFrom instanceof BinlogCoordinates) {
+                throw new InvalidBackupOptionsException('baseManifest and binlogFrom make an incremental backup: set parentId and chainId too.');
+            }
+
+            return;
+        }
+
+        if ($this->recordBinlogCoordinates || $this->recordFileManifest) {
+            throw new InvalidBackupOptionsException('An incremental backup records its coordinates and manifest itself: leave recordBinlogCoordinates and recordFileManifest off.');
+        }
+        if ($this->includeDatabase !== ($this->binlogFrom instanceof BinlogCoordinates)) {
+            throw new InvalidBackupOptionsException('An incremental backup includes the database exactly when binlogFrom is set (the database part is the binary logs).');
+        }
+        if ($this->includeFiles !== ($this->baseManifest instanceof FileManifest)) {
+            throw new InvalidBackupOptionsException('An incremental backup includes files exactly when baseManifest is set (the file part is a delta).');
+        }
+        if ($this->format === ArchiveFormat::SqlGz) {
+            throw new InvalidBackupOptionsException('An incremental backup is a tar.gz or a zip.');
+        }
+        if ($this->tableRules !== []) {
+            throw new InvalidBackupOptionsException('An incremental backup captures every table: table rules do not apply.');
         }
     }
 

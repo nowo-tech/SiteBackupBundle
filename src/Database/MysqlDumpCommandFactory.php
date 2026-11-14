@@ -101,6 +101,19 @@ final class MysqlDumpCommandFactory
     }
 
     /**
+     * The connection parts of a `DATABASE_URL` (1.36+, option files of the binary log tools), validated like
+     * {@see self::fromDatabaseUrl()}. Holds the password: never log it.
+     *
+     * @throws InvalidArgumentException
+     *
+     * @return array{database: string, host: ?string, port: int, socket: ?string, user: string, pass: string}
+     */
+    public static function connection(string $databaseUrl): array
+    {
+        return self::parse($databaseUrl);
+    }
+
+    /**
      * Inserts options right before the `--` end-of-options marker of a command built by this factory.
      *
      * @param list<string> $command

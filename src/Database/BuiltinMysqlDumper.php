@@ -9,6 +9,8 @@ use Nowo\SiteBackupBundle\Enum\TableRule;
 use Nowo\SiteBackupBundle\Exception\DumpFailedException;
 use Nowo\SiteBackupBundle\Exception\InvalidBackupOptionsException;
 use Nowo\SiteBackupBundle\Exception\UnsafeTableRuleException;
+use Nowo\SiteBackupBundle\Incremental\DumpCoordinatesParser;
+use Nowo\SiteBackupBundle\Incremental\MysqlToolVersion;
 use Nowo\SiteBackupBundle\Log\SecretRedactor;
 use Nowo\SiteBackupBundle\Process\ProcessDeadline;
 use Symfony\Component\Filesystem\Filesystem;
@@ -77,12 +79,18 @@ final class BuiltinMysqlDumper
     /**
      * @param array<string, TableRule> $tableRules
      * @param (callable(): void)|null $tick called while the dump runs
+     * @param bool $recordBinlogCoordinates 1.36+: `--source-data=2` (+ `--set-gtid-purged=COMMENTED`) on the data pass,
+     *                                      parsed into {@see DumpReport::$binlogCoordinates}; needs the Oracle
+     *                                      mysqldump 8.0.26+ (the MariaDB client cannot read MySQL binlog coordinates)
      *
      * @throws DumpFailedException|InvalidBackupOptionsException|UnsafeTableRuleException
      */
-    public function dump(string $target, array $tableRules = [], bool $allowUnsafeTableRules = false, ?callable $tick = null): DumpReport
+    public function dump(string $target, array $tableRules = [], bool $allowUnsafeTableRules = false, ?callable $tick = null, bool $recordBinlogCoordinates = false): DumpReport
     {
         self::assertExtraOptions($this->extraOptions);
+        if ($recordBinlogCoordinates && $tableRules !== []) {
+            throw new InvalidBackupOptionsException('recordBinlogCoordinates cannot be combined with table rules: a binlog replay needs every table.');
+        }
 
         try {
             $spec     = MysqlDumpCommandFactory::fromDatabaseUrl((string) $this->databaseUrl, $this->skipSslVerifyServerCert, $this->binary, $this->extraOptions);
@@ -101,7 +109,14 @@ final class BuiltinMysqlDumper
 
         [$flavour, $version] = $this->probeClient();
         $gtidOff             = $flavour === self::FLAVOUR_MYSQL;
-        $commands            = self::planCommands($spec['command'], $database, $tableRules, $gtidOff);
+        if ($recordBinlogCoordinates) {
+            if ($flavour !== self::FLAVOUR_MYSQL || !MysqlToolVersion::supports(MysqlToolVersion::oracleClient($version))) {
+                throw new InvalidBackupOptionsException(sprintf('recordBinlogCoordinates needs the Oracle mysqldump %s+ (backup.database.binary); the MariaDB client tools cannot read MySQL binlog coordinates.', MysqlToolVersion::MINIMUM));
+            }
+        }
+        // `--set-gtid-purged=COMMENTED` exists from 8.0.32; older 8.0 clients record the coordinates without the GTID set.
+        $gtidCommented = MysqlToolVersion::supports(MysqlToolVersion::oracleClient($version), '8.0.32');
+        $commands      = self::planCommands($spec['command'], $database, $tableRules, $gtidOff, $recordBinlogCoordinates, $gtidCommented);
 
         // Owner-only before mysqldump opens it: the dump is a plaintext copy of the database.
         $this->filesystem->touch($target);
@@ -124,7 +139,29 @@ final class BuiltinMysqlDumper
             $this->filesystem->remove($structureFile);
         }
 
-        return new DumpReport($flavour, $version, count($commands), $gtidOff, $warnings);
+        $coordinates = null;
+        if ($recordBinlogCoordinates) {
+            $coordinates = DumpCoordinatesParser::parse($target);
+            if ($coordinates === null) {
+                throw new DumpFailedException('The dump holds no binlog coordinates: is log_bin on, and does the account have RELOAD and REPLICATION CLIENT?');
+            }
+        }
+
+        return new DumpReport($flavour, $version, count($commands), $gtidOff, $warnings, $coordinates);
+    }
+
+    /**
+     * The schema this dumper dumps (1.36+: the database of binlog coordinates and captures).
+     *
+     * @throws DumpFailedException when the URL is not usable
+     */
+    public function databaseName(): string
+    {
+        try {
+            return MysqlDumpCommandFactory::databaseName((string) $this->databaseUrl);
+        } catch (InvalidArgumentException $e) {
+            throw new DumpFailedException('Database dump: ' . $e->getMessage(), 0, $e);
+        }
     }
 
     /**
@@ -136,9 +173,12 @@ final class BuiltinMysqlDumper
      *
      * @return list<list<string>>
      */
-    public static function planCommands(array $baseCommand, string $database, array $tableRules, bool $gtidPurgedOff): array
+    public static function planCommands(array $baseCommand, string $database, array $tableRules, bool $gtidPurgedOff, bool $recordBinlogCoordinates = false, bool $gtidCommented = true): array
     {
         $common = $gtidPurgedOff ? ['--set-gtid-purged=OFF'] : [];
+        // 1.36+: the data pass records the binlog coordinates of its snapshot (as a comment) and, from 8.0.32, the
+        // snapshot's GTID set as a comment too (never executed on import).
+        $data = $recordBinlogCoordinates ? ['--source-data=2', $gtidCommented ? '--set-gtid-purged=COMMENTED' : '--set-gtid-purged=OFF'] : $common;
 
         $ignore    = [];
         $structure = [];
@@ -149,7 +189,7 @@ final class BuiltinMysqlDumper
             }
         }
 
-        $commands = [MysqlDumpCommandFactory::withOptions($baseCommand, [...$common, ...$ignore])];
+        $commands = [MysqlDumpCommandFactory::withOptions($baseCommand, [...$data, ...$ignore])];
         if ($structure !== []) {
             $commands[] = [...MysqlDumpCommandFactory::withOptions($baseCommand, [...$common, '--no-data']), ...$structure];
         }
