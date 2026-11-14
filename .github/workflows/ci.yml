@@ -191,8 +191,19 @@ jobs:
 
   # 1.36+ (Beacon E0 items 9-11): binlog incrementals against a real MySQL 9 server and the Oracle client tools.
   binlog-incrementals:
-    name: Binlog incrementals (MySQL 9)
+    name: Binlog incrementals (MySQL 9, GTID ${{ matrix.gtid }})
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # GTID on, default log size.
+          - gtid: 'on'
+            server: '--gtid-mode=ON --enforce-gtid-consistency=ON'
+          # Beacon production: GTID never enabled (file + position only) and small logs, so one incremental spans
+          # several binary log files.
+          - gtid: 'off'
+            server: '--gtid-mode=OFF --enforce-gtid-consistency=OFF --max-binlog-size=4096'
 
     steps:
       - name: Checkout code
@@ -217,7 +228,7 @@ jobs:
           PWA="ci-$(openssl rand -hex 12)"; PWB="ci-$(openssl rand -hex 12)"; PWR="ci-$(openssl rand -hex 12)"
           echo "::add-mask::$PWA"; echo "::add-mask::$PWB"; echo "::add-mask::$PWR"
           docker run -d --name sbb-mysql9 -p 127.0.0.1:3306:3306 -e MYSQL_ALLOW_EMPTY_PASSWORD=1 -e MYSQL_DATABASE=app mysql:9.7.2 \
-            --gtid-mode=ON --enforce-gtid-consistency=ON --binlog-format=ROW --binlog-row-image=FULL
+            ${{ matrix.server }} --binlog-format=ROW --binlog-row-image=FULL
           # Over TCP: the entrypoint's init server is socket-only, the real one listens once init is done.
           for i in $(seq 1 120); do docker exec sbb-mysql9 mysql -uroot -h127.0.0.1 --protocol=TCP -e "SELECT 1" >/dev/null 2>&1 && break; sleep 2; done
           docker exec sbb-mysql9 mysql -uroot -h127.0.0.1 --protocol=TCP -e "SELECT VERSION()"
@@ -252,6 +263,7 @@ jobs:
             echo "SBB_BINLOG_MYSQL=$RUNNER_TEMP/bin/mysql"
             echo "SBB_BINLOG_MYSQLDUMP=$RUNNER_TEMP/bin/mysqldump"
             echo "SBB_BINLOG_MYSQLBINLOG=$RUNNER_TEMP/bin/mysqlbinlog"
+            echo "SBB_BINLOG_GTID=${{ matrix.gtid }}"
           } >> "$GITHUB_ENV"
 
       - name: Shared server, filtered and raw captures, DDL after the full, point-in-time restore, gaps

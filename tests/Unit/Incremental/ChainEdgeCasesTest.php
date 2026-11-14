@@ -196,7 +196,8 @@ final class ChainEdgeCasesTest extends TestCase
         $report = $manager->restoreChain($i1->getId(), new DateTimeImmutable('2027-01-01 UTC'));
         self::assertStringContainsString('Nothing was captured after', implode(' ', $report->notes));
 
-        // Database only (no files at all).
+        // Database only (no files at all); a new chain taken after the restores (same-second fulls count as closed).
+        $this->clock->sleep(1);
         $dbOnly = $manager->createBackup(new BackupOptions(includeFiles: false, recordBinlogCoordinates: true));
         $this->clock->sleep(3600);
         $dbInc  = $manager->createBackup($manager->incrementalOptions($dbOnly->getId()));
@@ -259,7 +260,7 @@ final class ChainEdgeCasesTest extends TestCase
         self::assertContains('1 link(s) pointing outside the project skipped.', $full->getWarnings());
 
         // Coordinates the server would never write.
-        $badDump = EngineFixtures::script($this->tools, 'bad-dump', 'if [ "$1" = "--version" ]; then echo "mysqldump  Ver 9.7.2 for Linux"; exit 0; fi; for a in "$@"; do case "$a" in --result-file=*) out="${a#--result-file=}";; esac; done; echo "-- CHANGE REPLICATION SOURCE TO SOURCE_LOG_FILE=\'bad\', SOURCE_LOG_POS=4;" > "$out"');
+        $badDump = EngineFixtures::script($this->tools, 'bad-dump', 'if [ "$1" = "--version" ]; then echo "mysqldump  Ver 9.7.2 for Linux"; exit 0; fi; for a in "$@"; do case "$a" in --result-file=*) out="${a#--result-file=}";; esac; done; printf -- "-- CHANGE REPLICATION SOURCE TO SOURCE_LOG_FILE=\'bad\', SOURCE_LOG_POS=4;\\nCREATE TABLE t (id INT);\\n-- Dump completed\\n" > "$out"');
         $bad     = new BackupArchiver($this->project, $this->storage, ['config'], [], null, 60, clock: $this->clock, builtinDumper: new BuiltinMysqlDumper('mysql://bk@db/app', $badDump), binlogServer: BinlogFakes::server([]));
         try {
             $bad->create(new BackupOptions(includeFiles: false, recordBinlogCoordinates: true));
@@ -399,7 +400,7 @@ final class ChainEdgeCasesTest extends TestCase
         $dump = EngineFixtures::script($this->tools, 'fake-dump', <<<'SH'
             if [ "$1" = "--version" ]; then echo "mysqldump  Ver 9.7.2 for Linux on x86_64 (MySQL Community Server - GPL)"; exit 0; fi
             for a in "$@"; do case "$a" in --result-file=*) out="${a#--result-file=}";; esac; done
-            printf -- "-- CHANGE REPLICATION SOURCE TO SOURCE_LOG_FILE='binlog.000002', SOURCE_LOG_POS=1480;\nCREATE TABLE t (id INT);\n" > "$out"
+            printf -- "-- CHANGE REPLICATION SOURCE TO SOURCE_LOG_FILE='binlog.000002', SOURCE_LOG_POS=1480;\nCREATE TABLE t (id INT);\n-- Dump completed\n" > "$out"
             SH);
         $server = BinlogFakes::server([['name' => 'binlog.000002', 'size' => 2000]]);
         (new Filesystem())->mkdir($this->tools . '/server');

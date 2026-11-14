@@ -82,13 +82,13 @@ final class CreateBackupCommand extends Command
             $io->warning(SecretRedactor::redact($e->getMessage()));
 
             return self::EXIT_LOCKED;
-        } catch (BinlogGapException $e) {
-            $io->error(SecretRedactor::redact($e->getMessage()) . ' (' . $e->getReason() . ')');
-
-            return self::EXIT_BINLOG_GAP;
-        } catch (BinlogFilterException $e) {
-            // PP-D1-L2: like a gap, only a new full backup continues (the same event fails every later capture).
+        } catch (BinlogGapException|BinlogFilterException $e) {
+            // PP-D1-L2: a refused event, like a gap, needs a new full backup. Beacon counts promotions per reason: the
+            // machine-readable code goes to stdout (`reason: <code>`, or JSON with --json) and to the history row.
             $io->error(SecretRedactor::redact($e->getMessage()) . ' Take a full backup.');
+            $output->writeln((bool) $input->getOption('json')
+                ? (string) json_encode(['error' => 'needs_full_backup', 'reason' => $e->getReason()])
+                : 'reason: ' . $e->getReason());
 
             return self::EXIT_BINLOG_GAP;
         } catch (InvalidBackupOptionsException|InvalidArgumentException $e) {

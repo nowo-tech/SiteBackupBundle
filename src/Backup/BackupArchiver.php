@@ -30,6 +30,7 @@ use Nowo\SiteBackupBundle\Incremental\ChainLink;
 use Nowo\SiteBackupBundle\Incremental\ChainPaths;
 use Nowo\SiteBackupBundle\Incremental\FileManifest;
 use Nowo\SiteBackupBundle\Incremental\IncrementalArtifact;
+use Nowo\SiteBackupBundle\Incremental\RestoreMarker;
 use Nowo\SiteBackupBundle\Log\SecretRedactor;
 use Nowo\SiteBackupBundle\Model\ArchivePassword;
 use Nowo\SiteBackupBundle\Model\BackupArtifact;
@@ -119,6 +120,7 @@ use function str_replace;
 use function str_starts_with;
 use function strlen;
 use function strtolower;
+use function strtoupper;
 use function substr;
 use function sys_get_temp_dir;
 use function touch;
@@ -231,6 +233,14 @@ final class BackupArchiver
         }
         $this->runtimeStateRelativePaths = RuntimeStatePaths::relativeTo($projectDir, $statePaths);
         $this->secretPolicy              = $secretPolicy ?? new SecretPathPolicy();
+    }
+
+    /**
+     * Where restores are recorded (1.36+, {@see RestoreMarker}).
+     */
+    public function restoreMarkerPath(): string
+    {
+        return rtrim($this->storageDir, '/\\') . '/' . RestoreMarker::FILENAME;
     }
 
     /**
@@ -1895,7 +1905,13 @@ final class BackupArchiver
         $tick = static fn () => $beat();
 
         if ($this->builtinDumper instanceof BuiltinMysqlDumper) {
-            return $this->builtinDumper->dump($dumpAbsolute, $options->tableRules, $options->allowUnsafeTableRules, $tick, $options->recordBinlogCoordinates, $options->dumpRoutines);
+            // PP-D2-H1: the GTID set is recorded (as a comment) only when the server has GTIDs on.
+            $gtidOn = false;
+            if ($options->recordBinlogCoordinates && $this->binlogServer instanceof BinlogServerInterface) {
+                $gtidOn = in_array(strtoupper($this->binlogServer->variables(['gtid_mode'])['gtid_mode'] ?? 'OFF'), ['ON', 'ON_PERMISSIVE'], true);
+            }
+
+            return $this->builtinDumper->dump($dumpAbsolute, $options->tableRules, $options->allowUnsafeTableRules, $tick, $options->recordBinlogCoordinates, $options->dumpRoutines, $gtidOn);
         }
 
         $command = (string) $this->databaseDumpCommand;

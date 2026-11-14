@@ -9,6 +9,7 @@ use Nowo\SiteBackupBundle\Backup\BackupArchiver;
 use Nowo\SiteBackupBundle\Backup\SecretPathPolicy;
 use Nowo\SiteBackupBundle\Database\BuiltinMysqlDumper;
 use Nowo\SiteBackupBundle\Database\DumpImporter;
+use Nowo\SiteBackupBundle\Exception\BinlogGapException;
 use Nowo\SiteBackupBundle\Exception\ChainBrokenException;
 use Nowo\SiteBackupBundle\Exception\ChainRestoreException;
 use Nowo\SiteBackupBundle\Exception\CorruptArchiveException;
@@ -22,6 +23,7 @@ use Nowo\SiteBackupBundle\Incremental\ChainRestoreStep;
 use Nowo\SiteBackupBundle\Incremental\FileManifest;
 use Nowo\SiteBackupBundle\Incremental\IncrementalArtifact;
 use Nowo\SiteBackupBundle\Incremental\MysqlBinlogTool;
+use Nowo\SiteBackupBundle\Incremental\RestoreMarker;
 use Nowo\SiteBackupBundle\Model\BackupArtifact;
 use Nowo\SiteBackupBundle\Model\BackupHistoryEntry;
 use Nowo\SiteBackupBundle\Model\BackupOptions;
@@ -266,6 +268,7 @@ final class ChainBackupFlowTest extends TestCase
         file_put_contents($tools . '/decoded.3', "DELIMITER /*!*/;\n" . FakeBinlog::start(127) . FakeBinlog::event(1480, 2000, "Query\tthread_id=1", "use `app`/*!*/;\nBEGIN\n/*!*/;\n")
             . FakeBinlog::start(4) . FakeBinlog::event(127, 900, 'Xid = 1', "COMMIT/*!*/;\n")
             . FakeBinlog::start(4) . FakeBinlog::event(127, 900, "Query\tthread_id=1", "use `app`/*!*/;\nCREATE TABLE later (id INT)\n/*!*/;\n", '261101  1:45:00') . "# End of log file\n");
+        $pending = $manager->incrementalOptions($i2->getId());
         // A target server where the restore account cannot create triggers: refused before anything is touched.
         touch($tools . '/untrusted');
         try {
@@ -297,6 +300,25 @@ final class ChainBackupFlowTest extends TestCase
         );
         self::assertSame($i1->getId() . '..' . $i2->getId(), $report->steps[1]->backupId);
         self::assertSame(['binlog.000004'], array_column($i2->getMeta()['binlog_files'], 'name'));
+
+        // Beacon: new full after restore. The chain is closed for incrementals (exit 3 like a gap), also when the options
+        // were built before the restore; a full backup taken afterwards starts a chain that continues.
+        try {
+            $manager->incrementalOptions($i2->getId());
+            self::fail('an incremental after a restore was allowed');
+        } catch (BinlogGapException $e) {
+            self::assertSame(BinlogGapException::CLOSED_BY_RESTORE, $e->getReason());
+        }
+        self::assertFileExists($this->root . '/storage/' . RestoreMarker::FILENAME);
+        try {
+            $manager->createBackup($pending);
+            self::fail('options built before the restore continued the closed chain');
+        } catch (BinlogGapException $e) {
+            self::assertSame(BinlogGapException::CLOSED_BY_RESTORE, $e->getReason());
+        }
+        $row = $this->history->list(1)[0];
+        self::assertSame('create_needs_full', $row->getAction());
+        self::assertSame(['reason' => 'chain_closed_by_restore'], $row->getContext());
 
         // A replay failure after the dump import: the report says exactly what the live database has.
         file_put_contents($tools . '/order', '');
@@ -510,6 +532,7 @@ final class ChainBackupFlowTest extends TestCase
             echo "-- CHANGE REPLICATION SOURCE TO SOURCE_LOG_FILE='binlog.000002', SOURCE_LOG_POS=1480;"
             echo "CREATE TABLE t (id INT);"
             echo '/*!50003 CREATE*/ /*!50017 DEFINER=`root`@`%`*/ /*!50003 TRIGGER `trg` BEFORE INSERT ON `t` FOR EACH ROW SET @x = 1 */;;'
+            echo "-- Dump completed on 2026-11-01  0:00:00"
             SH);
     }
 

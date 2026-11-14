@@ -22,6 +22,7 @@ use function array_filter;
 use function count;
 use function explode;
 use function fclose;
+use function fgets;
 use function fopen;
 use function in_array;
 use function mb_substr;
@@ -86,10 +87,13 @@ final class BuiltinMysqlDumper
      *                                      parsed into {@see DumpReport::$binlogCoordinates}; needs the Oracle
      *                                      mysqldump 8.0.26+ (the MariaDB client cannot read MySQL binlog coordinates)
      * @param bool $routines 1.36+: `--routines --events` on the data pass (opt-in, chain full backups)
+     * @param bool $serverGtidOn 1.36+ (PP-D2-H1): the server's `gtid_mode` is ON / ON_PERMISSIVE; only then does a
+     *                           coordinates dump ask for `--set-gtid-purged=COMMENTED` (with GTID off mysqldump prints
+     *                           "Error: Server has GTIDs disabled.", exits 0 and writes an empty dump)
      *
      * @throws DumpFailedException|InvalidBackupOptionsException|UnsafeTableRuleException
      */
-    public function dump(string $target, array $tableRules = [], bool $allowUnsafeTableRules = false, ?callable $tick = null, bool $recordBinlogCoordinates = false, bool $routines = false): DumpReport
+    public function dump(string $target, array $tableRules = [], bool $allowUnsafeTableRules = false, ?callable $tick = null, bool $recordBinlogCoordinates = false, bool $routines = false, bool $serverGtidOn = false): DumpReport
     {
         self::assertExtraOptions($this->extraOptions);
         if ($recordBinlogCoordinates && $tableRules !== []) {
@@ -125,7 +129,7 @@ final class BuiltinMysqlDumper
             }
         }
         // `--set-gtid-purged=COMMENTED` exists from 8.0.32; older 8.0 clients record the coordinates without the GTID set.
-        $gtidCommented = MysqlToolVersion::supports(MysqlToolVersion::oracleClient($version), '8.0.32');
+        $gtidCommented = $serverGtidOn && MysqlToolVersion::supports(MysqlToolVersion::oracleClient($version), '8.0.32');
         $commands      = self::planCommands($spec['command'], $database, $tableRules, $gtidOff, $recordBinlogCoordinates, $gtidCommented, $routines);
 
         // Owner-only before mysqldump opens it: the dump is a plaintext copy of the database.
@@ -151,6 +155,10 @@ final class BuiltinMysqlDumper
 
         $coordinates = null;
         if ($recordBinlogCoordinates) {
+            // PP-D2-H1: a chain's full must be a whole dump (mysqldump may exit 0 after an error with an empty file).
+            if (!self::isCompleteDump($target)) {
+                throw new DumpFailedException('The dump is incomplete (no table, or no "Dump completed" trailer): the chain was not started.');
+            }
             $coordinates = DumpCoordinatesParser::parse($target);
             if ($coordinates === null) {
                 throw new DumpFailedException('The dump holds no binlog coordinates: is log_bin on, and does the account have RELOAD and REPLICATION CLIENT?');
@@ -272,9 +280,33 @@ final class BuiltinMysqlDumper
             // Not chained: Symfony's message embeds the command line.
             throw new DumpFailedException(sprintf('Database dump timed out after %d seconds (process_timeout).', $this->timeoutSeconds));
         }
-        if (!$process->isSuccessful()) {
+        // PP-D2-H1: mysqldump reports some errors ("Error: Server has GTIDs disabled.") and still exits 0.
+        if (!$process->isSuccessful() || preg_match('/^(?:mysqldump:\s*)?(?:Error\b|\[ERROR\]|Got error\b)/mi', $process->getErrorOutput()) === 1) {
             throw new DumpFailedException('Database dump failed: ' . mb_substr(SecretRedactor::redact(trim($process->getErrorOutput())), 0, 500));
         }
+    }
+
+    /**
+     * A table definition and mysqldump's `-- Dump completed` trailer are both present.
+     */
+    private static function isCompleteDump(string $path): bool
+    {
+        $handle = @fopen($path, 'r');
+        if ($handle === false) {
+            return false;
+        }
+        $table     = false;
+        $completed = false;
+        try {
+            while (($line = fgets($handle, 1 << 16)) !== false) {
+                $table     = $table || str_starts_with($line, 'CREATE TABLE ');
+                $completed = $completed || str_starts_with($line, '-- Dump completed');
+            }
+        } finally {
+            fclose($handle);
+        }
+
+        return $table && $completed;
     }
 
     private function append(string $from, string $to): void

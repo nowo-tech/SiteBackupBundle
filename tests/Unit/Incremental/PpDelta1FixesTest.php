@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Tests\Unit\Incremental;
 
+use DateTimeImmutable;
 use Nowo\SiteBackupBundle\Command\CreateBackupCommand;
 use Nowo\SiteBackupBundle\Database\BuiltinMysqlDumper;
 use Nowo\SiteBackupBundle\Exception\BinlogFilterException;
+use Nowo\SiteBackupBundle\Exception\BinlogGapException;
 use Nowo\SiteBackupBundle\Exception\InvalidBackupOptionsException;
 use Nowo\SiteBackupBundle\Incremental\BinlogBoundaries;
 use Nowo\SiteBackupBundle\Incremental\BinlogFilterResult;
@@ -15,6 +17,7 @@ use Nowo\SiteBackupBundle\Incremental\BinlogSchemaFilter;
 use Nowo\SiteBackupBundle\Incremental\BinlogStatementClassifier as C;
 use Nowo\SiteBackupBundle\Incremental\DumpObjects;
 use Nowo\SiteBackupBundle\Incremental\MysqlBinlogTool;
+use Nowo\SiteBackupBundle\Incremental\RestoreMarker;
 use Nowo\SiteBackupBundle\Model\BackupOptions;
 use Nowo\SiteBackupBundle\Service\SiteBackupManagerInterface;
 use Nowo\SiteBackupBundle\Tests\Unit\Engine\EngineFixtures;
@@ -25,9 +28,12 @@ use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Tester\CommandTester;
 use Symfony\Component\Filesystem\Filesystem;
 
+use function chmod;
 use function file_get_contents;
 use function file_put_contents;
+use function fileperms;
 use function implode;
+use function mkdir;
 use function touch;
 
 /**
@@ -229,6 +235,52 @@ final class PpDelta1FixesTest extends TestCase
         self::assertNull($replayer->storedProgramsRefusal());
         file_put_contents($tools . '/grants', "GRANT SELECT, SUPER, RELOAD ON *.* TO `rs`@`%`\n");
         self::assertNull($replayer->storedProgramsRefusal());
+    }
+
+    public function testRestoreMarker(): void
+    {
+        $path = $this->dir . '/' . RestoreMarker::FILENAME;
+        $meta = ['binlog_captured_at' => '2026-11-01T01:00:00+00:00', 'snapshot_at' => '2026-11-01T00:00:00+00:00'];
+        self::assertNull(RestoreMarker::read($path));
+        RestoreMarker::assertOpen($path, 'p', $meta);
+
+        RestoreMarker::write($path, new DateTimeImmutable('2026-11-01T00:30:00+00:00'), 'chain', 'h');
+        RestoreMarker::assertOpen($path, 'p', $meta);
+        RestoreMarker::write($path, new DateTimeImmutable('2026-11-01T02:00:00+00:00'), 'restore', 'b');
+        // An older restore never moves the marker back.
+        RestoreMarker::write($path, new DateTimeImmutable('2026-11-01T00:10:00+00:00'), 'restore', 'c');
+        self::assertEquals(new DateTimeImmutable('2026-11-01T02:00:00+00:00'), RestoreMarker::read($path));
+        self::assertSame(0o600, fileperms($path) & 0o777);
+        foreach ([$meta, ['snapshot_at' => '2026-11-01T02:00:00+00:00'], ['created_at' => 'not a date'], []] as $i => $parent) {
+            try {
+                RestoreMarker::assertOpen($path, 'p', $parent);
+                self::fail('case ' . $i . ': a closed chain was continued');
+            } catch (BinlogGapException $e) {
+                self::assertSame(BinlogGapException::CLOSED_BY_RESTORE, $e->getReason());
+            }
+        }
+        RestoreMarker::assertOpen($path, 'p', ['created_at' => '2026-11-01T02:00:01+00:00']);
+
+        // A damaged marker still closes the chains taken before it was written.
+        file_put_contents($path, 'not json');
+        touch($path, 1_700_000_000);
+        self::assertSame(1_700_000_000, RestoreMarker::read($path)?->getTimestamp());
+        file_put_contents($path, '{"restored_at": 5}');
+        self::assertNotNull(RestoreMarker::read($path));
+
+        try {
+            RestoreMarker::write($this->dir . '/missing/' . RestoreMarker::FILENAME, new DateTimeImmutable(), 'restore', 'x');
+            self::fail('a marker was written into a missing directory');
+        } catch (RuntimeException) {
+        }
+        mkdir($this->dir . '/ro', 0o500);
+        try {
+            RestoreMarker::write($this->dir . '/ro/' . RestoreMarker::FILENAME, new DateTimeImmutable(), 'restore', 'x');
+            self::fail('a marker was written into a read-only directory');
+        } catch (RuntimeException) {
+        } finally {
+            chmod($this->dir . '/ro', 0o700);
+        }
     }
 
     /**

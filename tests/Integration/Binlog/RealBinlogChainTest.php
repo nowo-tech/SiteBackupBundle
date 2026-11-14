@@ -111,11 +111,21 @@ final class RealBinlogChainTest extends TestCase
 
         [$manager] = $this->stack(IncrementalArtifact::FILTERED);
 
-        $this->app('CREATE TABLE pitr (id INT PRIMARY KEY, v VARBINARY(32)); INSERT INTO pitr VALUES (1, 0x61)');
+        $this->app('CREATE TABLE pitr (id INT PRIMARY KEY, v VARBINARY(32)); INSERT INTO pitr VALUES (1, 0x61); CREATE TABLE filler (id INT PRIMARY KEY, pad VARCHAR(255))');
         file_put_contents($this->project . '/config/app.yaml', "v: 1\n");
         $full = $manager->createBackup(new BackupOptions(recordBinlogCoordinates: true, recordFileManifest: true));
         self::assertSame(trim($this->admin('SELECT @@GLOBAL.server_uuid')), $full->getMeta()['server_uuid']);
+        if ($this->gtidOff()) {
+            // Beacon production: file + position only, no GTID set anywhere.
+            self::assertContains($full->getMeta()['gtid_executed'] ?? null, [null, '']);
+        }
         sleep(1);
+        // Separate transactions of ~250 bytes: with max_binlog_size=4096 (GTID-off cell) the capture spans several logs.
+        $filler = [];
+        for ($n = 1; $n <= 40; ++$n) {
+            $filler[] = 'INSERT INTO filler VALUES (' . $n . ", REPEAT('x', 200))";
+        }
+        $this->app(implode('; ', $filler));
 
         // Writes on the shared server: another tenant (rows, an account), PP-M2 scenario B (another schema's table
         // dropped from an app session) and PP-M1 scenario C (DDL on app without a default database).
@@ -132,6 +142,9 @@ final class RealBinlogChainTest extends TestCase
 
         $i1 = $manager->createBackup($manager->incrementalOptions($full->getId()));
         self::assertSame(IncrementalArtifact::FILTERED, $i1->getMeta()['binlog_capture']);
+        if ($this->gtidOff()) {
+            self::assertGreaterThan(2, count($i1->getMeta()['binlog_files']), 'one incremental spans several rotated logs');
+        }
         self::assertGreaterThan(0, $i1->getMeta()['binlog_events']['dropped_events']);
         // PP-M3: the archive holds the app schema's events only.
         $events = $this->extract($i1, ChainPaths::EVENTS);
@@ -175,6 +188,24 @@ final class RealBinlogChainTest extends TestCase
         // The other tenant was never touched by any restore.
         self::assertSame('42', trim($this->admin('SELECT GROUP_CONCAT(id) FROM other.victim')));
 
+        // Beacon: new full after restore. The restores above closed this chain: the next incremental is refused like a
+        // gap (the CLI exits 3), and a new full backup starts a chain that continues.
+        try {
+            $manager->incrementalOptions($i2->getId());
+            self::fail('an incremental after a restore onto the live server was allowed');
+        } catch (BinlogGapException $e) {
+            self::assertSame(BinlogGapException::CLOSED_BY_RESTORE, $e->getReason());
+        }
+        sleep(1);
+        $fresh = $manager->createBackup(new BackupOptions(recordBinlogCoordinates: true, recordFileManifest: true));
+        $this->app('INSERT INTO pitr VALUES (5, 0x65, 55)');
+        $next   = $manager->createBackup($manager->incrementalOptions($fresh->getId()));
+        $report = $manager->restoreChain($next->getId(), null, 'ci', null, true);
+        self::assertTrue($report->complete);
+        self::assertSame('5', trim($this->app('SELECT MAX(id) FROM pitr')));
+        sleep(1);
+        $fresh = $manager->createBackup(new BackupOptions(recordBinlogCoordinates: true, recordFileManifest: true));
+
         // Gaps: another server, then purged logs.
         $capture = new BinlogCapture($server, $this->env['SBB_BINLOG_BACKUP_URL'], new MysqlBinlogTool($this->env['SBB_BINLOG_MYSQLBINLOG'], 300), $this->work());
         try {
@@ -186,13 +217,13 @@ final class RealBinlogChainTest extends TestCase
         $this->admin('FLUSH BINARY LOGS');
         $this->admin("PURGE BINARY LOGS TO '" . $server->status()['file'] . "'");
         try {
-            $manager->createBackup($manager->incrementalOptions($i2->getId()));
+            $manager->createBackup($manager->incrementalOptions($fresh->getId()));
             self::fail('a capture from purged logs was accepted');
         } catch (BinlogGapException $e) {
             self::assertSame(BinlogGapException::EXPIRED, $e->getReason());
         }
 
-        $this->assertNoPassword([$full, $i1, $i2]);
+        $this->assertNoPassword([$full, $i1, $i2, $next]);
     }
 
     public function testRawCapturesAreRefusedAtRestoreWhenTheyTouchAnotherSchema(): void
@@ -306,6 +337,8 @@ final class RealBinlogChainTest extends TestCase
             'rename into app' => ['ALTER TABLE other.mv RENAME TO app.mv', null, 'across several databases'],
             // X5: a view of the app that reads another schema.
             'cross-schema view' => ['CREATE VIEW v_leak AS SELECT * FROM other.victim', 'app', 'refers to another database'],
+            // PP-D2-M1 (V9): a tenant's XA left prepared.
+            'tenant XA' => ["XA START 'tx1'; INSERT INTO other.victim VALUES (77); XA END 'tx1'; XA PREPARE 'tx1'", 'other', 'XA transaction'],
         ];
         foreach ($attacks as $case => [$sql, $database, $expected]) {
             $full    = $manager->createBackup(new BackupOptions(includeFiles: false, recordBinlogCoordinates: true));
@@ -320,8 +353,24 @@ final class RealBinlogChainTest extends TestCase
             }
             self::assertSame($archive, $this->archives($storage), $case . ': something was archived');
             self::assertSame('1', trim($this->app('SELECT COUNT(*) FROM pitr WHERE id = 1')), $case);
+            if ($case === 'tenant XA') {
+                $this->admin("XA ROLLBACK 'tx1'");
+            }
             $this->admin('DROP TABLE IF EXISTS other.inj; DROP VIEW IF EXISTS app.v_leak; DROP TABLE IF EXISTS app.mv; CREATE TABLE IF NOT EXISTS other.mv (id INT)');
         }
+
+        // PP-D2-L1 (V10): benign tenant DDL whose comment holds `/*!*/;` is dropped, not a reason for a full backup.
+        $full = $manager->createBackup(new BackupOptions(includeFiles: false, recordBinlogCoordinates: true));
+        $this->admin("CREATE TABLE c2 (c INT) COMMENT 'plain /*!*/; text'", 'other');
+        $this->app('INSERT INTO pitr VALUES (99)');
+        $inc = $manager->createBackup($manager->incrementalOptions($full->getId()));
+        self::assertStringNotContainsString('plain', $this->extract($inc, ChainPaths::EVENTS));
+        self::assertGreaterThan(0, $inc->getMeta()['binlog_events']['dropped_events']);
+    }
+
+    private function gtidOff(): bool
+    {
+        return getenv('SBB_BINLOG_GTID') === 'off';
     }
 
     private function objects(): string

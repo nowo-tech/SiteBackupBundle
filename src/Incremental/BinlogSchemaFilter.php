@@ -328,6 +328,7 @@ final class BinlogSchemaFilter
         $reason  = 'session';
         $kept    = [];
         $main    = false;
+        $create  = false;
         foreach (explode('/*!*/;', $content) as $piece) {
             $statement = trim($piece);
             if ($statement === '') {
@@ -337,7 +338,12 @@ final class BinlogSchemaFilter
             // PP-D1-H1: an event is [use] [session settings] then ONE statement. A second statement (a `/*!*/;` or a
             // `use` hidden in a literal or an identifier) is never trusted.
             if ($main && $normalised !== '') {
-                return [BinlogStatementClassifier::UNKNOWN, [], 'several statements in one event'];
+                // PP-D2-L1: the first statement of a `CREATE` attributed with certainty to another database (its
+                // target precedes any literal) is dropped whole: the rest of the event never reaches the output.
+                // Anything else stays fail-closed.
+                return $verdict === BinlogStatementClassifier::OTHER && $create
+                    ? [BinlogStatementClassifier::OTHER, [], $reason . ' (several statements; dropped whole)']
+                    : [BinlogStatementClassifier::UNKNOWN, [], 'several statements in one event'];
             }
             if (preg_match('/^use\s+`((?:[^`]|``)+)`\s*$/i', $normalised, $m) === 1) {
                 $defaultDb = str_replace('``', '`', $m[1]);
@@ -348,7 +354,8 @@ final class BinlogSchemaFilter
             if (BinlogStatementClassifier::isSessionSetting($statement)) {
                 continue;
             }
-            $main = true;
+            $main   = true;
+            $create = preg_match('/^CREATE\s/i', $normalised) === 1;
             if ($result !== BinlogStatementClassifier::CONTROL) {
                 $verdict = $result;
                 $reason  = $why;

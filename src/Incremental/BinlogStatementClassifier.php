@@ -46,7 +46,7 @@ final class BinlogStatementClassifier
 
     private const SERVER_LEVEL = '/^(?:(?:CREATE|ALTER|DROP|RENAME)\s+USER|GRANT|REVOKE|(?:CREATE|DROP)\s+ROLE|SET\s+(?:PASSWORD|DEFAULT\s+ROLE|ROLE|GLOBAL|PERSIST|PERSIST_ONLY|@@GLOBAL)|FLUSH|ALTER\s+INSTANCE|INSTALL|UNINSTALL|(?:CREATE|ALTER|DROP)\s+(?:SERVER|(?:UNDO\s+)?TABLESPACE|LOGFILE\s+GROUP|SPATIAL\s+REFERENCE\s+SYSTEM|RESOURCE\s+GROUP))\b/i';
 
-    private const CONTROL_STATEMENTS = '/^(?:BEGIN|COMMIT|ROLLBACK|START\s+TRANSACTION|SAVEPOINT|RELEASE\s+SAVEPOINT|XA\s+|DELIMITER\b|SET\s+(?:TIMESTAMP|INSERT_ID|LAST_INSERT_ID|@|TRANSACTION|NAMES|CHARACTER|SESSION|COMPLETION_TYPE|AUTOCOMMIT|SQL_LOG_BIN|FOREIGN_KEY_CHECKS|UNIQUE_CHECKS|SQL_MODE|TIME_ZONE)\b|SET\s+@)/i';
+    private const CONTROL_STATEMENTS = '/^(?:BEGIN|COMMIT|ROLLBACK|START\s+TRANSACTION|SAVEPOINT|RELEASE\s+SAVEPOINT|DELIMITER\b|SET\s+(?:TIMESTAMP|INSERT_ID|LAST_INSERT_ID|@|TRANSACTION|NAMES|CHARACTER|SESSION|COMPLETION_TYPE|AUTOCOMMIT|SQL_LOG_BIN|FOREIGN_KEY_CHECKS|UNIQUE_CHECKS|SQL_MODE|TIME_ZONE)\b|SET\s+@)/i';
 
     /**
      * @return array{0: string, 1: string} result, short reason (never SQL text)
@@ -56,6 +56,11 @@ final class BinlogStatementClassifier
         $sql = self::normalise($statement);
         if ($sql === '') {
             return [self::CONTROL, 'empty'];
+        }
+        // PP-D2-M1: XA transactions are not supported in chains (another tenant's prepared XA would stop a replay with
+        // XAER_DUPID, and an app's XA cannot be split across links): fail closed, whoever runs it.
+        if (preg_match('/^XA\s/i', $sql) === 1) {
+            return [self::UNKNOWN, 'XA transaction (not supported by chain backups)'];
         }
         if (preg_match(self::CONTROL_STATEMENTS, $sql) === 1 && preg_match(self::SERVER_LEVEL, $sql) !== 1) {
             return [self::CONTROL, 'session'];

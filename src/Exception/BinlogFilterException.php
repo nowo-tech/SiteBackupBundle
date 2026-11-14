@@ -16,6 +16,9 @@ use function sprintf;
  */
 final class BinlogFilterException extends RuntimeException implements SiteBackupException
 {
+    /** Machine-readable reason (same place as {@see BinlogGapException::getReason()}): a new full backup is needed. */
+    public const REASON = 'filter_mismatch';
+
     /**
      * @param list<string> $problems
      */
@@ -27,6 +30,11 @@ final class BinlogFilterException extends RuntimeException implements SiteBackup
             implode('; ', array_slice($problems, 0, 10)),
             $total > 10 ? sprintf(' (+%d more)', $total - 10) : '',
         ));
+    }
+
+    public function getReason(): string
+    {
+        return self::REASON;
     }
 
     /**

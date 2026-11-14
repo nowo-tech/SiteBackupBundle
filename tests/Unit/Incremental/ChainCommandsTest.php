@@ -152,7 +152,7 @@ final class ChainCommandsTest extends TestCase
         $gapping->method('createBackup')->willThrowException(new BinlogGapException(BinlogGapException::EXPIRED, 'binlog.000002 is no longer on the server'));
         $create = new CommandTester(new CreateBackupCommand($gapping));
         self::assertSame(CreateBackupCommand::EXIT_BINLOG_GAP, $create->execute([]));
-        self::assertStringContainsString('(expired)', $create->getDisplay());
+        self::assertStringContainsString('reason: gap_expired', $create->getDisplay());
     }
 
     public function testBinlogCheckCommand(): void

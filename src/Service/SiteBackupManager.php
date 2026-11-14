@@ -18,6 +18,8 @@ use Nowo\SiteBackupBundle\Event\RestoreCompletedEvent;
 use Nowo\SiteBackupBundle\Event\RestoreFailedEvent;
 use Nowo\SiteBackupBundle\Event\RestoreStartedEvent;
 use Nowo\SiteBackupBundle\Exception\BackupAlreadyRunningException;
+use Nowo\SiteBackupBundle\Exception\BinlogFilterException;
+use Nowo\SiteBackupBundle\Exception\BinlogGapException;
 use Nowo\SiteBackupBundle\Exception\ChainBrokenException;
 use Nowo\SiteBackupBundle\Exception\CorruptArchiveException;
 use Nowo\SiteBackupBundle\Exception\InvalidBackupOptionsException;
@@ -27,6 +29,7 @@ use Nowo\SiteBackupBundle\Incremental\ChainRestoreReport;
 use Nowo\SiteBackupBundle\Incremental\ChainVerifier;
 use Nowo\SiteBackupBundle\Incremental\IncrementalBackupManagerInterface;
 use Nowo\SiteBackupBundle\Incremental\IncrementalOptions;
+use Nowo\SiteBackupBundle\Incremental\RestoreMarker;
 use Nowo\SiteBackupBundle\Lock\BackupOperationLock;
 use Nowo\SiteBackupBundle\Lock\BackupOperationLockHandle;
 use Nowo\SiteBackupBundle\Log\SecretRedactor;
@@ -109,6 +112,7 @@ final class SiteBackupManager implements SiteBackupManagerInterface, Incremental
      * session or security access: safe from a controller, a console command or a Messenger handler.
      *
      * @throws BackupAlreadyRunningException when another backup / restore holds the operation lock
+     * @throws BinlogGapException when an incremental's chain cannot continue (1.36+; a restore closed it, or the logs)
      */
     public function createBackup(BackupOptions|string|null $options = null, ?string $createdBy = null): BackupArtifact
     {
@@ -132,6 +136,17 @@ final class SiteBackupManager implements SiteBackupManagerInterface, Incremental
                 });
             }
 
+            // "New full after restore": checked again under the operation lock (a restore may have run since).
+            $parent = $options->parentId !== null ? $this->archiver->find($options->parentId) : null;
+            if ($parent instanceof BackupArtifact) {
+                try {
+                    RestoreMarker::assertOpen($this->archiver->restoreMarkerPath(), $parent->getId(), $parent->getMeta());
+                } catch (BinlogGapException $e) {
+                    $this->recordNeedsFull($e, $parent->getId(), $actor);
+
+                    throw $e;
+                }
+            }
             $this->logger->info('SiteBackup: backup started.', $this->context('create') + ['operation_id' => $operationId, 'format' => $options->format->value]);
             $this->eventDispatcher?->dispatch(new BackupStartedEvent($operationId, $options->toLoggableArray(), $actor));
 
@@ -139,6 +154,7 @@ final class SiteBackupManager implements SiteBackupManagerInterface, Incremental
                 $artifact = $this->archiver->create($options);
             } catch (Throwable $e) {
                 $this->logger->error('SiteBackup: backup failed.', $this->context('create', null, $e) + ['operation_id' => $operationId]);
+                $this->recordNeedsFull($e, $options->parentId, $actor);
                 $this->eventDispatcher?->dispatch(new BackupFailedEvent(
                     $operationId,
                     $e::class,
@@ -328,6 +344,26 @@ final class SiteBackupManager implements SiteBackupManagerInterface, Incremental
         }
     }
 
+    /**
+     * A gap or a refused event: the next backup must be a full one. The history row carries the machine-readable
+     * reason (`context.reason`) so hosts can count promotions per reason.
+     */
+    private function recordNeedsFull(Throwable $e, ?string $parentId, ?string $actor): void
+    {
+        if (!$e instanceof BinlogGapException && !$e instanceof BinlogFilterException) {
+            return;
+        }
+        // @igor-ignore - Service coordinates I/O or request-scoped work; not unsafe worker singleton state.
+        $this->historyStorage->append(new BackupHistoryEntry(
+            action: 'create_needs_full',
+            occurredAt: $this->clock->now(),
+            actor: $actor,
+            backupId: $parentId,
+            message: SecretRedactor::fromThrowable($e),
+            context: ['reason' => $e->getReason()],
+        ));
+    }
+
     public function incrementalOptions(string $parentId, ?BackupOptions $base = null): BackupOptions
     {
         $parent = $this->archiver->find($parentId);
@@ -338,6 +374,14 @@ final class SiteBackupManager implements SiteBackupManagerInterface, Incremental
             if (($other->getMeta()['parent_id'] ?? null) === $parentId) {
                 throw new InvalidBackupOptionsException(sprintf('Backup "%s" already has an incremental ("%s"): continue from the head of the chain.', $parentId, $other->getId()));
             }
+        }
+
+        try {
+            RestoreMarker::assertOpen($this->archiver->restoreMarkerPath(), $parentId, $parent->getMeta());
+        } catch (BinlogGapException $e) {
+            $this->recordNeedsFull($e, $parentId, null);
+
+            throw $e;
         }
 
         return IncrementalOptions::fromParentMeta($parentId, $parent->getMeta(), $base);
@@ -426,6 +470,14 @@ final class SiteBackupManager implements SiteBackupManagerInterface, Incremental
             throw new InvalidBackupOptionsException('The parent archive cannot be read: ' . SecretRedactor::fromThrowable($e), 0, $e);
         }
 
+        try {
+            RestoreMarker::assertOpen($this->archiver->restoreMarkerPath(), $parent['id'], $parent['meta']);
+        } catch (BinlogGapException $e) {
+            $this->recordNeedsFull($e, $parent['id'], null);
+
+            throw $e;
+        }
+
         return IncrementalOptions::fromParentMeta($parent['id'], $parent['meta'], $base);
     }
 
@@ -448,6 +500,8 @@ final class SiteBackupManager implements SiteBackupManagerInterface, Incremental
                 context: ['chain' => $chain->ids(), 'until' => $until?->format(DATE_ATOM)],
             ));
             $this->logger->warning('SiteBackup: chain restore started.', $this->context('restore_chain', $headId) + ['links' => (string) count($chain->ids())]);
+            // Every chain taken so far is closed before anything is touched (the restore goes into the binary log).
+            RestoreMarker::write($this->archiver->restoreMarkerPath(), $this->clock->now(), 'chain', $headId);
 
             try {
                 $report = $this->chainRestorer->restore($chain, $until, $password, $lock instanceof BackupOperationLockHandle ? static fn () => $lock->refresh() : null, $recreateDatabase);
@@ -518,6 +572,7 @@ final class SiteBackupManager implements SiteBackupManagerInterface, Incremental
             throw new RuntimeException(sprintf('Backup "%s" not found.', $backupId));
         }
         RestoreOrchestrator::assertNotIncremental($artifact);
+        RestoreMarker::write($this->archiver->restoreMarkerPath(), $this->clock->now(), 'restore', $backupId);
 
         // @igor-ignore - Service coordinates I/O or request-scoped work; not unsafe worker singleton state.
         $this->historyStorage->append(new BackupHistoryEntry(

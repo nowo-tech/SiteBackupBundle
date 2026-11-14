@@ -354,6 +354,11 @@ event that is not the schema's.
 
 ### Prerequisites
 
+GTID is optional: chains use file + position coordinates only; the chain's dump asks for the GTID set
+(`--set-gtid-purged=COMMENTED`) only when `gtid_mode` is ON, and a dump that reports an error or holds no table is
+refused even when `mysqldump` exits 0 (`gtid_mode=OFF` is tested in CI, together with small
+`max_binlog_size` values so that one incremental spans several rotated logs).
+
 - **MySQL 8.0.26+** (8.4 LTS, 9.x) with `log_bin` on and **`binlog_format=ROW`** (required: MIXED / STATEMENT are
   refused at capture time), `binlog_row_image=FULL` (recommended), and `binlog_expire_logs_seconds` comfortably longer
   than the interval between two backups (a log that expires before the next incremental makes that run a gap).
@@ -460,12 +465,23 @@ text for structure:
   database after `FROM`, `JOIN`, `LIKE`, `REFERENCES`, `INTO` or `UPDATE` (a view or trigger body, `CREATE TABLE …
   LIKE`, a foreign key) is refused: such a replay would stop half-way under the restore account. Triggers whose body
   writes only the schema, and `CREATE` / `DROP TRIGGER` on it, are kept.
+- **XA transactions fail closed** (`XA START` / `END` / `PREPARE` / `COMMIT`, whoever runs them): another tenant's
+  prepared XA would stop a replay half-way (`XAER_DUPID`), and an XA transaction cannot be split across links. Keep XA
+  off servers whose schemas use incrementals, or take full backups only.
+- **Clearly-other DDL is dropped, not refused** (PP-D2-L1): a `CREATE …` whose first statement targets another
+  database with certainty (its target precedes any literal or comment) is dropped whole even when its text holds
+  `/*!*/;`, so a tenant's comment does not force full backups. Anything else ambiguous (an `ALTER`, a target in the
+  schema, a savepoint name) still fails closed, and so does every boundary mismatch.
 - **Transaction compression** (`binlog_transaction_compression=ON`) is not supported: its payload events do not follow
   the expected structure and the capture fails closed. Keep it off on servers that use incrementals.
 
-A tenant can therefore make captures fail (start a new chain after removing the offending object), never get its
-events into the archive or the replay. With the `nowo:site-backup:create` command a `BinlogFilterException` exits with
-**3**, like a binlog gap: take a full backup.
+A tenant can therefore still make some captures fail (start a new chain), never get its events into the archive or
+the replay.
+
+**Needs a full backup: exit 3 and a machine-readable reason.** `nowo:site-backup:create` exits **3** on a gap or a
+refused event and prints `reason: <code>` (with `--json`: `{"error": "needs_full_backup", "reason": "<code>"}`); the
+history gets a `create_needs_full` row with `context.reason`. Codes: `filter_mismatch` (`BinlogFilterException`),
+`gap_expired`, `server_changed`, `gap_position_invalid`, `chain_closed_by_restore` (`BinlogGapException`).
 
 ### Taking a chain
 
@@ -478,9 +494,10 @@ $next = $manager->incrementalOptions($head->getId(), new BackupOptions(format: A
 try {
     $head = $manager->createBackup($next);
 } catch (BinlogGapException $e) {
-    // $e->getReason(): expired | server_changed | position_invalid — start a new chain with a full backup.
+    // $e->getReason(): gap_expired | server_changed | gap_position_invalid | chain_closed_by_restore — take a full backup.
 } catch (BinlogFilterException $e) {
     // An event that cannot be attributed to the schema: nothing was archived; take a full backup.
+    // $e->getReason() === 'filter_mismatch'.
 }
 ```
 
@@ -564,9 +581,15 @@ complete and the command exits 1.
   created later stay on disk: a restore never deletes files outside what the chain recorded as deleted.
 - An imported chain keeps the original creation times; the full backup's `snapshot_at` bounds `--until` on both paths.
 
-After a restore: clear the cache and restart the PHP workers, and **take a new full backup** before the next
-incremental: the restore itself is written to the server's binary log, so an incremental of the old chain would carry
-the restore's writes (replaying such a chain can fail with duplicate keys). The panel restores single backups only (chains: CLI).
+After a restore: clear the cache and restart the PHP workers.
+
+**A restore closes every chain taken before it.** The restore itself is written to the server's binary log, so an
+incremental of an older chain would carry the restore's writes (and its replay fails with duplicate keys). Before a
+restore (`restoreChain()`, `restore()`, the commands and the panel) touches anything, the bundle records its instant
+in `<storage_dir>/.nowo-site-backup-restored.json`; an incremental whose parent's capture ended at or before that
+instant is refused with `BinlogGapException` reason `chain_closed_by_restore` (`nowo:site-backup:create` exits **3**, like
+any gap): take a new full backup. The marker is written even when the restore is then refused, and a full backup
+taken in the same second as a restore counts as closed (wait a second). The panel restores single backups only (chains: CLI).
 `restore()` / `nowo:site-backup:restore` refuse an incremental alone, and `deleteBackup()` refuses a backup that an
 incremental depends on (delete chains from their head).
 

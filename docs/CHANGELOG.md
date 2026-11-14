@@ -166,6 +166,24 @@ opt-in: existing options, defaults, archives, sidecars and events are unchanged.
   - A chain restore that re-creates triggers or stored functions on a target with binary logging,
     `log_bin_trust_function_creators` OFF and no `SUPER` is refused before anything is touched (MySQL would stop the
     dump import with ERROR 1419); the restore account for routine dumps needs `SHOW_ROUTINE` on the dump side.
+  - **New full after restore (Beacon):** every restore records its instant (`RestoreMarker`,
+    `<storage_dir>/.nowo-site-backup-restored.json`) before touching anything; an incremental of a parent captured
+    before it fails with `BinlogGapException::CLOSED_BY_RESTORE` (CLI exit 3).
+  - CI: the MySQL 9 job runs with GTID on and with GTID off plus `max_binlog_size=4096` (file + position only,
+    captures spanning several logs).
+- **Audit PP, delta 2 (before the tag).**
+  - **GTID-off servers (PP-D2-H1):** the chain's dump uses `--set-gtid-purged=COMMENTED` only when `gtid_mode` is ON
+    (with GTID off mysqldump printed an error, exited 0 and wrote an empty dump, so no chain could start); a dump with
+    an `Error` line on stderr is refused even on exit 0, and a coordinates dump without tables or the `Dump completed`
+    trailer is refused.
+  - **XA (PP-D2-M1):** XA statements fail closed (`filter_mismatch`), so another tenant's prepared XA can no longer
+    stop a replay half-way.
+  - **Tenant DDL (PP-D2-L1):** a `CREATE` attributed with certainty to another database is dropped whole even when its
+    text holds `/*!*/;`; everything ambiguous still fails closed.
+  - **Reasons:** `BinlogFilterException::getReason()` (`filter_mismatch`); `BinlogGapException` codes renamed
+    `gap_expired`, `gap_position_invalid`, `chain_closed_by_restore` (`server_changed` unchanged); the CLI prints them
+    and the history records a `create_needs_full` row with `context.reason`.
+  - The ERROR 1419 pre-check counts triggers and functions only (procedures are not subject to it).
   - `RemoteBackupPublisher::prune()` keeps the 1.35 behaviour for prefixes without any chain sidecar (an unreadable
     sidecar is still reported); it fails closed only where chains exist.
 

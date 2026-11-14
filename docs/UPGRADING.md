@@ -150,6 +150,9 @@ nothing changes until a backup asks for binlog coordinates, a file manifest or a
   (`UnreadableSidecar`) and keeps its chain, or prunes nothing in that run when the chain is unknown (1.35 skipped it
   silently). A prefix without any chain sidecar prunes as in 1.35 (only the report is new). `orphans()` never returns
   chain members.
+- After any restore, incrementals of chains taken before it are refused (`BinlogGapException` reason
+  `chain_closed_by_restore`, CLI exit 3): take a new full backup. Hosts that promote a gap to a full backup need nothing
+  else.
 - Chain backups refuse, at capture time, events whose boundaries do not match the binary logs, statements that rename
   tables across schemas or reference another database, and transaction-compressed binlogs: such a capture fails with
   `BinlogFilterException` (`nowo:site-backup:create` exits 3); start a new chain after removing the cause.

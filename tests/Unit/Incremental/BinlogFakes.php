@@ -81,8 +81,8 @@ final class BinlogFakes
      * @param list<array{name: string, size: int}> $logs
      * @param list<array{name: string, size: int}>|null $afterFlush
      */
-    public static function server(array $logs, string $uuid = ChainFixtures::UUID, string $version = '9.7.2', ?array $afterFlush = null, string $format = 'ROW'): FakeBinlogServer
+    public static function server(array $logs, string $uuid = ChainFixtures::UUID, string $version = '9.7.2', ?array $afterFlush = null, string $format = 'ROW', string $gtidMode = 'ON'): FakeBinlogServer
     {
-        return new FakeBinlogServer($logs, $uuid, $version, $afterFlush, $format);
+        return new FakeBinlogServer($logs, $uuid, $version, $afterFlush, $format, $gtidMode);
     }
 }

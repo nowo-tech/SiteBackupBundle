@@ -22,7 +22,7 @@ final class FakeBinlogServer implements BinlogServerInterface
      * @param list<array{name: string, size: int}> $logs
      * @param list<array{name: string, size: int}>|null $afterFlush
      */
-    public function __construct(private array $logs, private readonly string $uuid, private readonly string $version, private readonly ?array $afterFlush, private readonly string $format = 'ROW')
+    public function __construct(private array $logs, private readonly string $uuid, private readonly string $version, private readonly ?array $afterFlush, private readonly string $format = 'ROW', private readonly string $gtidMode = 'ON')
     {
     }
 
@@ -38,7 +38,7 @@ final class FakeBinlogServer implements BinlogServerInterface
 
     public function variables(array $names): array
     {
-        return ['binlog_format' => $this->format];
+        return ['binlog_format' => $this->format, 'gtid_mode' => $this->gtidMode];
     }
 
     public function schemas(): array

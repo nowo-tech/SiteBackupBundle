@@ -274,7 +274,8 @@ final class ChainRestorer
         }
         $programs = [];
         foreach (array_keys($dump !== null ? DumpObjects::parse($dump) : []) as $object) {
-            if (str_starts_with($object, 'TRIGGER ') || str_starts_with($object, 'FUNCTION ') || str_starts_with($object, 'PROCEDURE ')) {
+            // ERROR 1419 applies to triggers and stored functions, not to procedures or events (PP-D2-I2).
+            if (str_starts_with($object, 'TRIGGER ') || str_starts_with($object, 'FUNCTION ')) {
                 $programs[] = $object;
             }
         }

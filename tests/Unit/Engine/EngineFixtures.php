@@ -54,6 +54,7 @@ final class EngineFixtures
             if [ -n "\$out" ]; then exec 1>"\$out"; fi
             echo "-- args: \$*"
             echo "CREATE TABLE t (id INT);"
+            echo "-- Dump completed on 2026-11-01  0:00:00"
             echo "\$MYSQL_PWD" > "{$dir}/last-pwd"
             if [ {$exit} -ne 0 ]; then echo "mysqldump: Got error: 1045 for mysql://app:REDACTED-TEST@db/x" >&2; fi
             exit {$exit}

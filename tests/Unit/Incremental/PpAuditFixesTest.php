@@ -374,7 +374,7 @@ final class PpAuditFixesTest extends TestCase
         self::assertStringNotContainsString('column-statistics', $tls);
 
         // The coordinates dump runs with the binlog account, which must name the same database.
-        $dump   = EngineFixtures::script($this->tools, 'args-dump', 'if [ "$1" = "--version" ]; then echo "mysqldump  Ver 9.7.2 for Linux"; exit 0; fi; for a in "$@"; do case "$a" in --result-file=*) out="${a#--result-file=}";; esac; done; echo "-- $* MYSQL_PWD=$MYSQL_PWD" > "$out"; echo "-- CHANGE REPLICATION SOURCE TO SOURCE_LOG_FILE=\'binlog.000002\', SOURCE_LOG_POS=4;" >> "$out"');
+        $dump   = EngineFixtures::script($this->tools, 'args-dump', 'if [ "$1" = "--version" ]; then echo "mysqldump  Ver 9.7.2 for Linux"; exit 0; fi; for a in "$@"; do case "$a" in --result-file=*) out="${a#--result-file=}";; esac; done; echo "-- $* MYSQL_PWD=$MYSQL_PWD" > "$out"; echo "-- CHANGE REPLICATION SOURCE TO SOURCE_LOG_FILE=\'binlog.000002\', SOURCE_LOG_POS=4;" >> "$out"; printf -- "CREATE TABLE t (id INT);\\n-- Dump completed\\n" >> "$out"');
         $dumper = new BuiltinMysqlDumper('mysql://app:a@db/app', $dump, binlogDatabaseUrl: 'mysql://bk:b@db/app');
         $dumper->dump($this->root . '/coords.sql', recordBinlogCoordinates: true);
         self::assertStringContainsString('--user=bk', (string) file_get_contents($this->root . '/coords.sql'));
@@ -524,7 +524,7 @@ final class PpAuditFixesTest extends TestCase
         $dump = EngineFixtures::script($this->tools, 'fake-dump', <<<'SH'
             if [ "$1" = "--version" ]; then echo "mysqldump  Ver 9.7.2 for Linux on x86_64 (MySQL Community Server - GPL)"; exit 0; fi
             for a in "$@"; do case "$a" in --result-file=*) out="${a#--result-file=}";; esac; done
-            printf -- "-- CHANGE REPLICATION SOURCE TO SOURCE_LOG_FILE='binlog.000002', SOURCE_LOG_POS=1480;\nCREATE TABLE \`t\` (id INT);\n" > "$out"
+            printf -- "-- CHANGE REPLICATION SOURCE TO SOURCE_LOG_FILE='binlog.000002', SOURCE_LOG_POS=1480;\nCREATE TABLE \`t\` (id INT);\n-- Dump completed\n" > "$out"
             SH);
         $server   = BinlogFakes::server([['name' => 'binlog.000002', 'size' => 2000]]);
         $tool     = new MysqlBinlogTool(BinlogFakes::mysqlbinlog($this->tools));
