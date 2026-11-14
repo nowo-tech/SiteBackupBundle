@@ -11,6 +11,7 @@ use Throwable;
 
 use function bin2hex;
 use function chmod;
+use function clearstatcache;
 use function dirname;
 use function file_get_contents;
 use function file_put_contents;
@@ -77,6 +78,8 @@ final class RestoreMarker
      */
     public static function read(string $path): ?DateTimeImmutable
     {
+        // Long-running workers: never trust a cached stat of the marker.
+        clearstatcache(true, $path);
         if (!is_file($path)) {
             return null;
         }
