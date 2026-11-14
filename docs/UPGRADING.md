@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.36.0](#to-1360)
 - [To 1.35.2](#to-1352)
 - [To 1.35.1](#to-1351)
 - [To 1.35.0](#to-1350)
@@ -129,6 +130,14 @@
   - [Breaking changes](#breaking-changes-1)
 
 ## Unreleased
+
+## To 1.36.0
+
+From **1.35.2**:
+
+```bash
+composer update nowo-tech/site-backup-bundle
+```
 
 Target: **1.36.0** (minor). `composer update nowo-tech/site-backup-bundle`. No configuration change is needed and
 nothing changes until a backup asks for binlog coordinates, a file manifest or an incremental.

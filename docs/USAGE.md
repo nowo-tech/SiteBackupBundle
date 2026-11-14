@@ -657,7 +657,7 @@ Zero config beyond what the sections above describe: install, import the routes,
 `security.access_roles`, bind `setup.admin_provisioner`. Inject `Service\SiteBackupManagerInterface` in a controller
 or command to create backups. Hosts written before 1.35 on `SiteBackupAccessGateInterface`, `ActorResolverInterface`
 or `AdminUserProvisionerInterface` keep working unchanged; the container build reports one deprecation per such
-service (see [UPGRADING](UPGRADING.md#unreleased)).
+service (see [UPGRADING](UPGRADING.md#to-1360)).
 
 ### DDD host
 
