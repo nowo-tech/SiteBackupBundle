@@ -72,6 +72,7 @@ panel:
     intro: 'Cópias criadas, eliminadas e restauradas, da mais recente para a mais antiga.'
   flash:
     created: 'Cópia de segurança criada: %id%'
+    created_with_warnings: 'Cópia de segurança criada: %id% (avisos: %warnings%)'
     deleted: 'Cópia de segurança eliminada: %id%'
     verify_ok: 'Integridade válida para %id%'
     verify_failed: 'Integridade FALHOU: %errors%'

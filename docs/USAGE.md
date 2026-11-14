@@ -358,7 +358,9 @@ GTID is optional: chains use file + position coordinates only; the chain's dump 
 (`--set-gtid-purged=COMMENTED`) only when `gtid_mode` is ON, and a dump that reports an error or holds no table is
 refused even when `mysqldump` exits 0 (one exception: MySQL 9.x mysqldump reports "Error … when trying to dump
 masking policies" when the account cannot read `mysql.column_masking_policy`; the dump is otherwise whole and the
-backup gets a warning — grant `SELECT ON mysql.column_masking_policy` if the schema uses masking policies) (`gtid_mode=OFF` is tested in CI, together with small
+backup gets a warning in the CLI output, the panel and the history row — grant
+`SELECT ON mysql.column_masking_policy` to the dump account if the schema uses masking policies, or a restore brings
+the data back unmasked). A chain cannot start on a schema without tables (clear error: create the schema first) (`gtid_mode=OFF` is tested in CI, together with small
 `max_binlog_size` values so that one incremental spans several rotated logs).
 
 - **MySQL 8.0.26+** (8.4 LTS, 9.x) with `log_bin` on and **`binlog_format=ROW`** (required: MIXED / STATEMENT are
@@ -402,6 +404,7 @@ CREATE USER 'backup'@'%' IDENTIFIED BY '…';
 GRANT RELOAD, REPLICATION CLIENT, REPLICATION SLAVE ON *.* TO 'backup'@'%';
 GRANT SELECT, SHOW VIEW, TRIGGER, LOCK TABLES, EVENT ON app.* TO 'backup'@'%';
 GRANT SHOW_ROUTINE ON *.* TO 'backup'@'%';   -- only with --routines / dumpRoutines (8.0.20+)
+GRANT SELECT ON mysql.column_masking_policy TO 'backup'@'%';   -- MySQL 9.x, when the schema uses masking policies
 
 -- restore_url: re-creates the schema, imports the dump, replays the events
 CREATE USER 'restore'@'%' IDENTIFIED BY '…';
@@ -587,11 +590,14 @@ After a restore: clear the cache and restart the PHP workers.
 
 **A restore closes every chain taken before it.** The restore itself is written to the server's binary log, so an
 incremental of an older chain would carry the restore's writes (and its replay fails with duplicate keys). Before a
-restore (`restoreChain()`, `restore()`, the commands and the panel) touches anything, the bundle records its instant
+restore (`restoreChain()`, `restore()`, the commands and the panel) — and before `nowo:site-backup:db-import` or a
+`sql_file` setup step imports anything — touches anything, the bundle records its instant
 in `<storage_dir>/.nowo-site-backup-restored.json`; an incremental whose parent's capture ended at or before that
 instant is refused with `BinlogGapException` reason `chain_closed_by_restore` (`nowo:site-backup:create` exits **3**, like
 any gap): take a new full backup. The marker is written even when the restore is then refused, and a full backup
-taken in the same second as a restore counts as closed (wait a second). The panel restores single backups only (chains: CLI).
+taken in the same second as a restore counts as closed (wait a second). **Restores done outside the bundle** (a DBA
+loading a dump, another instance with another `storage_dir`) are not seen: take a new full backup after them (or
+write the marker yourself: `{"restored_at": "<ATOM date>"}` in that file). The panel restores single backups only (chains: CLI).
 `restore()` / `nowo:site-backup:restore` refuse an incremental alone, and `deleteBackup()` refuses a backup that an
 incremental depends on (delete chains from their head).
 

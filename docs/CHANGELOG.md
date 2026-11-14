@@ -79,6 +79,20 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+Target: **1.36.1** (patch). Audit PP delta 3 follow-ups.
+
+### Fixed
+
+- **Restore marker for every import (PP-D3-L1):** `nowo:site-backup:db-import` and `sql_file` setup steps (both
+  importers) record the restore marker before importing, so the chains taken before them are closed like after a
+  restore; when the marker cannot be written nothing is imported. The storage directory is created (owner-only) when
+  missing.
+- **Masking-policy warning surfaced (PP-D3-L2):** dump warnings (such as column masking policies left out because the
+  account cannot read `mysql.column_masking_policy`) are now in the `create` history row (`context.warnings`) and in
+  the panel's success message, besides the CLI output.
+- **Empty schema (PP-D3-I4):** a chain's full backup on a schema without tables fails with a clear message instead of
+  "incomplete dump".
+
 ## [1.36.0] - 2026-11-14
 
 Target: **1.36.0** (minor). Incremental backups (Beacon request 2026-11-04, block E0 items 9–11). Everything is

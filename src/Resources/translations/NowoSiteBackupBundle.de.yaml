@@ -72,6 +72,7 @@ panel:
     intro: 'Erstellte, gelöschte und wiederhergestellte Sicherungen, neueste zuerst.'
   flash:
     created: 'Backup erstellt: %id%'
+    created_with_warnings: 'Backup erstellt: %id% (Warnungen: %warnings%)'
     deleted: 'Backup gelöscht: %id%'
     verify_ok: 'Integrität in Ordnung für %id%'
     verify_failed: 'Integritätsprüfung FEHLGESCHLAGEN: %errors%'

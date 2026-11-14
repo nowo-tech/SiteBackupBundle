@@ -4,13 +4,16 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Setup\Step;
 
+use DateTimeImmutable;
 use Nowo\SiteBackupBundle\Database\DumpImporter;
 use Nowo\SiteBackupBundle\Exception\BackupAlreadyRunningException;
 use Nowo\SiteBackupBundle\Exception\DumpFailedException;
+use Nowo\SiteBackupBundle\Incremental\RestoreMarker;
 use Nowo\SiteBackupBundle\Setup\SetupContext;
 use Nowo\SiteBackupBundle\Setup\SetupStepInput;
 use Nowo\SiteBackupBundle\Setup\SetupStepResult;
 use ReflectionClass;
+use RuntimeException;
 use Symfony\Component\Finder\Finder;
 use Throwable;
 
@@ -60,6 +63,7 @@ final class SqlFileStep extends AbstractSetupStep
         private readonly mixed $connection = null,
         private readonly string $importer = self::IMPORTER_PDO,
         private readonly ?DumpImporter $dumpImporter = null,
+        private readonly ?string $restoreMarkerPath = null,
     ) {
         parent::__construct($id, $label);
     }
@@ -87,6 +91,16 @@ final class SqlFileStep extends AbstractSetupStep
             }
 
             return SetupStepResult::fail('No SQL files matched the configured paths.');
+        }
+
+        // PP-D3-L1: an import writes the database (and its binary log): it closes the chains like a restore. Recorded
+        // before anything is imported; when it cannot be recorded, nothing is imported.
+        if ($this->restoreMarkerPath !== null) {
+            try {
+                RestoreMarker::write($this->restoreMarkerPath, new DateTimeImmutable(), 'sql_file', $this->getId());
+            } catch (RuntimeException $e) {
+                return SetupStepResult::fail($e->getMessage());
+            }
         }
 
         if ($this->importer === self::IMPORTER_CLIENT) {

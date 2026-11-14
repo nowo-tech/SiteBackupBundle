@@ -131,6 +131,13 @@
 
 ## Unreleased
 
+Target: **1.36.1**. `composer update nowo-tech/site-backup-bundle`. No configuration change.
+
+- `nowo:site-backup:db-import` and `sql_file` setup steps now close the backup chains (they write the database), like
+  restores: the next incremental of an older chain exits 3 (`chain_closed_by_restore`); take a new full backup.
+  Restores or imports done **outside the bundle** (a DBA, another instance with another `storage_dir`) cannot be seen:
+  take a new full backup after them.
+
 ## To 1.36.0
 
 From **1.35.2**:
@@ -167,6 +174,10 @@ nothing changes until a backup asks for binlog coordinates, a file manifest or a
   `BinlogFilterException` (`nowo:site-backup:create` exits 3); start a new chain after removing the cause.
 - Local `backup.retention` order is unchanged for hosts without chains (oldest first); with chains, deletions go
   newest first.
+- **Every dump made by the built-in dumper** (not only chain backups) now fails when `mysqldump` writes an `Error` line
+  to stderr, even when it exits 0 (before 1.36 such a dump could be silently incomplete). The MySQL 9.x masking-policy
+  error is the only exception: it becomes a warning (grant `SELECT ON mysql.column_masking_policy` to keep the policies
+  in the dump).
 - Shared MySQL server: keep the default `binlog_capture: filtered`; use separate `binlog_url` / `restore_url`
   accounts (USAGE "Accounts and MySQL grants").
 
