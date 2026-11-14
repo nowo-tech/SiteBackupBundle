@@ -217,7 +217,9 @@ jobs:
           echo "::add-mask::$PW"
           docker run -d --name sbb-mysql9 -p 127.0.0.1:3306:3306 -e MYSQL_ALLOW_EMPTY_PASSWORD=1 -e MYSQL_DATABASE=app mysql:9.7.2 \
             --gtid-mode=ON --enforce-gtid-consistency=ON --binlog-format=ROW --binlog-row-image=FULL
-          for i in $(seq 1 90); do docker exec sbb-mysql9 mysql -uroot -e "SELECT 1" >/dev/null 2>&1 && break; sleep 2; done
+          # Over TCP: the entrypoint's init server is socket-only, the real one listens once init is done.
+          for i in $(seq 1 120); do docker exec sbb-mysql9 mysql -uroot -h127.0.0.1 --protocol=TCP -e "SELECT 1" >/dev/null 2>&1 && break; sleep 2; done
+          docker exec sbb-mysql9 mysql -uroot -h127.0.0.1 --protocol=TCP -e "SELECT VERSION()"
           docker exec sbb-mysql9 mysql -uroot -e "CREATE USER 'bk'@'%' IDENTIFIED BY '$PW'; GRANT ALL ON app.* TO 'bk'@'%'; GRANT RELOAD, REPLICATION CLIENT, REPLICATION SLAVE ON *.* TO 'bk'@'%'; GRANT REPLICATION_APPLIER, SESSION_VARIABLES_ADMIN, SYSTEM_VARIABLES_ADMIN ON *.* TO 'bk'@'%';"
           # The server image ships mysql and mysqldump but not mysqlbinlog: take it from the matching Oracle client RPM
           # (sha256 = repo.mysql.com digest) and run it in the same image (same glibc and libraries).
