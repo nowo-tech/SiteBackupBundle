@@ -4,10 +4,13 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Command;
 
+use DateTimeImmutable;
 use Nowo\SiteBackupBundle\Database\DumpImporter;
 use Nowo\SiteBackupBundle\Exception\BackupAlreadyRunningException;
 use Nowo\SiteBackupBundle\Exception\DumpFailedException;
+use Nowo\SiteBackupBundle\Incremental\RestoreMarker;
 use Nowo\SiteBackupBundle\Log\SecretRedactor;
+use RuntimeException;
 use Symfony\Component\Console\Attribute\AsCommand;
 use Symfony\Component\Console\Command\Command;
 use Symfony\Component\Console\Input\InputArgument;
@@ -16,6 +19,8 @@ use Symfony\Component\Console\Input\InputOption;
 use Symfony\Component\Console\Output\OutputInterface;
 use Symfony\Component\Console\Style\SymfonyStyle;
 
+use function basename;
+
 /**
  * Streams a SQL dump into the configured database through the `mysql` client (1.28+): constant memory, password
  * in the environment. It overwrites data, so it needs --force.
@@ -23,7 +28,11 @@ use Symfony\Component\Console\Style\SymfonyStyle;
 #[AsCommand(name: 'nowo:site-backup:db-import', description: 'Import a SQL dump into the configured database through the mysql client (streamed)')]
 final class DatabaseImportCommand extends Command
 {
-    public function __construct(private readonly DumpImporter $importer)
+    /**
+     * @param string|null $restoreMarkerPath 1.36.1+ (PP-D3-L1): where restores are recorded; the import closes every
+     *                                       chain taken before it (null: not recorded)
+     */
+    public function __construct(private readonly DumpImporter $importer, private readonly ?string $restoreMarkerPath = null)
     {
         parent::__construct();
     }
@@ -42,6 +51,16 @@ final class DatabaseImportCommand extends Command
             $io->error('The import overwrites the tables of the dump: run again with --force.');
 
             return Command::INVALID;
+        }
+
+        try {
+            if ($this->restoreMarkerPath !== null) {
+                RestoreMarker::write($this->restoreMarkerPath, new DateTimeImmutable(), 'db_import', basename((string) $input->getArgument('file')));
+            }
+        } catch (RuntimeException $e) {
+            $io->error($e->getMessage() . ' Nothing was imported.');
+
+            return Command::FAILURE;
         }
 
         try {

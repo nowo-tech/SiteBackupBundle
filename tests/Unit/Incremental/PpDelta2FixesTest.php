@@ -94,7 +94,7 @@ final class PpDelta2FixesTest extends TestCase
             (new BuiltinMysqlDumper('mysql://bk@db/app', $empty))->dump($this->dir . '/empty.sql', [], false, null, true);
             self::fail('an empty dump started a chain');
         } catch (DumpFailedException $e) {
-            self::assertStringContainsString('incomplete', $e->getMessage());
+            self::assertStringContainsString('no tables', $e->getMessage());
         }
     }
 

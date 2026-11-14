@@ -367,6 +367,11 @@ final class SiteBackupPanelController
         $label    = $request->request->getString('label');
         $artifact = $this->manager->createBackup($label !== '' ? $label : null, $this->actor($request));
 
+        // PP-D3-L2: warnings (e.g. column masking policies left out of the dump) are shown, not only logged.
+        if ($artifact->getWarnings() !== []) {
+            return $this->message('panel.flash.created_with_warnings', 'Backup created: %id% (warnings: %warnings%)', ['%id%' => $artifact->getId(), '%warnings%' => implode(' ', $artifact->getWarnings())]);
+        }
+
         return $this->message('panel.flash.created', 'Backup created: %id%', ['%id%' => $artifact->getId()]);
     }
 

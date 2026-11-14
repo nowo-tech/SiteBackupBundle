@@ -159,8 +159,9 @@ final class BuiltinMysqlDumper
         $coordinates = null;
         if ($recordBinlogCoordinates) {
             // PP-D2-H1: a chain's full must be a whole dump (mysqldump may exit 0 after an error with an empty file).
-            if (!self::isCompleteDump($target)) {
-                throw new DumpFailedException('The dump is incomplete (no table, or no "Dump completed" trailer): the chain was not started.');
+            $incomplete = self::incompleteDump($target);
+            if ($incomplete !== null) {
+                throw new DumpFailedException($incomplete);
             }
             $coordinates = DumpCoordinatesParser::parse($target);
             if ($coordinates === null) {
@@ -298,13 +299,13 @@ final class BuiltinMysqlDumper
     }
 
     /**
-     * A table definition and mysqldump's `-- Dump completed` trailer are both present.
+     * Why a coordinates dump cannot start a chain, or null: mysqldump's `-- Dump completed` trailer and a table.
      */
-    private static function isCompleteDump(string $path): bool
+    private static function incompleteDump(string $path): ?string
     {
         $handle = @fopen($path, 'r');
         if ($handle === false) {
-            return false;
+            return 'The dump is not readable: the chain was not started.';
         }
         $table     = false;
         $completed = false;
@@ -316,8 +317,12 @@ final class BuiltinMysqlDumper
         } finally {
             fclose($handle);
         }
+        if (!$completed) {
+            return 'The dump is incomplete (no "Dump completed" trailer): the chain was not started.';
+        }
 
-        return $table && $completed;
+        // PP-D3-I4: a chain needs something to replay into.
+        return $table ? null : 'The schema has no tables: a chain cannot start on an empty schema. Create the schema (migrations) first, then take the full backup.';
     }
 
     private function append(string $from, string $to): void

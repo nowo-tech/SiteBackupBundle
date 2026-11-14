@@ -41,6 +41,7 @@ use Nowo\SiteBackupBundle\Incremental\BinlogServerInterface;
 use Nowo\SiteBackupBundle\Incremental\IncrementalBackupManagerInterface;
 use Nowo\SiteBackupBundle\Incremental\MysqlBinlogTool;
 use Nowo\SiteBackupBundle\Incremental\MysqlClientBinlogServer;
+use Nowo\SiteBackupBundle\Incremental\RestoreMarker;
 use Nowo\SiteBackupBundle\Lock\BackupOperationLock;
 use Nowo\SiteBackupBundle\Remote\BackupRemoteTargetInterface;
 use Nowo\SiteBackupBundle\Remote\FlysystemRemoteTarget;
@@ -125,6 +126,7 @@ use function is_array;
 use function is_bool;
 use function is_int;
 use function is_string;
+use function rtrim;
 use function trigger_deprecation;
 use function trim;
 
@@ -461,7 +463,9 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
 
         if ($container->hasDefinition(DatabaseImportCommand::class)) {
             $container->getDefinition(DatabaseImportCommand::class)
-                ->setArgument('$importer', new Reference(DumpImporter::class));
+                ->setArgument('$importer', new Reference(DumpImporter::class))
+                // PP-D3-L1: an import writes the database (and its binary log): it closes the chains like a restore.
+                ->setArgument('$restoreMarkerPath', rtrim((string) $config['backup']['storage_dir'], '/') . '/' . RestoreMarker::FILENAME);
         }
     }
 
@@ -1322,7 +1326,8 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             // Host steps (#[AsSetupStep]) are set by SetupStepsPass.
             ->setArgument('$customSteps', [])
             ->setArgument('$checkerLocator', new Reference(SetupTabCheckerLocator::class))
-            ->setArgument('$dumpImporter', new Reference(DumpImporter::class));
+            ->setArgument('$dumpImporter', new Reference(DumpImporter::class))
+            ->setArgument('$restoreMarkerPath', rtrim((string) $config['backup']['storage_dir'], '/') . '/' . RestoreMarker::FILENAME);
 
         /** @var array<string, array{steps?: list<array<string, mixed>>, tabs?: list<array<string, mixed>>, advance_mode?: string|null}> $profiles */
         $profiles      = $setup['profiles'];

@@ -72,6 +72,7 @@ panel:
     intro: 'Sauvegardes créées, supprimées et restaurées, de la plus récente à la plus ancienne.'
   flash:
     created: 'Sauvegarde créée : %id%'
+    created_with_warnings: 'Sauvegarde créée : %id% (avertissements : %warnings%)'
     deleted: 'Sauvegarde supprimée : %id%'
     verify_ok: 'Intégrité vérifiée pour %id%'
     verify_failed: 'Échec de l''intégrité : %errors%'

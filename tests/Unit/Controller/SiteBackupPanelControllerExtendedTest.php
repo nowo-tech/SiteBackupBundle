@@ -6,6 +6,7 @@ namespace Nowo\SiteBackupBundle\Tests\Unit\Controller;
 
 use DateTimeImmutable;
 use Nowo\SiteBackupBundle\Controller\SiteBackupPanelController;
+use Nowo\SiteBackupBundle\Model\BackupArtifact;
 use Nowo\SiteBackupBundle\Model\BackupHistoryEntry;
 use Nowo\SiteBackupBundle\Model\RestoreProgress;
 use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
@@ -199,6 +200,32 @@ final class SiteBackupPanelControllerExtendedTest extends TestCase
         $request->setSession($session);
         // A failed create goes back to the create form with the error (422), not to the index.
         self::assertSame(422, $controller->index($request)->getStatusCode());
+    }
+
+    public function testCreateShowsTheBackupWarnings(): void
+    {
+        // PP-D3-L2: a warning such as masking policies left out of the dump reaches the panel, not only the log.
+        $manager = $this->createMock(SiteBackupManagerInterface::class);
+        $manager->method('createBackup')->willReturn(new BackupArtifact('b1', 'b1.tar.gz', '/tmp/b1.tar.gz', new DateTimeImmutable(), 1, str_repeat('a', 64), [], ['warnings' => ['masking policies left out']]));
+        $manager->method('listBackups')->willReturn([]);
+        $manager->method('getRestoreProgress')->willReturn(new RestoreProgress());
+        $csrf = $this->createMock(CsrfTokenManagerInterface::class);
+        $csrf->method('getToken')->willReturn(new CsrfToken('id', 'token'));
+        $csrf->method('isTokenValid')->willReturn(true);
+        /** @var list<array<string, mixed>> $contexts */
+        $contexts = [];
+        $twig     = $this->createMock(Environment::class);
+        $twig->method('render')->willReturnCallback(static function (string $template, array $context) use (&$contexts): string {
+            $contexts[] = $context;
+
+            return 'html';
+        });
+        $controller = new SiteBackupPanelController($manager, new PasswordSiteBackupAccessGate(null, false), $this->createFormFactory($csrf), $twig, ['panel_index' => 'index', 'panel_login' => 'login', 'panel_history' => 'history'], '/_site_backup', $csrf);
+        $request    = Request::create('/', 'POST', ['action' => 'create', '_csrf_token' => 'token']);
+        $request->setSession(new Session(new MockArraySessionStorage()));
+
+        $controller->index($request);
+        self::assertSame(['success' => ['Backup created: b1 (warnings: masking policies left out)']], $contexts[0]['messages']);
     }
 
     public function testRestoreFailureShowsOnlyTheRedactedMessage(): void

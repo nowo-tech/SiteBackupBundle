@@ -22,6 +22,7 @@ use function is_file;
 use function is_string;
 use function json_decode;
 use function json_encode;
+use function mkdir;
 use function random_bytes;
 use function rename;
 use function sprintf;
@@ -36,6 +37,9 @@ use const JSON_THROW_ON_ERROR;
  * never be continued: its next incremental would carry the restore's own writes. Before a restore touches anything,
  * the manager records its instant in `<storage_dir>/.nowo-site-backup-restored.json`; an incremental of a parent whose
  * capture ended at or before that instant is refused like a gap ({@see BinlogGapException::CLOSED_BY_RESTORE}).
+ *
+ * Every bundle path that writes the database records it: `restoreChain()`, `restore()`, `nowo:site-backup:db-import`
+ * and `sql_file` setup steps (PP-D3-L1). Restores done outside the bundle must write it too, or take a new full backup.
  *
  * Stateless helpers (no service state; safe in worker mode).
  */
@@ -54,8 +58,9 @@ final class RestoreMarker
             $at = $previous;
         }
         $dir = dirname($path);
-        if (!is_dir($dir)) {
-            throw new RuntimeException('The backup storage directory does not exist: the restore marker cannot be written.');
+        // A fresh install (setup wizard, db-import) may not have the storage directory yet: owner-only, like the archiver.
+        if (!is_dir($dir) && !@mkdir($dir, 0o700, true) && !is_dir($dir)) {
+            throw new RuntimeException('The backup storage directory cannot be created: the restore marker cannot be written.');
         }
         $tmp = $dir . '/.nowo-site-backup-restored.' . bin2hex(random_bytes(6)) . '.tmp';
         try {

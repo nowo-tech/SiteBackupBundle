@@ -72,6 +72,7 @@ panel:
     intro: 'Backups created, deleted and restored, newest first.'
   flash:
     created: 'Backup created: %id%'
+    created_with_warnings: 'Backup created: %id% (warnings: %warnings%)'
     deleted: 'Backup deleted: %id%'
     verify_ok: 'Integrity OK for %id%'
     verify_failed: 'Integrity FAILED: %errors%'

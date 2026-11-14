@@ -58,6 +58,7 @@ final class SetupStepFactory
         private readonly array $customSteps = [],
         private readonly ?SetupTabCheckerLocator $checkerLocator = null,
         private readonly ?DumpImporter $dumpImporter = null,
+        private readonly ?string $restoreMarkerPath = null,
     ) {
         foreach (array_keys($this->customSteps) as $type) {
             if (in_array($type, self::RESERVED_TYPES, true)) {
@@ -145,6 +146,7 @@ final class SetupStepFactory
                 $this->dbalConnection,
                 ($config['importer'] ?? null) === SqlFileStep::IMPORTER_CLIENT ? SqlFileStep::IMPORTER_CLIENT : SqlFileStep::IMPORTER_PDO,
                 $this->dumpImporter,
+                $this->restoreMarkerPath,
             ),
             'console' => new ConsoleStep(
                 $id,

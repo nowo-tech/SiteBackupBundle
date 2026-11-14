@@ -72,6 +72,7 @@ panel:
     intro: 'Aangemaakte, verwijderde en herstelde back-ups, nieuwste eerst.'
   flash:
     created: 'Back-up gemaakt: %id%'
+    created_with_warnings: 'Back-up gemaakt: %id% (waarschuwingen: %warnings%)'
     deleted: 'Back-up verwijderd: %id%'
     verify_ok: 'Integriteit in orde voor %id%'
     verify_failed: 'Integriteitscontrole MISLUKT: %errors%'

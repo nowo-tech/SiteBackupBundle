@@ -177,7 +177,8 @@ final class SiteBackupManager implements SiteBackupManagerInterface, Incremental
                 actor: $actor,
                 backupId: $artifact->getId(),
                 message: $options->label,
-                context: ['size_bytes' => $artifact->getSizeBytes(), 'sha256' => $artifact->getArchiveSha256()],
+                // PP-D3-L2: warnings (names and reasons only) travel with the history row.
+                context: ['size_bytes' => $artifact->getSizeBytes(), 'sha256' => $artifact->getArchiveSha256()] + ($artifact->getWarnings() !== [] ? ['warnings' => $artifact->getWarnings()] : []),
             ));
             $this->eventDispatcher?->dispatch(new BackupCreatedEvent($artifact, $actor, $operationId));
 

@@ -268,11 +268,9 @@ final class PpDelta1FixesTest extends TestCase
         file_put_contents($path, '{"restored_at": 5}');
         self::assertNotNull(RestoreMarker::read($path));
 
-        try {
-            RestoreMarker::write($this->dir . '/missing/' . RestoreMarker::FILENAME, new DateTimeImmutable(), 'restore', 'x');
-            self::fail('a marker was written into a missing directory');
-        } catch (RuntimeException) {
-        }
+        // A missing storage directory is created (fresh install).
+        RestoreMarker::write($this->dir . '/missing/' . RestoreMarker::FILENAME, new DateTimeImmutable(), 'restore', 'x');
+        self::assertNotNull(RestoreMarker::read($this->dir . '/missing/' . RestoreMarker::FILENAME));
         mkdir($this->dir . '/ro', 0o500);
         try {
             RestoreMarker::write($this->dir . '/ro/' . RestoreMarker::FILENAME, new DateTimeImmutable(), 'restore', 'x');
