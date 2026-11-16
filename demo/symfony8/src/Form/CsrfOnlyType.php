@@ -4,17 +4,21 @@ declare(strict_types=1);
 
 namespace App\Form;
 
-use Symfony\Component\Form\AbstractType;
+use Nowo\FormKitBundle\Attribute\FormKitConfig;
+use Nowo\FormKitBundle\Form\FormKitAbstractType;
+use Override;
 use Symfony\Component\OptionsResolver\OptionsResolver;
 
 /**
- * CSRF-only POST (demo force-setup flag on/off). No fields: the template renders the CSRF child through the
+ * CSRF-only POST of the demo force-setup flag on/off (REQ-DEMO-015, FormKit profile `demo`). No fields: the template renders the CSRF child through the
  * REQ-TWIG-003 child loop and keeps its own submit button outside the loop (REQ-TWIG-005).
  *
- * @extends AbstractType<null>
+ * @extends FormKitAbstractType<null>
  */
-final class CsrfOnlyType extends AbstractType
+#[FormKitConfig('demo')]
+final class CsrfOnlyType extends FormKitAbstractType
 {
+    #[Override]
     public function configureOptions(OptionsResolver $resolver): void
     {
         $resolver->setDefaults([
