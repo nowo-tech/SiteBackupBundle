@@ -11,5 +11,6 @@ return [
     Nowo\HotReloadBundle\NowoHotReloadBundle::class => ['dev' => true, 'test' => true],
     Nowo\TwigInspectorBundle\NowoTwigInspectorBundle::class => ['dev' => true, 'test' => true],
     Nowo\SiteBackupBundle\NowoSiteBackupBundle::class => ['all' => true],
+    Nowo\FormKitBundle\NowoFormKitBundle::class => ['all' => true],
     Nowo\UiKitBundle\NowoUiKitBundle::class => ['all' => true],
 ];

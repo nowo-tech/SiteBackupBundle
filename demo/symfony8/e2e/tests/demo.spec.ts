@@ -3,8 +3,14 @@ import { PANEL, createBackup, login, row } from './helpers';
 
 /**
  * REQ-DEMO-013 / REQ-UI-003 — the Site Backup panel and setup wizard render on the UiKit page contract inside the
- * demo host layouts (layouts/admin.html.twig, layouts/guest.html.twig).
+ * demo host layouts (base.html.twig, layouts/guest.html.twig).
  */
+test.beforeEach(async ({ page }) => {
+  // The dev stack's FrankenPHP hot reload morphs the page whenever the backup archive is written, which closes an open
+  // dialog under the test: the e2e run does not subscribe to it.
+  await page.route('**/.well-known/mercure**', (route) => route.abort());
+});
+
 test.describe('setup wizard (guest layout)', () => {
   test('runs the guided setup to the end, or is closed once done', async ({ page }) => {
     await page.goto('/en/_setup');

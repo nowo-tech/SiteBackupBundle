@@ -80,6 +80,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Demo
+
+- The demo is built on UiKit and FormKit (REQ-DEMO-014 / REQ-DEMO-015): the hand-written shell and token overrides are gone, the demo shell is UiKit's admin and guest layouts with its default theme (also the layouts of the panel and the setup wizard), and the force-setup forms are FormKit types themed by the `demo` profile on UiKit's form theme. No bundle runtime change.
+
 ### Changed
 
 - Demo `.gitignore` ignores `/.pnpm-store` (REQ-GITIGNORE-003); demo `config/preload.php` declares strict types (REQ-CS-004)
