@@ -80,6 +80,12 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- Demo `.gitignore` ignores `/.pnpm-store` (REQ-GITIGNORE-003); demo `config/preload.php` declares strict types (REQ-CS-004)
+- Canonical `.scrutinizer.yml` (REQ-CI-002); Dependabot watches the demo Playwright `e2e/` npm manifest (REQ-GH-002)
+- Spec Kit: the 113 `src/` files added since the 2026-11-01 baseline review are mapped in `code-inventory.md`, with eight new area requirements in `spec.md` (REQ-SPECKIT-001 / REQ-SPECKIT-003)
+
 ## [1.36.1] - 2026-11-14
 
 Target: **1.36.1** (patch). Audit PP delta 3 follow-ups.

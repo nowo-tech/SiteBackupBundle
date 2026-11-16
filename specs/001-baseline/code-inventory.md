@@ -2,7 +2,7 @@
 
 **Baseline spec**: [`spec.md`](spec.md)  
 **Package**: `nowo-tech/site-backup-bundle`  
-**Last audited**: 2026-11-01 (v1.26.0 + unreleased REQ-SEC-004 CG fix; features 002–007 included; feature IDs are prefixed with their spec number, e.g. `004 FR-PERF-001` → [`specs/004-worker-perf-dump-hardening/`](../004-worker-perf-dump-hardening/spec.md))
+**Last audited**: 2026-11-16 (sweep: 2026-11-01 baseline + later sources) (v1.26.0 + unreleased REQ-SEC-004 CG fix; features 002–007 included; feature IDs are prefixed with their spec number, e.g. `004 FR-PERF-001` → [`specs/004-worker-perf-dump-hardening/`](../004-worker-perf-dump-hardening/spec.md))
 
 Every production source under `src/` is listed exactly once, grouped by domain (REQ-SPECKIT-001 / REQ-SPECKIT-003).
 
@@ -268,6 +268,126 @@ Every production source under `src/` is listed exactly once, grouped by domain (
 | `Resources/translations/NowoSiteBackupBundle.nl.yaml` | FR-I18N-001 |
 | `Resources/translations/NowoSiteBackupBundle.pt.yaml` | FR-I18N-001 |
 
+## Sources added after the last baseline review (sweep 2026-11-16)
+
+These 113 `src/` files were added by releases after the last review. Each row maps the file to the requirement already used for its neighbours in the same directory; the description comes from the class docblock. With them, every file under `src/` is listed in this inventory.
+
+| Source file | Requirement IDs |
+| --- | --- |
+| `Attribute/AsSetupStep.php` | FR-SETUP-003 |
+| `Backup/SecretPathPolicy.php` | FR-CG-008 |
+| `Backup/VerifyFileResult.php` | FR-CG-008 |
+| `Backup/ZipAesAuthenticator.php` | FR-CG-008 |
+| `Command/BinlogCheckCommand.php` | FR-CLI-001 |
+| `Command/CleanupCommand.php` | FR-CLI-001 |
+| `Command/DatabaseImportCommand.php` | FR-CLI-001 |
+| `Command/ImportArchiveCommand.php` | FR-CLI-001 |
+| `Command/PasswordInput.php` | FR-CLI-001 |
+| `Command/RestoreChainCommand.php` | FR-CLI-001 |
+| `Command/RestoreDrillCommand.php` | FR-CLI-001 |
+| `Command/SigningKeygenCommand.php` | FR-CLI-001 |
+| `Crypto/AgeBinaryEncryptor.php` | FR-CRYPTO-001 |
+| `Crypto/ArchiveEncryptorInterface.php` | FR-CRYPTO-001 |
+| `Database/BuiltinMysqlDumper.php` | FR-CG-007 |
+| `Database/DumpImporter.php` | FR-CG-007 |
+| `Database/DumpReport.php` | FR-CG-007 |
+| `Database/MysqlClientSchemaInspector.php` | FR-CG-007 |
+| `Database/MysqlOptionFile.php` | FR-CG-007 |
+| `Database/SchemaInspectorInterface.php` | FR-CG-007 |
+| `Database/SchemaSnapshot.php` | FR-CG-007 |
+| `Database/TableSafetyChecker.php` | FR-CG-007 |
+| `Database/TableStatsCollector.php` | FR-CG-007 |
+| `DependencyInjection/Compiler/LegacyPortDeprecationPass.php` | FR-SEC-002 |
+| `DependencyInjection/Compiler/PortAliasValidityPass.php` | FR-SEC-002 |
+| `DependencyInjection/Compiler/SetupReopenDetectorsPass.php` | FR-SEC-002 |
+| `DependencyInjection/Compiler/SetupStepsPass.php` | FR-SEC-002 |
+| `Drill/DrillReport.php` | FR-DRILL-001 |
+| `Drill/RestoreDrill.php` | FR-DRILL-001 |
+| `Enum/ArchiveFormat.php` | FR-SETUP-004 |
+| `Enum/TableRule.php` | FR-SETUP-004 |
+| `Event/BackupFailedEvent.php` | FR-EVT-001 |
+| `Event/BackupImportedEvent.php` | FR-EVT-001 |
+| `Event/BackupStartedEvent.php` | FR-EVT-001 |
+| `Event/RemoteBackupPrunedEvent.php` | FR-EVT-001 |
+| `Event/RemoteBackupUploadedEvent.php` | FR-EVT-001 |
+| `Event/SiteBackupEvents.php` | FR-EVT-001 |
+| `Exception/BackupAlreadyRunningException.php` | FR-EXCEPTION-001 |
+| `Exception/BinlogFilterException.php` | FR-EXCEPTION-001 |
+| `Exception/BinlogGapException.php` | FR-EXCEPTION-001 |
+| `Exception/BinlogUnavailableException.php` | FR-EXCEPTION-001 |
+| `Exception/ChainBrokenException.php` | FR-EXCEPTION-001 |
+| `Exception/ChainRestoreException.php` | FR-EXCEPTION-001 |
+| `Exception/CorruptArchiveException.php` | FR-EXCEPTION-001 |
+| `Exception/DumpFailedException.php` | FR-EXCEPTION-001 |
+| `Exception/FormatUnavailableException.php` | FR-EXCEPTION-001 |
+| `Exception/InsufficientDiskException.php` | FR-EXCEPTION-001 |
+| `Exception/InvalidBackupOptionsException.php` | FR-EXCEPTION-001 |
+| `Exception/RemoteTargetException.php` | FR-EXCEPTION-001 |
+| `Exception/SecretsInArchiveException.php` | FR-EXCEPTION-001 |
+| `Exception/SiteBackupException.php` | FR-EXCEPTION-001 |
+| `Exception/UnsafeArchiveException.php` | FR-EXCEPTION-001 |
+| `Exception/UnsafeTableRuleException.php` | FR-EXCEPTION-001 |
+| `Exception/WrongPasswordException.php` | FR-EXCEPTION-001 |
+| `Incremental/BackupChain.php` | FR-INCREMENTAL-001 |
+| `Incremental/BinlogBoundaries.php` | FR-INCREMENTAL-001 |
+| `Incremental/BinlogCapture.php` | FR-INCREMENTAL-001 |
+| `Incremental/BinlogCaptureInterface.php` | FR-INCREMENTAL-001 |
+| `Incremental/BinlogCoordinates.php` | FR-INCREMENTAL-001 |
+| `Incremental/BinlogEventTimes.php` | FR-INCREMENTAL-001 |
+| `Incremental/BinlogFilterResult.php` | FR-INCREMENTAL-001 |
+| `Incremental/BinlogPrerequisites.php` | FR-INCREMENTAL-001 |
+| `Incremental/BinlogPrerequisitesInterface.php` | FR-INCREMENTAL-001 |
+| `Incremental/BinlogReplayer.php` | FR-INCREMENTAL-001 |
+| `Incremental/BinlogSchemaFilter.php` | FR-INCREMENTAL-001 |
+| `Incremental/BinlogServerInterface.php` | FR-INCREMENTAL-001 |
+| `Incremental/BinlogStatementClassifier.php` | FR-INCREMENTAL-001 |
+| `Incremental/CapturedBinlog.php` | FR-INCREMENTAL-001 |
+| `Incremental/ChainLink.php` | FR-INCREMENTAL-001 |
+| `Incremental/ChainPaths.php` | FR-INCREMENTAL-001 |
+| `Incremental/ChainRestoreReport.php` | FR-INCREMENTAL-001 |
+| `Incremental/ChainRestoreStep.php` | FR-INCREMENTAL-001 |
+| `Incremental/ChainVerifier.php` | FR-INCREMENTAL-001 |
+| `Incremental/Check.php` | FR-INCREMENTAL-001 |
+| `Incremental/DumpCoordinatesParser.php` | FR-INCREMENTAL-001 |
+| `Incremental/DumpObjects.php` | FR-INCREMENTAL-001 |
+| `Incremental/FileManifest.php` | FR-INCREMENTAL-001 |
+| `Incremental/IncrementalArtifact.php` | FR-INCREMENTAL-001 |
+| `Incremental/IncrementalBackupManagerInterface.php` | FR-INCREMENTAL-001 |
+| `Incremental/IncrementalOptions.php` | FR-INCREMENTAL-001 |
+| `Incremental/MysqlBinlogTool.php` | FR-INCREMENTAL-001 |
+| `Incremental/MysqlClientBinlogServer.php` | FR-INCREMENTAL-001 |
+| `Incremental/MysqlToolVersion.php` | FR-INCREMENTAL-001 |
+| `Incremental/RestoreMarker.php` | FR-INCREMENTAL-001 |
+| `Lock/BackupOperationLock.php` | FR-LOCK-001 |
+| `Lock/BackupOperationLockHandle.php` | FR-LOCK-001 |
+| `Model/ArchivePassword.php` | FR-MODEL-001 |
+| `Model/BackupOptions.php` | FR-MODEL-001 |
+| `Model/BackupProgress.php` | FR-MODEL-001 |
+| `Model/ImportOptions.php` | FR-MODEL-001 |
+| `Remote/BackupRemoteTargetInterface.php` | FR-REMOTE-001 |
+| `Remote/FlysystemRemoteTarget.php` | FR-REMOTE-001 |
+| `Remote/InMemoryRemoteTarget.php` | FR-REMOTE-001 |
+| `Remote/PruneReport.php` | FR-REMOTE-001 |
+| `Remote/RemoteBackupPublisher.php` | FR-REMOTE-001 |
+| `Remote/RemoteObject.php` | FR-REMOTE-001 |
+| `Remote/VerifyMode.php` | FR-REMOTE-001 |
+| `Restore/ChainRestorer.php` | FR-RESTORE-001 |
+| `Restore/RestorePathGuard.php` | FR-RESTORE-001 |
+| `Retention/RetentionItem.php` | FR-RETENTION-001 |
+| `Retention/RetentionPlanner.php` | FR-RETENTION-001 |
+| `Retention/RetentionPolicy.php` | FR-RETENTION-001 |
+| `Security/HttpFoundationPanelSession.php` | FR-SEC-001 |
+| `Security/PanelAccessGateInterface.php` | FR-SEC-001 |
+| `Security/PanelActorResolverInterface.php` | FR-SEC-001 |
+| `Security/PanelRequestContext.php` | FR-SEC-001 |
+| `Security/PanelRequestContextFactory.php` | FR-SEC-001 |
+| `Security/PanelSessionInterface.php` | FR-SEC-001 |
+| `Setup/AdminAccountProvisionerInterface.php` | FR-SETUP-001 |
+| `Setup/AdminUserData.php` | FR-SETUP-001 |
+| `Setup/InitialInstallOnlyStepInterface.php` | FR-SETUP-001 |
+| `Setup/InitialInstallOnlySteps.php` | FR-SETUP-001 |
+| `Signing/BackupSigner.php` | FR-SIGNING-001 |
+
 ## Coverage summary
 
 | Category | Files |
@@ -290,6 +410,6 @@ Every production source under `src/` is listed exactly once, grouped by domain (
 | Twig & UiKit page views | 5 |
 | Twig templates | 18 |
 | Translations | 7 |
-| **Total production sources** | **164** |
+| **Total production sources** | **277** |
 
 Audit command: `git ls-files src | wc -l` → 164.
