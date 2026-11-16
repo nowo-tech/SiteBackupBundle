@@ -248,3 +248,16 @@ Incremental features extend this baseline (IDs prefixed with the spec number in 
 - [UPGRADING.md](../../docs/UPGRADING.md)
 - [code-inventory.md](code-inventory.md)
 - [SECURITY.md](../../docs/SECURITY.md)
+
+### Requirements added by the inventory sweep (2026-11-16)
+
+Areas introduced by releases after the baseline review; each requirement names the area and what its main source does (class docblock).
+
+- **FR-CRYPTO-001** `src/Crypto/`: age passphrase encryption through the `age` binary ≥ 1.3 and `age-plugin-batchpass` (1.29+, owner decision Q-O4 option A).
+- **FR-DRILL-001** `src/Drill/`: Result of a RestoreDrill (1.29+).
+- **FR-EXCEPTION-001** `src/Exception/`: Another backup, import, delete or restore holds the operation lock.
+- **FR-INCREMENTAL-001** `src/Incremental/`: A full backup and its incrementals, oldest first (1.36+).
+- **FR-LOCK-001** `src/Lock/`: One backup / import / delete / restore at a time (1.28+).
+- **FR-REMOTE-001** `src/Remote/`: Remote storage for backups, implemented by the host (1.29+): S3 through its own client, SFTP, a Flysystem filesystem… The bundle ships no network client of its own.
+- **FR-RETENTION-001** `src/Retention/`: One backup as the retention planner sees it (local artifact or remote object).
+- **FR-SIGNING-001** `src/Signing/`: Optional Ed25519 signature of a backup's sidecar fields (1.29+, owner decision Q-O3: shipped, off by default).

@@ -24,3 +24,6 @@ composer.lock.bak
 !.env.example
 !.env.test
 composer.lock
+
+# pnpm local store (REQ-GITIGNORE-003): never commit it
+/.pnpm-store
