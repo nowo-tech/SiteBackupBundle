@@ -28,6 +28,7 @@ See [SETUP-WIZARD.md](SETUP-WIZARD.md), [USAGE.md](USAGE.md), and [demo/README.m
 
 - [Start the demo in development](#start-the-demo-in-development)
 - [Start the demo in production mode](#start-the-demo-in-production-mode)
+- [Demo smoke (REQ-TEST-011)](#demo-smoke-req-test-011)
 - [Timeout hierarchy (REQ-RUNTIME-001)](#timeout-hierarchy-req-runtime-001)
 - [Troubleshooting](#troubleshooting)
 
@@ -49,6 +50,14 @@ The demo is not a production deployment, but the production runtime can be repro
 2. Run with `APP_ENV=prod` / `APP_DEBUG=0` (compose override), `composer install --no-dev --optimize-autoloader` and `php bin/console cache:clear --env=prod` inside the container.
 3. Set a real panel password hash (`nowo:site-backup:hash-password`) and the setup token before exposing the host (see [SECURITY.md](SECURITY.md)).
 4. After a restore, `cache_clear` or a `DATABASE_URL` change, run `bin/console nowo:site-backup:worker-restart` and restart the workers (kernel is not reset between requests).
+
+## Demo smoke (REQ-TEST-011)
+
+```bash
+make demo-smoke   # = make -C demo release-verify: up -> GET http://127.0.0.1:8056/ expects 200 (or 302) -> down
+```
+
+The `Demo smoke` workflow (`.github/workflows/demo-smoke.yml`) runs the same command on a weekly schedule, on every `v*` tag and on demand.
 
 ## Timeout hierarchy (REQ-RUNTIME-001)
 
