@@ -82,6 +82,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Demo
 
+- `Demo smoke` workflow (weekly, on `v*` tags, on demand) runs `make demo-smoke` and expects HTTP 200 (REQ-TEST-011); documented in `docs/DEMO-FRANKENPHP.md`. `make test-e2e` uses the Playwright image that matches `e2e/package.json` (1.65).
 - The demo is built on UiKit and FormKit (REQ-DEMO-014 / REQ-DEMO-015): the hand-written shell and token overrides are gone, the demo shell is UiKit's admin and guest layouts with its default theme (also the layouts of the panel and the setup wizard), and the force-setup forms are FormKit types themed by the `demo` profile on UiKit's form theme. No bundle runtime change.
 
 ### Changed

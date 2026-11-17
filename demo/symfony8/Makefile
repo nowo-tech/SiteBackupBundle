@@ -74,7 +74,7 @@ verify: ensure-up
 	echo "Healthcheck OK ($$code)"
 
 # REQ-DEMO-013: Playwright e2e + WebP screenshots (official Playwright image, same version as e2e/package.json).
-PLAYWRIGHT_IMAGE ?= mcr.microsoft.com/playwright:v1.58.2-jammy
+PLAYWRIGHT_IMAGE ?= mcr.microsoft.com/playwright:v1.65.0-jammy
 
 test-e2e: ensure-up
 	@mkdir -p e2e/node_modules
