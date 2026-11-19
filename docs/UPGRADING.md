@@ -132,6 +132,61 @@
 
 ## Unreleased
 
+Setup progress tables (portable DDL):
+
+- **Hosts on `setup.progress_storage: doctrine`, `chain` or `cache_doctrine` with MySQL, MariaDB or PostgreSQL:** the
+  setup tables (`setup.progress_table`, default `nowo_site_backup_setup_progress`, and `setup.progress_steps_table`,
+  default `nowo_site_backup_setup_step`) are now created on first use. Until now their `CREATE TABLE` failed on those
+  servers, so they do not exist yet: the account of the DBAL connection needs `CREATE` on the schema (as documented
+  since 1.2.0). With `chain` / `cache_doctrine`, progress was kept only in the JSON file / the cache pool; the first
+  save after the upgrade writes it to the database too. A host that runs the wizard on several servers, or wipes
+  `var/` / flushes the cache between runs, should check after the upgrade that completed steps are what it expects
+  (`nowo:site-backup:setup-status` or the wizard page) before resuming.
+- SQLite tables created by earlier versions are used as they are (nothing is altered or dropped).
+- `chain` / `cache_doctrine` now log one warning per request on the `site_backup` channel while the database is not
+  usable (expected before the database step of a cold start). Route or silence it like any other `site_backup`
+  warning.
+
+Concurrency (REQ-RUNTIME-003, see [CONCURRENCY.md](CONCURRENCY.md)). No configuration change is required.
+
+- **Lock-conflict status.** When another backup, restore, delete or import holds the operation lock, the panel now
+  answers **409** (it answered 200, or 422 on the create form) with `Retry-After` and `X-Conflict-Code: CONFLICT_001`.
+  The setup wizard answers 409 the same way when another setup run is in progress, and its JSON API answers
+  `409 {"error": "setup_running", "code": "CONFLICT_001"}`. Keep the old retry handling on 503 with
+  `nowo_site_backup.conflict_response.status: 503`.
+- **Setup runs are serialised.** `SetupOrchestrator::advance()` and `resetProgress()` throw
+  `SetupAlreadyRunningException` while another run holds the setup lock (`nowo:site-backup:setup`,
+  `setup-reset` and `setup-token --open` then fail with that message). With `lock.factory` the setup lock always takes
+  both the local file `<storage_dir>/.setup.lock` (first) and the key `<backup.lock.key>.setup`, whatever
+  `setup.lock_fallback_local` says; without `lock.factory` it takes the file only. So with `lock.factory`,
+  `storage_dir` must now also be writable and support `flock()` for the setup wizard (a file system without a lock
+  manager answers 503).
+- **Clear status** (`SiteBackupManagerInterface::clearRestoreStatus()`) now takes the operation lock and may throw
+  `BackupAlreadyRunningException`. It never clears a restore that is still running: it throws
+  `RestoreStillRunningException` (the panel shows "A restore is still running"), and
+  `RestoreOrchestrator::clearFailedOrCompleted()` now returns `bool` (false = nothing cleared).
+- **Store failures are not conflicts.** `BackupOperationLock::acquire()` throws `OperationLockUnavailableException`
+  (not `BackupAlreadyRunningException`) when the lock file cannot be opened or locked (`flock()` fails without
+  "would block": ENOLCK, NFS / CIFS without a lock manager) or the lock store fails. Code that caught
+  `BackupAlreadyRunningException` for those cases should also catch the new exception (both implement
+  `SiteBackupException`).
+- **Lock file or store failures, visible effects.** An unopenable lock file now makes `nowo:site-backup:create` exit
+  **1** (it exited 75, `EXIT_LOCKED`, as if another backup ran); schedulers that retry on 75 only should treat 1 as an
+  error to look at. The `sql_file` setup step with the PDO importer took no lock before: it now fails with "SQL import
+  not started" (nothing imported) when a backup holds the lock or the lock store is unavailable; retry the step.
+- **Setup lock fallback.** New `setup.lock_fallback_local` (`cold_only` by default) decides only what happens when the
+  shared lock store fails: keep the local file alone (cold first install) or answer 503 (configured or re-opened
+  instance). The local file is taken either way when `lock.factory` exists. Set
+  `always` only with a single server. `cold_only` treats a durable done store that throws as cold; with several
+  servers and an ephemeral `var/`, set `never`. Install ext-posix (suggested) so subprocess trees are killed without
+  the `kill` binary.
+- **Several servers** sharing the database or the storage need a shared `framework.lock` store (Redis, PDO / DBAL);
+  `flock()` serialises one host only.
+- New optional constructor arguments (all with defaults): `BackupOperationLock` (`$fileName`, `$logger`,
+  `$retryAfterSeconds`, `$localFallback`), `SetupOrchestrator` (`$setupLock`), `SetupStepFactory` and `SqlFileStep`
+  (`$operationLock`), `SiteBackupPanelController` and `SetupWizardController` (`$conflictStatus`),
+  `DumpImporter::import()` (`$heldLock`).
+
 ## To 1.36.1
 
 From **1.36.0**:

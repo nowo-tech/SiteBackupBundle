@@ -8,7 +8,10 @@ use DateTimeImmutable;
 use Nowo\SiteBackupBundle\Database\DumpImporter;
 use Nowo\SiteBackupBundle\Exception\BackupAlreadyRunningException;
 use Nowo\SiteBackupBundle\Exception\DumpFailedException;
+use Nowo\SiteBackupBundle\Exception\OperationLockUnavailableException;
 use Nowo\SiteBackupBundle\Incremental\RestoreMarker;
+use Nowo\SiteBackupBundle\Lock\BackupOperationLock;
+use Nowo\SiteBackupBundle\Lock\BackupOperationLockHandle;
 use Nowo\SiteBackupBundle\Setup\SetupContext;
 use Nowo\SiteBackupBundle\Setup\SetupStepInput;
 use Nowo\SiteBackupBundle\Setup\SetupStepResult;
@@ -54,6 +57,8 @@ final class SqlFileStep extends AbstractSetupStep
 
     /**
      * @param list<string> $paths Absolute or project-relative paths / globs
+     * @param BackupOperationLock|null $operationLock 1.37+: held for the whole import (every file, both importers), so a
+     *                                                backup or restore never runs in the middle of it
      */
     public function __construct(
         string $id,
@@ -64,6 +69,7 @@ final class SqlFileStep extends AbstractSetupStep
         private readonly string $importer = self::IMPORTER_PDO,
         private readonly ?DumpImporter $dumpImporter = null,
         private readonly ?string $restoreMarkerPath = null,
+        private readonly ?BackupOperationLock $operationLock = null,
     ) {
         parent::__construct($id, $label);
     }
@@ -93,6 +99,25 @@ final class SqlFileStep extends AbstractSetupStep
             return SetupStepResult::fail('No SQL files matched the configured paths.');
         }
 
+        // 1.37+ (REQ-RUNTIME-003): one lock for every file, taken before anything is written (the retry is safe).
+        try {
+            $lock = $this->operationLock?->acquire();
+        } catch (BackupAlreadyRunningException|OperationLockUnavailableException $e) {
+            return SetupStepResult::fail(sprintf('SQL import not started: %s', $e->getMessage()));
+        }
+
+        try {
+            return $this->importLocked($ctx, $files, $lock);
+        } finally {
+            $lock?->release();
+        }
+    }
+
+    /**
+     * @param list<string> $files
+     */
+    private function importLocked(SetupContext $ctx, array $files, ?BackupOperationLockHandle $lock): SetupStepResult
+    {
         // PP-D3-L1: an import writes the database (and its binary log): it closes the chains like a restore. Recorded
         // before anything is imported; when it cannot be recorded, nothing is imported.
         if ($this->restoreMarkerPath !== null) {
@@ -104,7 +129,7 @@ final class SqlFileStep extends AbstractSetupStep
         }
 
         if ($this->importer === self::IMPORTER_CLIENT) {
-            return $this->importWithClient($ctx, $files);
+            return $this->importWithClient($ctx, $files, $lock);
         }
 
         if ($this->connection === null || !is_object($this->connection) || !method_exists($this->connection, 'executeStatement')) {
@@ -123,6 +148,7 @@ final class SqlFileStep extends AbstractSetupStep
                     continue;
                 }
                 $current = $file;
+                $lock?->refresh();
                 $this->connection->executeStatement($sql);
                 $log[] = sprintf('imported: %s', $file);
                 $this->discardRestoreDump($ctx, $file);
@@ -138,7 +164,7 @@ final class SqlFileStep extends AbstractSetupStep
     /**
      * @param list<string> $files
      */
-    private function importWithClient(SetupContext $ctx, array $files): SetupStepResult
+    private function importWithClient(SetupContext $ctx, array $files, ?BackupOperationLockHandle $lock): SetupStepResult
     {
         if (!$this->dumpImporter instanceof DumpImporter) {
             return SetupStepResult::fail('importer: client needs the mysql client importer (nowo_site_backup.backup.database.url).');
@@ -147,7 +173,7 @@ final class SqlFileStep extends AbstractSetupStep
         $log = [];
         foreach ($files as $file) {
             try {
-                $this->dumpImporter->import($file);
+                $this->dumpImporter->import($file, null, $lock);
             } catch (DumpFailedException|BackupAlreadyRunningException $e) {
                 return SetupStepResult::fail(sprintf('SQL import failed for %s (%s).', basename($file), $e->getMessage()), $log);
             }

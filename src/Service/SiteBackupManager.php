@@ -23,6 +23,7 @@ use Nowo\SiteBackupBundle\Exception\BinlogGapException;
 use Nowo\SiteBackupBundle\Exception\ChainBrokenException;
 use Nowo\SiteBackupBundle\Exception\CorruptArchiveException;
 use Nowo\SiteBackupBundle\Exception\InvalidBackupOptionsException;
+use Nowo\SiteBackupBundle\Exception\RestoreStillRunningException;
 use Nowo\SiteBackupBundle\Exception\WrongPasswordException;
 use Nowo\SiteBackupBundle\Incremental\BackupChain;
 use Nowo\SiteBackupBundle\Incremental\ChainRestoreReport;
@@ -130,7 +131,7 @@ final class SiteBackupManager implements SiteBackupManagerInterface, Incremental
                 // @igor-ignore - Per-call options; the closure lives only for this backup and is never stored on the service.
                 $options = $options->withHeartbeat(static function (BackupProgress $progress) use ($lock, $inner): void {
                     $lock->refresh();
-                    if ($inner !== null) {
+                    if ($inner instanceof Closure) {
                         $inner($progress);
                     }
                 });
@@ -625,8 +626,17 @@ final class SiteBackupManager implements SiteBackupManagerInterface, Incremental
 
     public function clearRestoreStatus(): void
     {
-        // @igor-ignore - Service coordinates I/O or request-scoped work; not unsafe worker singleton state.
-        $this->restoreOrchestrator->clearFailedOrCompleted();
+        // 1.37+: a restore in another process holds the lock; clearing its progress would drop the loading page.
+        $lock = $this->operationLock?->acquire();
+
+        try {
+            // @igor-ignore - Service coordinates I/O or request-scoped work; not unsafe worker singleton state.
+            if (!$this->restoreOrchestrator->clearFailedOrCompleted()) {
+                throw new RestoreStillRunningException();
+            }
+        } finally {
+            $lock?->release();
+        }
     }
 
     /**

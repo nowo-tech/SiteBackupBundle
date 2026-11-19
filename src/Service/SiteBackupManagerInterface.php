@@ -8,6 +8,7 @@ use Nowo\SiteBackupBundle\Backup\VerifyFileResult;
 use Nowo\SiteBackupBundle\Event\SiteBackupEvents;
 use Nowo\SiteBackupBundle\Exception\BackupAlreadyRunningException;
 use Nowo\SiteBackupBundle\Exception\CorruptArchiveException;
+use Nowo\SiteBackupBundle\Exception\RestoreStillRunningException;
 use Nowo\SiteBackupBundle\Exception\WrongPasswordException;
 use Nowo\SiteBackupBundle\Model\ArchivePassword;
 use Nowo\SiteBackupBundle\Model\BackupArtifact;
@@ -74,6 +75,12 @@ interface SiteBackupManagerInterface
      */
     public function restore(string $backupId, ?string $actor = null): RestoreProgress;
 
+    /**
+     * Clears a failed or completed restore status. 1.37+: under the operation lock, never while a restore runs.
+     *
+     * @throws BackupAlreadyRunningException when a backup / restore holds the operation lock (1.37+)
+     * @throws RestoreStillRunningException when a restore is still running (1.37+)
+     */
     public function clearRestoreStatus(): void;
 
     /**

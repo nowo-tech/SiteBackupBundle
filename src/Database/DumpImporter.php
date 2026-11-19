@@ -131,11 +131,22 @@ final class DumpImporter
 
     /**
      * @param (callable(): void)|null $tick called while the client runs
+     * @param BackupOperationLockHandle|null $heldLock 1.37+: the caller already holds the operation lock (several files
+     *                                                 imported as one unit); it is refreshed, never released here
      *
      * @throws BackupAlreadyRunningException|DumpFailedException
      */
-    public function import(string $file, ?callable $tick = null): void
+    public function import(string $file, ?callable $tick = null, ?BackupOperationLockHandle $heldLock = null): void
     {
+        if ($heldLock instanceof BackupOperationLockHandle) {
+            if (!is_file($file) || !is_readable($file)) {
+                throw new DumpFailedException('SQL import: the dump file is missing or not readable.');
+            }
+            $this->run($file, null, $tick, $heldLock);
+
+            return;
+        }
+
         $this->importInto($file, null, $tick);
     }
 
@@ -189,7 +200,7 @@ final class DumpImporter
         try {
             $refreshed = hrtime(true);
             ProcessDeadline::run($process, $this->timeoutSeconds, static function () use ($tick, $lock, &$refreshed): void {
-                if ($lock !== null && hrtime(true) - $refreshed > 5_000_000_000) {
+                if ($lock instanceof BackupOperationLockHandle && hrtime(true) - $refreshed > 5_000_000_000) {
                     $lock->refresh();
                     $refreshed = hrtime(true);
                 }
@@ -249,7 +260,7 @@ final class DumpImporter
      */
     public function createSchema(string $schema): void
     {
-        $this->execute(sprintf('CREATE DATABASE `%s`', self::schemaName($schema)));
+        $this->execute(sprintf('CREATE DATABASE `%s`', $this->schemaName($schema)));
     }
 
     /**
@@ -257,7 +268,7 @@ final class DumpImporter
      */
     public function dropSchema(string $schema): void
     {
-        $this->execute(sprintf('DROP DATABASE IF EXISTS `%s`', self::schemaName($schema)));
+        $this->execute(sprintf('DROP DATABASE IF EXISTS `%s`', $this->schemaName($schema)));
     }
 
     public function databaseName(): string
@@ -269,7 +280,7 @@ final class DumpImporter
         }
     }
 
-    private static function schemaName(string $schema): string
+    private function schemaName(string $schema): string
     {
         if (preg_match('/^[A-Za-z0-9_]{1,64}$/', $schema) !== 1) {
             throw new DumpFailedException('Schema names must match [A-Za-z0-9_]{1,64}.');

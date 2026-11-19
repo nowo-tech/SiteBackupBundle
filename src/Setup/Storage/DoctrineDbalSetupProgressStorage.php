@@ -27,8 +27,8 @@ use const JSON_THROW_ON_ERROR;
  * Persists setup progress in a singleton DBAL table (survives wiping var/).
  *
  * Soft-depends on Doctrine DBAL via duck-typing — no hard composer require.
- * Creates {@see self::TABLE} on first successful write when the connection works
- * (runtime DDL — not Symfony Migrations; early wizard steps may have no DB yet).
+ * Creates {@see self::TABLE} on first use when the connection works (runtime DDL — not Symfony Migrations;
+ * early wizard steps may have no DB yet). The DDL is portable since 1.37 ({@see SetupTableDdl}).
  *
  * When a {@see DoctrineDbalSetupStepJournal} is wired, each save also upserts
  * per-step rows (soft-fail) and load merges completed step ids from the journal.
@@ -62,26 +62,41 @@ final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInte
         }
 
         try {
-            $row = $this->withSchema(fn (): ?array => $this->fetchRow());
-            if ($row === null) {
-                $progress = new SetupProgress();
-            } else {
-                $payload = $row['payload'] ?? null;
-                if (is_string($payload) && $payload !== '') {
-                    try {
-                        /** @var array<string, mixed> $data */
-                        $data = json_decode($payload, true, 512, JSON_THROW_ON_ERROR);
+            return $this->loadOrFail();
+        } catch (Throwable) {
+            // Cold start: no database / table yet reads as idle.
+            return new SetupProgress();
+        }
+    }
 
-                        $progress = SetupProgress::fromArray($data);
-                    } catch (JsonException) {
-                        $progress = new SetupProgress();
-                    }
-                } else {
+    /**
+     * Like {@see load()} but lets the database error through, so a fallback storage can report it (1.37+).
+     *
+     * @throws Throwable when the connection is unusable, the table cannot be created or the row cannot be read
+     */
+    public function loadOrFail(): SetupProgress
+    {
+        if (!$this->isUsable()) {
+            throw new RuntimeException('Doctrine DBAL connection is not available for setup progress storage.');
+        }
+
+        $row = $this->withSchema(fn (): ?array => $this->fetchRow());
+        if ($row === null) {
+            $progress = new SetupProgress();
+        } else {
+            $payload = $row['payload'] ?? null;
+            if (is_string($payload) && $payload !== '') {
+                try {
+                    /** @var array<string, mixed> $data */
+                    $data = json_decode($payload, true, 512, JSON_THROW_ON_ERROR);
+
+                    $progress = SetupProgress::fromArray($data);
+                } catch (JsonException) {
                     $progress = new SetupProgress();
                 }
+            } else {
+                $progress = new SetupProgress();
             }
-        } catch (Throwable) {
-            return new SetupProgress();
         }
 
         return $this->enrichFromStepJournal($progress);
@@ -150,41 +165,67 @@ final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInte
     private function persistRow(array $params): void
     {
         if ($this->fetchRow() === null) {
-            $this->executeStatement(
-                sprintf(
-                    'INSERT INTO %s (id, phase, profile, current_step_id, percent, started_at, updated_at, completed_at, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    $this->quoteTable(),
-                ),
-                [
-                    $params['id'],
-                    $params['phase'],
-                    $params['profile'],
-                    $params['current_step_id'],
-                    $params['percent'],
-                    $params['started_at'],
-                    $params['updated_at'],
-                    $params['completed_at'],
-                    $params['payload'],
-                ],
-            );
-        } else {
-            $this->executeStatement(
-                sprintf(
-                    'UPDATE %s SET phase = ?, profile = ?, current_step_id = ?, percent = ?, started_at = ?, updated_at = ?, completed_at = ?, payload = ? WHERE id = 1',
-                    $this->quoteTable(),
-                ),
-                [
-                    $params['phase'],
-                    $params['profile'],
-                    $params['current_step_id'],
-                    $params['percent'],
-                    $params['started_at'],
-                    $params['updated_at'],
-                    $params['completed_at'],
-                    $params['payload'],
-                ],
-            );
+            try {
+                $this->insertRow($params);
+
+                return;
+            } catch (Throwable $e) {
+                // 1.37+: another process inserted row 1 first (the "only one" race): update it instead. Any other
+                // failure leaves no row and is rethrown.
+                if ($this->fetchRow() === null) {
+                    throw $e;
+                }
+            }
         }
+
+        $this->updateRow($params);
+    }
+
+    /**
+     * @param array<string, mixed> $params
+     */
+    private function insertRow(array $params): void
+    {
+        $this->executeStatement(
+            sprintf(
+                'INSERT INTO %s (id, phase, profile, current_step_id, percent, started_at, updated_at, completed_at, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                $this->quoteTable(),
+            ),
+            [
+                $params['id'],
+                $params['phase'],
+                $params['profile'],
+                $params['current_step_id'],
+                $params['percent'],
+                $params['started_at'],
+                $params['updated_at'],
+                $params['completed_at'],
+                $params['payload'],
+            ],
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $params
+     */
+    private function updateRow(array $params): void
+    {
+        $this->executeStatement(
+            sprintf(
+                'UPDATE %s SET phase = ?, profile = ?, current_step_id = ?, percent = ?, started_at = ?, updated_at = ?, completed_at = ?, payload = ? WHERE id = 1',
+                $this->quoteTable(),
+            ),
+            [
+                $params['phase'],
+                $params['profile'],
+                $params['current_step_id'],
+                $params['percent'],
+                $params['started_at'],
+                $params['updated_at'],
+                $params['completed_at'],
+                $params['payload'],
+            ],
+        );
     }
 
     private function syncStepJournal(SetupProgress $progress): void
@@ -274,22 +315,25 @@ final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInte
             return;
         }
 
-        $sql = sprintf(
-            'CREATE TABLE IF NOT EXISTS %s (
-                id INTEGER NOT NULL PRIMARY KEY,
-                phase VARCHAR(32) NOT NULL,
-                profile VARCHAR(64) NOT NULL,
-                current_step_id VARCHAR(128) DEFAULT NULL,
-                percent DOUBLE PRECISION NOT NULL DEFAULT 0,
-                started_at DATETIME DEFAULT NULL,
-                updated_at DATETIME DEFAULT NULL,
-                completed_at DATETIME DEFAULT NULL,
-                payload CLOB NOT NULL
-            )',
+        // 1.37+: column types from the connection's platform (the 1.2-1.36 CLOB / DATETIME only worked on SQLite).
+        SetupTableDdl::ensureTable(
+            $this->connection,
             $this->quoteTable(),
+            [
+                'id INTEGER NOT NULL PRIMARY KEY',
+                'phase VARCHAR(32) NOT NULL',
+                'profile VARCHAR(64) NOT NULL',
+                'current_step_id VARCHAR(128) DEFAULT NULL',
+                'percent {double} NOT NULL DEFAULT 0',
+                'started_at {datetime} DEFAULT NULL',
+                'updated_at {datetime} DEFAULT NULL',
+                'completed_at {datetime} DEFAULT NULL',
+                'payload {text} NOT NULL',
+            ],
+            function (string $sql): void {
+                $this->executeStatement($sql, []);
+            },
         );
-
-        $this->executeStatement($sql, []);
         $this->schemaEnsured = true;
         $this->ddlMemo?->mark();
     }
@@ -301,6 +345,8 @@ final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInte
 
     /**
      * @return array<string, mixed>|null
+     *
+     * @phpstan-impure
      */
     private function fetchRow(): ?array
     {

@@ -171,7 +171,10 @@ jobs:
           for flavour in oracle mariadb; do
             if [ "$flavour" = oracle ]; then IMAGE=mysql:8.4; BIN=mysql; else IMAGE=mariadb:11.8; BIN=mariadb; fi
             docker pull -q "$IMAGE" >/dev/null
-            printf '#!/bin/sh\nexec docker run --rm -i --network host --user %s -e MYSQL_PWD -v "%s:%s" %s %s "$@"\n' "$(id -u):$(id -g)" "$SHARED" "$SHARED" "$IMAGE" "$BIN" > "$RUNNER_TEMP/bin/$flavour-client"
+            # One long-lived client container per flavour: a cold `docker run` per call could exceed the importer's
+            # 30 s `mysql --version` probe on a busy runner (run 44087518905).
+            docker run -d --name "sbb-client-$flavour" --network host --user "$(id -u):$(id -g)" -v "$SHARED:$SHARED" --entrypoint sleep "$IMAGE" infinity >/dev/null
+            printf '#!/bin/sh\nexec docker exec -i -e MYSQL_PWD %s %s "$@"\n' "sbb-client-$flavour" "$BIN" > "$RUNNER_TEMP/bin/$flavour-client"
             chmod +x "$RUNNER_TEMP/bin/$flavour-client"
             "$RUNNER_TEMP/bin/$flavour-client" --version
           done
@@ -187,7 +190,76 @@ jobs:
 
       - name: Stop MySQL
         if: always()
-        run: docker rm -f sbb-mysql >/dev/null 2>&1 || true
+        run: docker rm -f sbb-mysql sbb-client-oracle sbb-client-mariadb >/dev/null 2>&1 || true
+
+  # REQ-RUNTIME-003: separate PHP processes race on a shared lock store (Symfony Lock PdoStore) on each server; only
+  # one backup / restore / setup run may hold the operation lock. Sessions use a 5 s lock wait, children a hard timeout.
+  lock-store-races:
+    name: Databases (lock-store races)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: race
+          MYSQL_DATABASE: race
+        ports: ['127.0.0.1:3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -prace" --health-interval=5s --health-timeout=5s --health-retries=30
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: race
+          MARIADB_DATABASE: race
+        ports: ['127.0.0.1:3307:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized" --health-interval=5s --health-timeout=5s --health-retries=30
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: race
+          POSTGRES_DB: race
+        ports: ['127.0.0.1:5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U postgres" --health-interval=5s --health-timeout=5s --health-retries=30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: json, zip, pdo_mysql, pdo_pgsql
+          coverage: none
+          tools: composer:v2
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Races on the flock fallback, FlockStore and PdoStore (MySQL 8.4, MariaDB 11.4, PostgreSQL 16)
+        timeout-minutes: 10
+        env:
+          SBB_RACE_MYSQL: 'mysql:host=127.0.0.1;port=3306;dbname=race|root|race'
+          SBB_RACE_MARIADB: 'mysql:host=127.0.0.1;port=3307;dbname=race|root|race'
+          SBB_RACE_PGSQL: 'pgsql:host=127.0.0.1;port=5432;dbname=race|postgres|race'
+        run: vendor/bin/phpunit --no-coverage --display-skipped --fail-on-skipped tests/Integration/Concurrency
+
+  # The demo installs the bundle from a path repository; its lock (when present) must satisfy the bundle's
+  # nowo-tech requirements. No nowo-tech/transaction-* dependency, so no dependency-floor job.
+  demo-lock:
+    name: Demo lock
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Demo lock satisfies the bundle's nowo-tech requirements
+        run: python3 .scripts/check-demo-lock.py . --only 'nowo-tech/*'
 
   # 1.36+ (Beacon E0 items 9-11): binlog incrementals against a real MySQL 9 server and the Oracle client tools.
   binlog-incrementals:
@@ -223,7 +295,6 @@ jobs:
       - name: Start MySQL 9.7 with binary logs and create the Oracle client wrappers
         run: |
           set -eu
-          command -v bsdtar || { sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends libarchive-tools; }
           # Three throwaway passwords (masked): the app's account, the backup account, the restore account (PP-M4).
           PWA="ci-$(openssl rand -hex 12)"; PWB="ci-$(openssl rand -hex 12)"; PWR="ci-$(openssl rand -hex 12)"
           echo "::add-mask::$PWA"; echo "::add-mask::$PWB"; echo "::add-mask::$PWR"
@@ -245,7 +316,14 @@ jobs:
           curl -fsSL -o "$RUNNER_TEMP/client.rpm" https://repo.mysql.com/yum/mysql-9.7-community/el/9/x86_64/mysql-community-client-9.7.2-1.el9.x86_64.rpm
           echo "888efdbf8f63750686377e520bf2e3df2e98c1cfb5b1cb21ebc8ce65e359b0c5  $RUNNER_TEMP/client.rpm" | sha256sum -c -
           mkdir -p "$RUNNER_TEMP/rpm" "$RUNNER_TEMP/bin"
-          bsdtar -xf "$RUNNER_TEMP/client.rpm" -C "$RUNNER_TEMP/rpm" ./usr/bin/mysqlbinlog
+          # bsdtar from the runner when present, else from an Alpine container: the Ubuntu apt mirrors time out at times
+          # (runs 44522096215, 44523653206), and this job must not depend on them.
+          if command -v bsdtar >/dev/null; then
+            bsdtar -xf "$RUNNER_TEMP/client.rpm" -C "$RUNNER_TEMP/rpm" ./usr/bin/mysqlbinlog
+          else
+            docker run --rm -v "$RUNNER_TEMP/client.rpm:/in/client.rpm:ro" -v "$RUNNER_TEMP/rpm:/out" alpine:3.22 sh -c 'apk add -q --no-cache libarchive-tools && bsdtar -xf /in/client.rpm -C /out ./usr/bin/mysqlbinlog && chown -R '"$(id -u):$(id -g)"' /out'
+          fi
+          test -x "$RUNNER_TEMP/rpm/usr/bin/mysqlbinlog"
           SHARED="$RUNNER_TEMP/sbb-binlog"
           mkdir -p "$SHARED"
           for tool in mysql mysqldump mysqlbinlog; do
@@ -276,6 +354,69 @@ jobs:
       - name: Stop MySQL
         if: always()
         run: docker rm -f sbb-mysql9 >/dev/null 2>&1 || true
+
+  # 1.37+ (UT-2): the runtime DDL of the setup progress and step tables on real servers, with DBAL 3 and DBAL 4
+  # (doctrine/dbal is a soft dependency: installed for this job only).
+  setup-storage-databases:
+    name: Setup storage DDL (MySQL 8.4, MariaDB 11.4, PostgreSQL 16, SQLite - DBAL ${{ matrix.dbal }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        dbal: ['3', '4']
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: ddl
+          MYSQL_DATABASE: ddl
+        ports: ['127.0.0.1:3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pddl" --health-interval=5s --health-timeout=5s --health-retries=30
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: ddl
+          MARIADB_DATABASE: ddl
+        ports: ['127.0.0.1:3307:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized" --health-interval=5s --health-timeout=5s --health-retries=30
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ddl
+          POSTGRES_DB: ddl
+        ports: ['127.0.0.1:5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U postgres" --health-interval=5s --health-timeout=5s --health-retries=30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: json, zip, pdo_mysql, pdo_pgsql, pdo_sqlite
+          coverage: none
+          tools: composer:v2
+
+      - name: Install dependencies with doctrine/dbal ${{ matrix.dbal }}
+        run: |
+          composer install --no-interaction --prefer-dist --no-progress
+          composer require --dev --no-interaction --no-progress -W "doctrine/dbal:^${{ matrix.dbal }}"
+          composer show doctrine/dbal | grep -E '^versions'
+
+      - name: Progress and step tables on real servers (save / load / reset, insert then update, concurrent first use)
+        timeout-minutes: 10
+        env:
+          SBB_DDL_MYSQL: 'pdo-mysql://root:ddl@127.0.0.1:3306/ddl'
+          SBB_DDL_MARIADB: 'pdo-mysql://root:ddl@127.0.0.1:3307/ddl'
+          SBB_DDL_PGSQL: 'pdo-pgsql://postgres:ddl@127.0.0.1:5432/ddl'
+        run: vendor/bin/phpunit --no-coverage --display-skipped --fail-on-skipped tests/Integration/SetupStorage
 
   code-style:
     name: Code Style

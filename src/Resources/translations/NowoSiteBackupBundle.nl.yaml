@@ -81,6 +81,9 @@ panel:
   error:
     invalid_csrf: 'Ongeldig CSRF-token.'
     access_denied: 'Toegang geweigerd.'
+    operation_running: 'Er loopt al een andere back-up of herstelactie. Er is niets gewijzigd; probeer het over een paar minuten opnieuw.'
+    restore_still_running: 'Er loopt nog een herstelactie; de status is niet gewist.'
+    lock_unavailable: 'De operatievergrendeling is niet beschikbaar. Er is niets gewijzigd; probeer het later opnieuw.'
     backup_not_found: 'Back-up niet gevonden.'
   create:
     intro: 'Archiveert de geconfigureerde paden en de databasedump in een .tar.gz met controlesommen.'
@@ -143,6 +146,8 @@ setup:
   error:
     invalid_csrf: 'Ongeldig CSRF-token.'
     invalid_request: 'Ongeldig installatieverzoek.'
+    setup_running: 'Er loopt al een andere installatierun. Er is niets gewijzigd; probeer het zo opnieuw.'
+    lock_unavailable: 'De installatievergrendeling is niet beschikbaar. Er is niets gewijzigd; probeer het later opnieuw.'
   reason:
     heading: 'Installatie vereist'
     db_connection: 'De database is niet bereikbaar met de huidige DATABASE_URL (ontbreekt, onjuist of de databaseservice is niet actief).'
