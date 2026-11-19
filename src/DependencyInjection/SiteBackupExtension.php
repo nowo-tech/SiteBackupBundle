@@ -1227,9 +1227,12 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$stepRowsEnabled', $stepRowsEnabled)
             ->setArgument('$ddlMemo', $ddlTtl > 0 ? $this->workerMemo($ddlTtl) : null);
 
+        // 1.37+: chain / cache_doctrine warn once per request when their database layer fails (site_backup channel).
         $container->getDefinition(ChainSetupProgressStorage::class)
             ->setArgument('$filesystem', new Reference(FilesystemSetupProgressStorage::class))
-            ->setArgument('$doctrine', new Reference(DoctrineDbalSetupProgressStorage::class));
+            ->setArgument('$doctrine', new Reference(DoctrineDbalSetupProgressStorage::class))
+            ->setArgument('$logger', new Reference('logger', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
+            ->addTag('monolog.logger', ['channel' => 'site_backup']);
 
         $usesCache = in_array($progressMode, ['cache', 'cache_doctrine'], true);
         if ($usesCache) {
@@ -1248,7 +1251,9 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
                 ->setArgument(
                     '$schemaChecker',
                     new Reference(SchemaExistenceCheckerInterface::class, ContainerBuilder::NULL_ON_INVALID_REFERENCE),
-                );
+                )
+                ->setArgument('$logger', new Reference('logger', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
+                ->addTag('monolog.logger', ['channel' => 'site_backup']);
         } else {
             $container->removeDefinition(CacheSetupProgressStorage::class);
             $container->removeDefinition(CacheDoctrineSetupProgressStorage::class);

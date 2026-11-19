@@ -30,6 +30,8 @@ services:
             - '../../Setup/Step/'
             - '../../Setup/Memo/'
             - '../../Setup/ColdStart/MemoizedSchemaExistenceChecker.php'
+            - '../../Setup/Storage/SetupTableDdl.php'
+            - '../../Setup/Storage/SetupProgressFallbackWarning.php'
             - '../../Database/'
             - '../../Security/PanelRequestContext.php'
             - '../../Security/HttpFoundationPanelSession.php'

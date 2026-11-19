@@ -90,6 +90,29 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Demo `.gitignore` ignores `/.pnpm-store` (REQ-GITIGNORE-003); demo `config/preload.php` declares strict types (REQ-CS-004)
 - Canonical `.scrutinizer.yml` (REQ-CI-002); Dependabot watches the demo Playwright `e2e/` npm manifest (REQ-GH-002)
 - Spec Kit: the 113 `src/` files added since the 2026-11-01 baseline review are mapped in `code-inventory.md`, with eight new area requirements in `spec.md` (REQ-SPECKIT-001 / REQ-SPECKIT-003)
+- **Setup progress fallback warning (UT-2):** `chain` and `cache_doctrine` log one warning per request on the
+  `site_backup` channel when their database layer fails and they fall back to the file / cache copy (storage,
+  operation, fallback, exception class and driver code; never the exception message). They used to swallow the
+  error silently.
+
+### Fixed
+
+- **Portable DDL for the DBAL setup tables (UT-2):** the runtime `CREATE TABLE` of the setup progress table
+  (`setup.progress_table`, affected `>= 1.2.0, < 1.37.0`) and of the per-step journal (`setup.progress_steps_table`,
+  affected `>= 1.11.0, < 1.37.0`) used `CLOB` and `DATETIME`, which only SQLite accepts: MySQL / MariaDB failed
+  with error 1064 and PostgreSQL with `type "datetime" does not exist`. Consequences on those servers:
+  - `progress_storage: doctrine`: the first save threw `Unable to prepare setup progress table` (the wizard answered
+    500) and load always read an idle wizard;
+  - `chain` / `cache_doctrine`: the database error was swallowed, so the progress only ever lived in the JSON file /
+    the cache pool and `CREATE TABLE` was retried on every load and save. Progress did not survive a `var/` wipe or a
+    cache flush and was not shared between servers; after such a wipe, or on another server, completed steps
+    (`sql_file`, migrations, seeds) could run again.
+
+  The column types now come from the connection's DBAL platform (DBAL 3 and 4): `LONGTEXT` / `DATETIME` on MySQL
+  and MariaDB, `TEXT` / `TIMESTAMP(0) WITHOUT TIME ZONE` on PostgreSQL, `CLOB` / `DATETIME` on SQLite (unchanged).
+  `CREATE TABLE IF NOT EXISTS` is kept where supported; elsewhere, and when two processes create the table at the
+  same moment, a failed `CREATE TABLE` is accepted when the table is there. Existing tables are never altered.
+  Covered by real-server tests on MySQL 8.4, MariaDB 11.4, PostgreSQL 16 and SQLite (new CI job).
 
 ## [1.36.1] - 2026-11-14
 

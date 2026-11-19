@@ -7,6 +7,8 @@ namespace Nowo\SiteBackupBundle\Setup\Storage;
 use DateTimeImmutable;
 use Nowo\SiteBackupBundle\Model\SetupProgress;
 use Nowo\SiteBackupBundle\Setup\ColdStart\SchemaExistenceCheckerInterface;
+use Psr\Log\LoggerInterface;
+use Symfony\Contracts\Service\ResetInterface;
 use Throwable;
 
 /**
@@ -14,28 +16,40 @@ use Throwable;
  * Loads Doctrine first (survives cache flush), then falls back to cache.
  *
  * Unlike {@see ChainSetupProgressStorage}, never writes JSON under {@code var/}.
+ *
+ * 1.37+: a database failure is logged once per request (warning, no exception message) through
+ * {@see SetupProgressFallbackWarning} instead of being swallowed silently. The Doctrine layer is still tried on
+ * every call: the database often appears in the middle of a wizard request (database_create step).
  */
-final class CacheDoctrineSetupProgressStorage implements SetupProgressStorageInterface
+final class CacheDoctrineSetupProgressStorage implements SetupProgressStorageInterface, ResetInterface
 {
+    private readonly SetupProgressFallbackWarning $warning;
+
     public function __construct(
         private readonly CacheSetupProgressStorage $cache,
         private readonly SetupProgressStorageInterface $doctrine,
         private readonly ?SchemaExistenceCheckerInterface $schemaChecker = null,
+        ?LoggerInterface $logger = null,
     ) {
+        $this->warning = new SetupProgressFallbackWarning($logger, 'cache_doctrine', 'cache');
     }
 
     public function load(): SetupProgress
     {
         if ($this->doctrineLooksUsable()) {
             try {
-                $fromDb = $this->doctrine->load();
-                if ($this->hasMeaningfulProgress($fromDb)) {
-                    $this->cache->save($fromDb);
+                $fromDb = $this->doctrine instanceof DoctrineDbalSetupProgressStorage
+                    ? $this->doctrine->loadOrFail()
+                    : $this->doctrine->load();
+            } catch (Throwable $e) {
+                $this->warning->report('load', $e);
+                $fromDb = null;
+            }
 
-                    return $fromDb;
-                }
-            } catch (Throwable) {
-                // Fall through to cache.
+            if ($fromDb instanceof SetupProgress && $this->hasMeaningfulProgress($fromDb)) {
+                $this->cache->save($fromDb);
+
+                return $fromDb;
             }
         }
 
@@ -59,9 +73,15 @@ final class CacheDoctrineSetupProgressStorage implements SetupProgressStorageInt
 
         try {
             $this->doctrine->save($progress);
-        } catch (Throwable) {
+        } catch (Throwable $e) {
             // Cache remains source of truth until database_create / DBAL works.
+            $this->warning->report('save', $e);
         }
+    }
+
+    public function reset(): void
+    {
+        $this->warning->reset();
     }
 
     private function doctrineLooksUsable(): bool

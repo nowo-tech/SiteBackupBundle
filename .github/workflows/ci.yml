@@ -277,6 +277,69 @@ jobs:
         if: always()
         run: docker rm -f sbb-mysql9 >/dev/null 2>&1 || true
 
+  # 1.37+ (UT-2): the runtime DDL of the setup progress and step tables on real servers, with DBAL 3 and DBAL 4
+  # (doctrine/dbal is a soft dependency: installed for this job only).
+  setup-storage-databases:
+    name: Setup storage DDL (MySQL 8.4, MariaDB 11.4, PostgreSQL 16, SQLite - DBAL ${{ matrix.dbal }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    strategy:
+      fail-fast: false
+      matrix:
+        dbal: ['3', '4']
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: ddl
+          MYSQL_DATABASE: ddl
+        ports: ['127.0.0.1:3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -pddl" --health-interval=5s --health-timeout=5s --health-retries=30
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: ddl
+          MARIADB_DATABASE: ddl
+        ports: ['127.0.0.1:3307:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized" --health-interval=5s --health-timeout=5s --health-retries=30
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: ddl
+          POSTGRES_DB: ddl
+        ports: ['127.0.0.1:5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U postgres" --health-interval=5s --health-timeout=5s --health-retries=30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: json, zip, pdo_mysql, pdo_pgsql, pdo_sqlite
+          coverage: none
+          tools: composer:v2
+
+      - name: Install dependencies with doctrine/dbal ${{ matrix.dbal }}
+        run: |
+          composer install --no-interaction --prefer-dist --no-progress
+          composer require --dev --no-interaction --no-progress -W "doctrine/dbal:^${{ matrix.dbal }}"
+          composer show doctrine/dbal | grep -E '^versions'
+
+      - name: Progress and step tables on real servers (save / load / reset, insert then update, concurrent first use)
+        timeout-minutes: 10
+        env:
+          SBB_DDL_MYSQL: 'pdo-mysql://root:ddl@127.0.0.1:3306/ddl'
+          SBB_DDL_MARIADB: 'pdo-mysql://root:ddl@127.0.0.1:3307/ddl'
+          SBB_DDL_PGSQL: 'pdo-pgsql://postgres:ddl@127.0.0.1:5432/ddl'
+        run: vendor/bin/phpunit --no-coverage --display-skipped --fail-on-skipped tests/Integration/SetupStorage
+
   code-style:
     name: Code Style
     runs-on: ubuntu-latest

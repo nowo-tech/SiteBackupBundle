@@ -22,8 +22,8 @@ use function sprintf;
 /**
  * Per-step setup journal in DBAL (survives wiping var/; audit + resume).
  *
- * Tables are created with runtime DDL ({@see ensureSchema}) — never Symfony Migrations —
- * because early wizard steps run before the host DB / migrations exist.
+ * Tables are created with runtime DDL ({@see ensureSchema}, portable since 1.37 via {@see SetupTableDdl}) — never
+ * Symfony Migrations — because early wizard steps run before the host DB / migrations exist.
  *
  * The "schema ensured" memo is re-validated when a query fails (table dropped while a
  * long-lived worker keeps this service), and cleared by {@see reset()}. When a
@@ -291,22 +291,25 @@ final class DoctrineDbalSetupStepJournal implements ResetInterface
         }
 
         // Runtime DDL only — host migrations must not own this table (cold-start wizard).
-        $sql = sprintf(
-            'CREATE TABLE IF NOT EXISTS %s (
-                profile VARCHAR(64) NOT NULL,
-                step_id VARCHAR(128) NOT NULL,
-                status VARCHAR(32) NOT NULL,
-                step_order INTEGER NOT NULL DEFAULT 0,
-                started_at DATETIME DEFAULT NULL,
-                finished_at DATETIME DEFAULT NULL,
-                updated_at DATETIME DEFAULT NULL,
-                message CLOB DEFAULT NULL,
-                PRIMARY KEY (profile, step_id)
-            )',
+        // 1.37+: column types from the connection's platform (the 1.11-1.36 CLOB / DATETIME only worked on SQLite).
+        SetupTableDdl::ensureTable(
+            $this->connection,
             $this->quoteTable(),
+            [
+                'profile VARCHAR(64) NOT NULL',
+                'step_id VARCHAR(128) NOT NULL',
+                'status VARCHAR(32) NOT NULL',
+                'step_order INTEGER NOT NULL DEFAULT 0',
+                'started_at {datetime} DEFAULT NULL',
+                'finished_at {datetime} DEFAULT NULL',
+                'updated_at {datetime} DEFAULT NULL',
+                'message {text} DEFAULT NULL',
+                'PRIMARY KEY (profile, step_id)',
+            ],
+            function (string $sql): void {
+                $this->executeStatement($sql, []);
+            },
         );
-
-        $this->executeStatement($sql, []);
         $this->schemaEnsured = true;
         $this->ddlMemo?->mark();
     }

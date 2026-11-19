@@ -132,6 +132,19 @@
 
 ## Unreleased
 
+- **Hosts on `setup.progress_storage: doctrine`, `chain` or `cache_doctrine` with MySQL, MariaDB or PostgreSQL:** the
+  setup tables (`setup.progress_table`, default `nowo_site_backup_setup_progress`, and `setup.progress_steps_table`,
+  default `nowo_site_backup_setup_step`) are now created on first use. Until now their `CREATE TABLE` failed on those
+  servers, so they do not exist yet: the account of the DBAL connection needs `CREATE` on the schema (as documented
+  since 1.2.0). With `chain` / `cache_doctrine`, progress was kept only in the JSON file / the cache pool; the first
+  save after the upgrade writes it to the database too. A host that runs the wizard on several servers, or wipes
+  `var/` / flushes the cache between runs, should check after the upgrade that completed steps are what it expects
+  (`nowo:site-backup:setup-status` or the wizard page) before resuming.
+- SQLite tables created by earlier versions are used as they are (nothing is altered or dropped).
+- `chain` / `cache_doctrine` now log one warning per request on the `site_backup` channel while the database is not
+  usable (expected before the database step of a cold start). Route or silence it like any other `site_backup`
+  warning.
+
 ## To 1.36.1
 
 From **1.36.0**:
