@@ -149,10 +149,19 @@ Concurrency (REQ-RUNTIME-003, see [CONCURRENCY.md](CONCURRENCY.md)). No configur
   (not `BackupAlreadyRunningException`) when the lock file cannot be opened or the lock store fails. Code that caught
   `BackupAlreadyRunningException` for those cases should also catch the new exception (both implement
   `SiteBackupException`).
+- **Lock file or store failures, visible effects.** An unopenable lock file now makes `nowo:site-backup:create` exit
+  **1** (it exited 75, `EXIT_LOCKED`, as if another backup ran); schedulers that retry on 75 only should treat 1 as an
+  error to look at. The `sql_file` setup step with the PDO importer took no lock before: it now fails with "SQL import
+  not started" (nothing imported) when a backup holds the lock or the lock store is unavailable; retry the step.
+- **Setup lock fallback.** New `setup.lock_fallback_local` (`cold_only` by default): when the shared lock store fails
+  on a configured or re-opened instance, the wizard now answers 503 instead of falling back to a local lock file. Set
+  `always` only with a single server.
+- **Clear status** while a restore is still running throws `RestoreStillRunningException` (the panel shows "A restore
+  is still running"); `RestoreOrchestrator::clearFailedOrCompleted()` now returns `bool` (false = nothing cleared).
 - **Several servers** sharing the database or the storage need a shared `framework.lock` store (Redis, PDO / DBAL);
   `flock()` serialises one host only.
 - New optional constructor arguments (all with defaults): `BackupOperationLock` (`$fileName`, `$logger`,
-  `$retryAfterSeconds`, `$fallBackToFlock`), `SetupOrchestrator` (`$setupLock`), `SetupStepFactory` and `SqlFileStep`
+  `$retryAfterSeconds`, `$localFallback`), `SetupOrchestrator` (`$setupLock`), `SetupStepFactory` and `SqlFileStep`
   (`$operationLock`), `SiteBackupPanelController` and `SetupWizardController` (`$conflictStatus`),
   `DumpImporter::import()` (`$heldLock`).
 

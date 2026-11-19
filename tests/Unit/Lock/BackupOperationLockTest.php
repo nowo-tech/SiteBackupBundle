@@ -7,6 +7,7 @@ namespace Nowo\SiteBackupBundle\Tests\Unit\Lock;
 use Nowo\SiteBackupBundle\Exception\BackupAlreadyRunningException;
 use Nowo\SiteBackupBundle\Exception\OperationLockUnavailableException;
 use Nowo\SiteBackupBundle\Lock\BackupOperationLock;
+use Nowo\SiteBackupBundle\Lock\LocalLockFallbackPolicyInterface;
 use Nowo\SiteBackupBundle\Tests\Unit\RecordingLogger;
 use PHPUnit\Framework\TestCase;
 use Symfony\Component\Filesystem\Filesystem;
@@ -106,7 +107,7 @@ final class BackupOperationLockTest extends TestCase
     public function testTheSetupLockFallsBackToTheLocalFileWhenTheStoreFails(): void
     {
         $logger = new RecordingLogger();
-        $lock   = new BackupOperationLock($this->dir, new LockFactory(new FailingStore(save: true)), 'k.setup', 60.0, fileName: '.setup.lock', logger: $logger, fallBackToFlock: true);
+        $lock   = new BackupOperationLock($this->dir, new LockFactory(new FailingStore(save: true)), 'k.setup', 60.0, fileName: '.setup.lock', logger: $logger, localFallback: $this->policy(true));
 
         $held = $lock->acquire();
         self::assertFileExists($this->dir . '/.setup.lock');
@@ -118,6 +119,15 @@ final class BackupOperationLockTest extends TestCase
         } catch (BackupAlreadyRunningException) {
         }
         $held->release();
+    }
+
+    public function testThePolicyCanRefuseTheLocalFallback(): void
+    {
+        // A configured instance (audit UT-1): the store outage is reported, servers keep excluding each other.
+        $lock = new BackupOperationLock($this->dir, new LockFactory(new FailingStore(save: true)), 'k.setup', 60.0, fileName: '.setup.lock', localFallback: $this->policy(false));
+
+        $this->expectException(OperationLockUnavailableException::class);
+        $lock->acquire();
     }
 
     public function testAStoreFailureWhileRefreshingIsLoggedAndRetried(): void
@@ -146,5 +156,19 @@ final class BackupOperationLockTest extends TestCase
 
         $held->release();
         self::assertStringContainsString('could not be released', $logger->records[0]['message'] ?? '');
+    }
+
+    private function policy(bool $allows): LocalLockFallbackPolicyInterface
+    {
+        return new class($allows) implements LocalLockFallbackPolicyInterface {
+            public function __construct(private readonly bool $allows)
+            {
+            }
+
+            public function allowsLocalFallback(): bool
+            {
+                return $this->allows;
+            }
+        };
     }
 }

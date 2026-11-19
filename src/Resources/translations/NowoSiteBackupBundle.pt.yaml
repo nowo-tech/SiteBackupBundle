@@ -82,6 +82,8 @@ panel:
     invalid_csrf: 'Token CSRF inválido.'
     access_denied: 'Acesso negado.'
     operation_running: 'Está em curso outra cópia de segurança ou restauro. Nada foi alterado; tente novamente dentro de alguns minutos.'
+    restore_still_running: 'Ainda está em curso um restauro; o seu estado não foi limpo.'
+    lock_unavailable: 'O bloqueio de operações não está disponível. Nada foi alterado; tente novamente mais tarde.'
     backup_not_found: 'Cópia de segurança não encontrada.'
   create:
     intro: 'Arquiva os caminhos configurados e o dump da base de dados num .tar.gz com somas de verificação.'
@@ -145,6 +147,7 @@ setup:
     invalid_csrf: 'Token CSRF inválido.'
     invalid_request: 'Pedido de configuração inválido.'
     setup_running: 'Está em curso outra execução da configuração. Nada foi alterado; tente novamente dentro de momentos.'
+    lock_unavailable: 'O bloqueio da configuração não está disponível. Nada foi alterado; tente novamente mais tarde.'
   reason:
     heading: 'É necessária a configuração'
     db_connection: 'A base de dados não está acessível com o DATABASE_URL atual (em falta, incorreto ou o serviço de base de dados está em baixo).'

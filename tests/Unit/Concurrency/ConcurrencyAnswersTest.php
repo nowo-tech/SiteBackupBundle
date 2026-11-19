@@ -10,6 +10,8 @@ use Nowo\SiteBackupBundle\Controller\SiteBackupPanelController;
 use Nowo\SiteBackupBundle\Database\DumpImporter;
 use Nowo\SiteBackupBundle\Exception\BackupAlreadyRunningException;
 use Nowo\SiteBackupBundle\Exception\DumpFailedException;
+use Nowo\SiteBackupBundle\Exception\OperationLockUnavailableException;
+use Nowo\SiteBackupBundle\Exception\RestoreStillRunningException;
 use Nowo\SiteBackupBundle\Exception\SetupAlreadyRunningException;
 use Nowo\SiteBackupBundle\Http\ConflictResponse;
 use Nowo\SiteBackupBundle\Lock\BackupOperationLock;
@@ -37,6 +39,7 @@ use Nowo\SiteBackupBundle\Storage\FilesystemRestoreProgressStorage;
 use Nowo\SiteBackupBundle\Tests\Unit\Controller\CreatesFormFactory;
 use Nowo\SiteBackupBundle\Tests\Unit\CreatesSiteBackupTestHarness;
 use Nowo\SiteBackupBundle\Tests\Unit\Engine\EngineFixtures;
+use Nowo\SiteBackupBundle\Tests\Unit\Lock\FailingStore;
 use PHPUnit\Framework\TestCase;
 use RuntimeException;
 use Symfony\Component\Filesystem\Filesystem;
@@ -44,6 +47,7 @@ use Symfony\Component\HttpFoundation\Request;
 use Symfony\Component\HttpFoundation\Response;
 use Symfony\Component\HttpFoundation\Session\Session;
 use Symfony\Component\HttpFoundation\Session\Storage\MockArraySessionStorage;
+use Symfony\Component\Lock\LockFactory;
 use Symfony\Component\Security\Csrf\CsrfToken;
 use Symfony\Component\Security\Csrf\CsrfTokenManagerInterface;
 use Twig\Environment;
@@ -111,6 +115,24 @@ final class ConcurrencyAnswersTest extends TestCase
         self::assertSame(503, $legacy->getStatusCode());
         self::assertSame('CONFLICT_001', $legacy->headers->get('X-Conflict-Code'));
 
+        // A failing lock store is not a conflict (audit UT-1): 503, no conflict code.
+        $down = $this->createMock(SiteBackupManagerInterface::class);
+        $down->method('createBackup')->willThrowException(new OperationLockUnavailableException());
+        $down->method('deleteBackup')->willThrowException(new OperationLockUnavailableException());
+        $down->method('clearRestoreStatus')->willThrowException(new RestoreStillRunningException());
+        $down->method('listBackups')->willReturn([]);
+        $down->method('getRestoreProgress')->willReturn(new RestoreProgress());
+        foreach (['create', 'delete'] as $action) {
+            $unavailable = $this->panel($down, $messages)->index($this->post(['action' => $action, 'backup_id' => 'b1', '_csrf_token' => 'token']));
+            self::assertSame(503, $unavailable->getStatusCode(), $action);
+            self::assertSame('60', $unavailable->headers->get('Retry-After'));
+            self::assertFalse($unavailable->headers->has('X-Conflict-Code'));
+        }
+        $messages = [];
+        $still    = $this->panel($down, $messages)->index($this->post(['action' => 'clear_restore', '_csrf_token' => 'token']));
+        self::assertSame(200, $still->getStatusCode());
+        self::assertStringContainsString('still running', (string) ($messages[0]['error'][0] ?? ''));
+
         // Another error is not a conflict.
         $other = $this->createMock(SiteBackupManagerInterface::class);
         $other->method('deleteBackup')->willThrowException(new RuntimeException('Backup "x" not found.'));
@@ -162,6 +184,23 @@ final class ConcurrencyAnswersTest extends TestCase
         self::assertSame(SetupProgress::PHASE_IDLE, $orchestrator->getProgress()->getPhase());
         $again = $orchestrator->advance('fresh_install', null, true, true);
         self::assertTrue($again->isFinished());
+    }
+
+    public function testTheWizardAnswers503WhenTheLockStoreFailsOnAConfiguredInstance(): void
+    {
+        $lock         = new BackupOperationLock($this->harnessStorageDir, new LockFactory(new FailingStore(save: true)), 'k.setup', 60.0, fileName: '.setup.lock');
+        $orchestrator = $this->orchestrator($lock);
+        $controller   = $this->wizard($orchestrator);
+
+        $page = $controller->index(Request::create('/?profile=fresh_install&token=tok', 'POST', ['_csrf_token' => 'token']));
+        self::assertSame(503, $page->getStatusCode());
+        self::assertSame('30', $page->headers->get('Retry-After'));
+        self::assertFalse($page->headers->has('X-Conflict-Code'));
+
+        $api = $controller->advanceApi(Request::create('/api/advance', 'POST', [], [], [], ['CONTENT_TYPE' => 'application/json', 'HTTP_X-Setup-Token' => 'tok'], '{}'));
+        self::assertSame(503, $api->getStatusCode());
+        self::assertSame(['error' => 'lock_unavailable'], json_decode((string) $api->getContent(), true));
+        self::assertSame(SetupProgress::PHASE_IDLE, $orchestrator->getProgress()->getPhase(), 'nothing ran');
     }
 
     public function testTheSqlStepHoldsTheOperationLockForEveryFile(): void
@@ -227,17 +266,26 @@ final class ConcurrencyAnswersTest extends TestCase
         $orchestrator = new RestoreOrchestrator($this->harnessProjectDir, $this->createArchiver(), $storage, []);
         $storage->save(new RestoreProgress(active: true, phase: RestoreProgress::PHASE_APPLYING, percent: 50.0, updatedAt: new DateTimeImmutable()));
 
-        $orchestrator->clearFailedOrCompleted();
+        self::assertFalse($orchestrator->clearFailedOrCompleted());
         self::assertTrue($orchestrator->isRestoreActive(), 'a running restore keeps its progress');
 
-        $storage->save(new RestoreProgress(active: false, phase: RestoreProgress::PHASE_FAILED, error: 'boom'));
-        $orchestrator->clearFailedOrCompleted();
-        self::assertSame(RestoreProgress::PHASE_IDLE, $storage->load()->getPhase());
-
-        // Through the manager the operation lock is taken first.
+        // Through the manager (audit UT-4): the caller is told, never "cleared".
         $lock    = new BackupOperationLock($this->harnessStorageDir);
         $manager = new SiteBackupManager($this->createArchiver(), $orchestrator, new FilesystemBackupHistoryStorage($this->harnessHistoryFile), operationLock: $lock);
-        $held    = $lock->acquire();
+
+        try {
+            $manager->clearRestoreStatus();
+            self::fail('Expected RestoreStillRunningException');
+        } catch (RestoreStillRunningException) {
+        }
+        $lock->acquire()->release();
+
+        $storage->save(new RestoreProgress(active: false, phase: RestoreProgress::PHASE_FAILED, error: 'boom'));
+        self::assertTrue($orchestrator->clearFailedOrCompleted());
+        self::assertSame(RestoreProgress::PHASE_IDLE, $storage->load()->getPhase());
+
+        // The operation lock is taken first.
+        $held = $lock->acquire();
 
         try {
             $manager->clearRestoreStatus();

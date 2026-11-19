@@ -39,7 +39,7 @@ Both locks are **non-blocking**: a second caller fails at once and does nothing.
 | Panel `restore`, `nowo:site-backup:restore`, `restore()` | none (staging dir, then files; the dump is handed to the setup SQL step) | operation lock, refreshed on every heartbeat; the loading page covers the site while progress is fresh | panel 409 + `CONFLICT_001`; CLI error; service exception |
 | `restore-chain`, `restoreChain()` | none (`mysql` client per link) | operation lock held for the whole chain; its importer does not take the lock again | CLI error; service exception |
 | Panel `delete`, `deleteBackup()` | none | operation lock | panel 409 + `CONFLICT_001` |
-| Panel `clear_restore`, `clearRestoreStatus()` (1.37+) | none | operation lock, and a still-running restore (fresh progress) is never cleared | panel 409 + `CONFLICT_001` |
+| Panel `clear_restore`, `clearRestoreStatus()` (1.37+) | none | operation lock, and a still-running restore (fresh progress) is never cleared (`RestoreStillRunningException`, the panel says "A restore is still running") | panel 409 + `CONFLICT_001` |
 | `import-archive` (one archive or a chain), `importArchive()` / `importChain()` | none | operation lock; a failed chain import removes what it imported | CLI error; service exception |
 | `db-import`, `restore-drill`, `DumpImporter` | none (the `mysql` client) | operation lock, refreshed every 5 s while the client runs | CLI error; service exception |
 | Setup wizard POST `/_setup`, JSON `POST …/api/advance`, `nowo:site-backup:setup` (1.37+) | none | setup lock for the whole run (progress is read after the lock is taken), refreshed before each step; "reset and run" share one lock | page 409 + `CONFLICT_001`; JSON 409 `{"error":"setup_running","code":"CONFLICT_001"}`; CLI error |
@@ -67,12 +67,15 @@ Only the bundle's own routes answer conflicts (the panel and the setup wizard). 
   reported as such and logged; it is never answered as a conflict.
 - The header carries only `CONFLICT_001` / `CONFLICT_002`. Domain errors keep their own messages and codes.
 - A failing lock store (Redis down, unwritable lock file) is **not** a conflict: `OperationLockUnavailableException`,
-  nothing is started, the panel shows the error.
+  nothing is started. The panel and the wizard answer **503** + `Retry-After` (no `X-Conflict-Code`); the setup JSON
+  API answers `503 {"error":"lock_unavailable"}`; console commands exit 1.
 
 ## Host options
 
 ```yaml
 nowo_site_backup:
+    setup:
+        lock_fallback_local: cold_only   # always | never: may the setup lock use its local file when the store fails?
     conflict_response:
         status: 409        # or 503 for clients that only retry on 503
     process_timeout: 600   # also sizes the lock TTL: 4 x process_timeout + 300 s
@@ -94,9 +97,11 @@ framework:
     lock: '%env(LOCK_DSN)%'   # redis://…, or a PDO / DBAL DSN on a database every server reaches
 ```
 
-Without it, two servers can run a backup and a restore at the same time. The setup lock falls back to the local lock
-file when the shared store does not answer (a cold instance often has no reachable database yet); the operation lock
-never falls back.
+Without it, two servers can run a backup and a restore at the same time. The operation lock never falls back to a
+local file. The setup lock falls back to its local lock file only as `setup.lock_fallback_local` allows (1.37+):
+`cold_only` (default) while the instance is genuinely cold (no `setup.done`, not re-opened, the durable done store not
+done), because the store is then often the database being set up; `always`; or `never`. On a configured or re-opened
+instance a store outage answers 503, so servers never stop excluding each other.
 
 ## Lock lifetime, store failures and crashes
 
@@ -106,7 +111,8 @@ never falls back.
 - **Release**: always in `finally`. A store failure while releasing is logged (`site_backup` channel) and the key
   expires at its TTL; the operation's own result or exception is kept.
 - **Refresh**: a store failure is logged and retried on the next heartbeat (the TTL leaves the margin). A lock lost to
-  another holder or expired stops the operation with Symfony Lock's exception.
+  another holder or expired stops the operation with Symfony Lock's exception; 1.37+: the running subprocess tree is
+  killed before the exception propagates.
 - **Crash**: `flock()` and a `FlockStore` are freed by the kernel when the process dies. A Redis / database key
   expires at its TTL; until then new operations get 409. A restore whose process died leaves "running" progress that
   stops counting after `restore.stale_after_seconds`.
@@ -136,5 +142,12 @@ the SQL import, and runs the rest under the setup lock like a first install.
 - A killed holder on an expiring store blocks new operations until the TTL passes (up to `4 × process_timeout + 300` s).
 - The setup SQL import runs each file as it is; a file that fails half-way is not rolled back (DDL cannot be). Prefer
   idempotent SQL; the step can be retried.
-- The setup lock on a cold instance may fall back to the local lock file, so two servers running the wizard at the same
-  time before the shared store answers are not serialised.
+- During the first install (cold instance, `cold_only`), a failing shared store lets the setup lock fall back to the
+  local lock file, so two servers running that first install at the same moment are not serialised. Run the first
+  install on one server, or set `setup.lock_fallback_local: never`.
+- `SetupWizardReopener` (re-open on a done instance) resets the stored progress without the setup lock. It only runs
+  while `setup.done` or the durable store says done, when the wizard is closed and no setup run can hold the progress;
+  a run started in the same instant as a re-open is the remaining window.
+- A lost lock stops the operation: the running subprocess (dump, client import) is killed first (1.37+), so it never
+  keeps writing without the lock; what it already wrote stays (a partial dump file is discarded with the failed backup;
+  a partial import is not rolled back).

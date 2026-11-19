@@ -6,6 +6,7 @@ namespace Nowo\SiteBackupBundle\Tests\Unit\Process;
 
 use Nowo\SiteBackupBundle\Process\ProcessDeadline;
 use PHPUnit\Framework\TestCase;
+use RuntimeException;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Process\Exception\ProcessTimedOutException;
 use Symfony\Component\Process\Process;
@@ -90,6 +91,39 @@ final class ProcessDeadlineTest extends TestCase
         $childPid = (int) trim((string) file_get_contents($pidFile));
         self::assertGreaterThan(0, $childPid);
         self::assertFalse($this->isAlive($childPid), 'the child process survived the timeout');
+    }
+
+    /**
+     * Audit UT-3: a callback that throws (a lost operation lock) kills the process tree before the exception escapes.
+     */
+    public function testAThrowingTickKillsTheProcessTree(): void
+    {
+        if (!is_dir('/proc/self')) {
+            self::markTestSkipped('Needs a Linux procfs to observe the child process.');
+        }
+
+        $pidFile = $this->dir . '/tick-child.pid';
+        $process = new Process(['sh', '-c', 'sleep 60 & echo $! > ' . $pidFile . '; wait']);
+        $calls   = 0;
+        $started = hrtime(true);
+
+        try {
+            ProcessDeadline::run($process, 60, static function () use (&$calls, $pidFile): void {
+                // The first call runs before start(); throw once the child exists.
+                if (++$calls > 1 && is_file($pidFile)) {
+                    throw new RuntimeException('lock lost');
+                }
+            });
+            self::fail('Expected the callback exception');
+        } catch (RuntimeException $e) {
+            self::assertSame('lock lost', $e->getMessage());
+        }
+
+        self::assertLessThan(10_000_000_000, hrtime(true) - $started);
+        self::assertFalse($process->isRunning());
+        $childPid = (int) trim((string) file_get_contents($pidFile));
+        self::assertGreaterThan(0, $childPid);
+        self::assertFalse($this->isAlive($childPid), 'the child kept running without the lock');
     }
 
     public function testKillTreeWithoutDescendantsStopsTheProcess(): void

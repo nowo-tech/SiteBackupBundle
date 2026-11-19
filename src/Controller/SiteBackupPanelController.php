@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\Controller;
 
 use Nowo\SiteBackupBundle\Exception\BackupAlreadyRunningException;
+use Nowo\SiteBackupBundle\Exception\OperationLockUnavailableException;
+use Nowo\SiteBackupBundle\Exception\RestoreStillRunningException;
 use Nowo\SiteBackupBundle\Form\Panel\CreateBackupType;
 use Nowo\SiteBackupBundle\Form\Panel\PanelActionType;
 use Nowo\SiteBackupBundle\Form\Panel\PanelLoginType;
@@ -99,6 +101,7 @@ final class SiteBackupPanelController
         $submittedAction = null;
         $submittedForm   = null;
         $conflict        = null;
+        $unavailable     = false;
 
         if ($request->isMethod('POST')) {
             $submittedAction = $request->request->getString('action');
@@ -130,6 +133,12 @@ final class SiteBackupPanelController
                         // 1.37+ (REQ-RUNTIME-003): the lock is taken before anything changes, so retrying is safe.
                         $conflict = $e;
                         $error    = $this->message('panel.error.operation_running', 'Another backup or restore is running. Nothing was changed; try again in a few minutes.');
+                    } catch (RestoreStillRunningException) {
+                        $error = $this->message('panel.error.restore_still_running', 'A restore is still running; its status was not cleared.');
+                    } catch (OperationLockUnavailableException) {
+                        // Not a conflict: the lock store failed and nothing was started (503, no conflict code).
+                        $unavailable = true;
+                        $error       = $this->message('panel.error.lock_unavailable', 'The operation lock is unavailable. Nothing was changed; try again later.');
                     } catch (Throwable $e) {
                         // 1.34+: a dump / restore error may quote the DSN or a password; the page shows it redacted.
                         $error = SecretRedactor::fromThrowable($e);
@@ -145,12 +154,21 @@ final class SiteBackupPanelController
                 'messages' => $this->messages($error, null),
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
 
-            return $conflict instanceof BackupAlreadyRunningException ? ConflictResponse::apply($response, $this->conflictStatus, $conflict->getRetryAfterSeconds()) : $response;
+            return $this->answer($response, $conflict, $unavailable);
         }
 
         $response = $this->renderIndex($this->messages($error, $success));
 
-        return $conflict instanceof BackupAlreadyRunningException ? ConflictResponse::apply($response, $this->conflictStatus, $conflict->getRetryAfterSeconds()) : $response;
+        return $this->answer($response, $conflict, $unavailable);
+    }
+
+    private function answer(Response $response, ?BackupAlreadyRunningException $conflict, bool $unavailable): Response
+    {
+        if ($conflict instanceof BackupAlreadyRunningException) {
+            return ConflictResponse::apply($response, $this->conflictStatus, $conflict->getRetryAfterSeconds());
+        }
+
+        return $unavailable ? ConflictResponse::unavailable($response, 60) : $response;
     }
 
     /**

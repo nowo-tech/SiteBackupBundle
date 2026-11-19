@@ -23,6 +23,7 @@ use Nowo\SiteBackupBundle\Exception\BinlogGapException;
 use Nowo\SiteBackupBundle\Exception\ChainBrokenException;
 use Nowo\SiteBackupBundle\Exception\CorruptArchiveException;
 use Nowo\SiteBackupBundle\Exception\InvalidBackupOptionsException;
+use Nowo\SiteBackupBundle\Exception\RestoreStillRunningException;
 use Nowo\SiteBackupBundle\Exception\WrongPasswordException;
 use Nowo\SiteBackupBundle\Incremental\BackupChain;
 use Nowo\SiteBackupBundle\Incremental\ChainRestoreReport;
@@ -630,7 +631,9 @@ final class SiteBackupManager implements SiteBackupManagerInterface, Incremental
 
         try {
             // @igor-ignore - Service coordinates I/O or request-scoped work; not unsafe worker singleton state.
-            $this->restoreOrchestrator->clearFailedOrCompleted();
+            if (!$this->restoreOrchestrator->clearFailedOrCompleted()) {
+                throw new RestoreStillRunningException();
+            }
         } finally {
             $lock?->release();
         }

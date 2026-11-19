@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\Controller;
 
 use JsonException;
+use Nowo\SiteBackupBundle\Exception\OperationLockUnavailableException;
 use Nowo\SiteBackupBundle\Exception\SetupAlreadyRunningException;
 use Nowo\SiteBackupBundle\Form\Setup\AdminUserType;
 use Nowo\SiteBackupBundle\Form\Setup\BootstrapModeType;
@@ -123,6 +124,7 @@ final class SetupWizardController
         $currentStep = $this->findCurrentStep($steps, $progress);
         $wizardForm  = $this->createSetupForm($progress, $currentStep, $reasons);
         $conflict    = null;
+        $unavailable = false;
 
         if ($request->isMethod('POST')) {
             if (!$this->csrfTokenManager instanceof CsrfTokenManagerInterface) {
@@ -159,6 +161,11 @@ final class SetupWizardController
                         $conflict = $e;
                         $error    = $this->message('setup.error.setup_running', 'Another setup run is in progress. Nothing was changed; try again in a moment.');
                         $progress = $this->orchestrator->getProgress();
+                    } catch (OperationLockUnavailableException) {
+                        // 1.37+ (audit UT-1): the shared lock store failed on a configured instance; nothing ran.
+                        $unavailable = true;
+                        $error       = $this->message('setup.error.lock_unavailable', 'The setup lock is unavailable. Nothing was changed; try again later.');
+                        $progress    = $this->orchestrator->getProgress();
                     }
                     $steps       = $this->orchestrator->getSteps($progress->getProfile());
                     $currentStep = $this->findCurrentStep($steps, $progress);
@@ -188,7 +195,11 @@ final class SetupWizardController
             'reopened' => $this->orchestrator->isReopened(),
         ], $pathPrefix));
 
-        return $conflict instanceof SetupAlreadyRunningException ? ConflictResponse::apply($response, $this->conflictStatus, $conflict->getRetryAfterSeconds()) : $response;
+        if ($conflict instanceof SetupAlreadyRunningException) {
+            return ConflictResponse::apply($response, $this->conflictStatus, $conflict->getRetryAfterSeconds());
+        }
+
+        return $unavailable ? ConflictResponse::unavailable($response, 30) : $response;
     }
 
     public function done(): Response
@@ -254,6 +265,11 @@ final class SetupWizardController
             // 1.37+ (REQ-RUNTIME-003): same error shape as the other answers, the code added.
             $response = new JsonResponse(['error' => 'setup_running', 'code' => ConflictResponse::RETRY_SAFE]);
             ConflictResponse::apply($response, $this->conflictStatus, $e->getRetryAfterSeconds());
+
+            return $response;
+        } catch (OperationLockUnavailableException) {
+            $response = new JsonResponse(['error' => 'lock_unavailable']);
+            ConflictResponse::unavailable($response, 30);
 
             return $response;
         }

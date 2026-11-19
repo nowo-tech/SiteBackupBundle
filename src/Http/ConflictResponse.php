@@ -25,6 +25,19 @@ final class ConflictResponse
     /** Part of the request was committed: read again, do not repeat (not produced by this bundle today). */
     public const PARTIALLY_COMMITTED = 'CONFLICT_002';
 
+    /**
+     * 1.37+ (audit UT-1): the lock store failed, so no lock could be taken and nothing was done. Not a conflict: 503 +
+     * `Retry-After`, no `X-Conflict-Code`.
+     */
+    public static function unavailable(Response $response, int $retryAfterSeconds): Response
+    {
+        $response->setStatusCode(Response::HTTP_SERVICE_UNAVAILABLE);
+        $response->headers->set('Retry-After', (string) max(1, $retryAfterSeconds));
+        $response->headers->set('Cache-Control', 'no-store, private');
+
+        return $response;
+    }
+
     public static function apply(Response $response, int $status, int $retryAfterSeconds): Response
     {
         $response->setStatusCode($status === Response::HTTP_SERVICE_UNAVAILABLE ? Response::HTTP_SERVICE_UNAVAILABLE : Response::HTTP_CONFLICT);

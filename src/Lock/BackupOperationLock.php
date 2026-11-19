@@ -39,7 +39,8 @@ use const LOCK_UN;
  * store or an unwritable lock file throws {@see OperationLockUnavailableException} instead (not a conflict); a store
  * failure while refreshing is logged and retried on the next heartbeat (the TTL leaves the margin), losing the lock to
  * another holder aborts the operation; a store failure while releasing is logged and the key expires at its TTL.
- * With `$fallBackToFlock` (the setup wizard lock) a failing store falls back to the local flock instead. Nothing is kept
+ * With a {@see LocalLockFallbackPolicyInterface} (the setup wizard lock, cold instances only) a failing store falls back
+ * to the local flock when the policy allows it at that moment. Nothing is kept
  * on the service between calls (worker mode).
  */
 final class BackupOperationLock
@@ -58,7 +59,7 @@ final class BackupOperationLock
         private readonly string $fileName = '.operation.lock',
         private readonly LoggerInterface $logger = new NullLogger(),
         private readonly int $retryAfterSeconds = 300,
-        private readonly bool $fallBackToFlock = false,
+        private readonly ?LocalLockFallbackPolicyInterface $localFallback = null,
     ) {
     }
 
@@ -72,11 +73,12 @@ final class BackupOperationLock
             try {
                 return $this->acquireShared($this->lockFactory);
             } catch (OperationLockUnavailableException $e) {
-                if (!$this->fallBackToFlock) {
+                // 1.37+ (audit UT-1): only while the policy allows it (a cold first install, by default); otherwise a
+                // store outage must not let servers stop excluding each other.
+                if (!$this->localFallback instanceof LocalLockFallbackPolicyInterface || !$this->localFallback->allowsLocalFallback()) {
                     throw $e;
                 }
-                // Setup wizard on a cold instance: the shared store (often the database being set up) may not answer
-                // yet; the local flock still serialises this host.
+                // Cold instance: the shared store (often the database being set up) may not answer yet.
                 $this->logger->warning('SiteBackup: the lock store is unavailable; using the local lock file.', ['bundle' => 'site_backup', 'lock' => $this->key]);
             }
         }

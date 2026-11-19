@@ -83,6 +83,7 @@ use Nowo\SiteBackupBundle\Setup\NullAdminUserProvisioner;
 use Nowo\SiteBackupBundle\Setup\NullDurableSetupDoneStore;
 use Nowo\SiteBackupBundle\Setup\SetupAccessTokenStore;
 use Nowo\SiteBackupBundle\Setup\SetupDbDoneGuard;
+use Nowo\SiteBackupBundle\Setup\SetupLockFallbackPolicy;
 use Nowo\SiteBackupBundle\Setup\SetupOrchestrator;
 use Nowo\SiteBackupBundle\Setup\SetupStepFactory;
 use Nowo\SiteBackupBundle\Setup\SetupTabCheckerLocator;
@@ -611,8 +612,7 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$fileName', '.setup.lock')
             ->setArgument('$logger', new Reference('logger', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
             ->setArgument('$retryAfterSeconds', 30)
-            // A cold instance may not reach the shared store yet (it is often the database being set up).
-            ->setArgument('$fallBackToFlock', true)
+            // $localFallback (setup.lock_fallback_local) is set by configureSetup().
             ->addTag('monolog.logger', ['channel' => 'site_backup']);
     }
 
@@ -1406,6 +1406,14 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$defaultAdvanceMode', $globalAdvance)
             ->setArgument('$workerRestartSignal', new Reference(WorkerRestartSignal::class))
             ->setArgument('$setupLock', new Reference(self::SETUP_LOCK_ID));
+
+        // 1.37+ (audit UT-1): the setup lock falls back to its local file only while the instance is cold (default).
+        $container->register(SetupLockFallbackPolicy::class, SetupLockFallbackPolicy::class)
+            ->setArgument('$markers', new Reference(SetupMarkerManager::class))
+            ->setArgument('$durableDoneStore', new Reference(DurableSetupDoneStoreInterface::class, ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
+            ->setArgument('$mode', (string) ($setup['lock_fallback_local'] ?? SetupLockFallbackPolicy::COLD_ONLY));
+        $container->getDefinition(self::SETUP_LOCK_ID)
+            ->setArgument('$localFallback', new Reference(SetupLockFallbackPolicy::class));
 
         if ($container->hasDefinition(SetupRequestSubscriber::class)) {
             $sub = $container->getDefinition(SetupRequestSubscriber::class);

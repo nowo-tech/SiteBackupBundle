@@ -6,6 +6,7 @@ namespace Nowo\SiteBackupBundle\Process;
 
 use Symfony\Component\Process\Exception\ProcessTimedOutException;
 use Symfony\Component\Process\Process;
+use Throwable;
 
 use function array_map;
 use function array_merge;
@@ -70,7 +71,15 @@ final class ProcessDeadline
             // Idle-timeout safety net (same value as the hard deadline).
             $process->checkTimeout();
             if ($tick !== null) {
-                $tick();
+                try {
+                    $tick();
+                } catch (Throwable $e) {
+                    // 1.37+ (audit UT-3): a failing callback (a lost operation lock) stops the operation; the
+                    // subprocess must not keep writing without the lock.
+                    self::killTree($process, $procRoot);
+
+                    throw $e;
+                }
             }
             usleep(self::POLL_MICROSECONDS);
         }
