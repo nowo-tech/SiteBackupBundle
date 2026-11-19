@@ -155,7 +155,9 @@ Concurrency (REQ-RUNTIME-003, see [CONCURRENCY.md](CONCURRENCY.md)). No configur
   not started" (nothing imported) when a backup holds the lock or the lock store is unavailable; retry the step.
 - **Setup lock fallback.** New `setup.lock_fallback_local` (`cold_only` by default): when the shared lock store fails
   on a configured or re-opened instance, the wizard now answers 503 instead of falling back to a local lock file. Set
-  `always` only with a single server.
+  `always` only with a single server. `cold_only` treats a durable done store that throws as cold; with several
+  servers and an ephemeral `var/`, set `never`. Install ext-posix (suggested) so subprocess trees are killed without
+  the `kill` binary.
 - **Clear status** while a restore is still running throws `RestoreStillRunningException` (the panel shows "A restore
   is still running"); `RestoreOrchestrator::clearFailedOrCompleted()` now returns `bool` (false = nothing cleared).
 - **Several servers** sharing the database or the storage need a shared `framework.lock` store (Redis, PDO / DBAL);

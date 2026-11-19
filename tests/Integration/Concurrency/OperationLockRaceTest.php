@@ -171,6 +171,22 @@ final class OperationLockRaceTest extends TestCase
     }
 
     /**
+     * Audit UT2-1: one run fell back to the local file (the shared store was down), the other reached the store a
+     * moment later. With the local file always taken first, they still exclude each other.
+     */
+    public function testAFallenBackSetupRunAndAStoreSetupRunExcludeEachOther(): void
+    {
+        $results = $this->race('flock_store', [
+            ['op' => 'setup', 'store' => 'failing', 'fallback' => true],
+            ['op' => 'setup', 'store' => 'flock_store', 'fallback' => true, 'delay' => 0.3],
+        ]);
+
+        self::assertSame(['setup_locked' => 1, 'won' => 1], $this->outcomes($results), $this->describe($results));
+        $log = (string) @file_get_contents($this->root . '/setup/steps.log');
+        self::assertSame(1, substr_count($log, ' start'), $log);
+    }
+
+    /**
      * A holder that dies (worker OOM, SIGKILL) never blocks the next operation: flock is freed by the kernel, a
      * FlockStore likewise.
      */

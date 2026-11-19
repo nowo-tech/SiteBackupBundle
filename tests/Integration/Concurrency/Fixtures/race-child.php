@@ -20,6 +20,7 @@ use Nowo\SiteBackupBundle\Service\SiteBackupManager;
 use Nowo\SiteBackupBundle\Setup\ConsoleProcessRunner;
 use Nowo\SiteBackupBundle\Setup\NullAdminUserProvisioner;
 use Nowo\SiteBackupBundle\Setup\SetupContext;
+use Nowo\SiteBackupBundle\Setup\SetupLockFallbackPolicy;
 use Nowo\SiteBackupBundle\Setup\SetupOrchestrator;
 use Nowo\SiteBackupBundle\Setup\SetupStepFactory;
 use Nowo\SiteBackupBundle\Setup\SetupStepInput;
@@ -30,6 +31,7 @@ use Nowo\SiteBackupBundle\Setup\Storage\SetupMarkerManager;
 use Nowo\SiteBackupBundle\Storage\FilesystemBackupHistoryStorage;
 use Nowo\SiteBackupBundle\Storage\FilesystemRestoreProgressStorage;
 use Nowo\SiteBackupBundle\Tests\Integration\Concurrency\OperationLockRaceTest;
+use Nowo\SiteBackupBundle\Tests\Unit\Lock\FailingStore;
 use Psr\EventDispatcher\EventDispatcherInterface;
 use RuntimeException;
 use Symfony\Component\Lock\LockFactory;
@@ -38,14 +40,16 @@ use Symfony\Component\Lock\Store\PdoStore;
 
 require dirname(__DIR__, 4) . '/vendor/autoload.php';
 
-/** @var array{store: string, key: string, delay: float, lock_dir: string, ttl: float, op: string, project_dir: string, storage_dir: string, history: string, progress: string, barrier: string, result: string, dump_seconds: int, backup_id?: string, pdo_dsn?: string, pdo_user?: string, pdo_password?: string, setup_dir?: string, setup_log?: string} $job */
+/** @var array{store: string, key: string, delay: float, lock_dir: string, ttl: float, op: string, project_dir: string, storage_dir: string, history: string, progress: string, barrier: string, result: string, dump_seconds: int, fallback?: bool, backup_id?: string, pdo_dsn?: string, pdo_user?: string, pdo_password?: string, setup_dir?: string, setup_log?: string} $job */
 $job = json_decode((string) file_get_contents($argv[1]), true, 512, \JSON_THROW_ON_ERROR);
 
 $factory = match ($job['store']) {
     'flock'       => null,
     'flock_store' => new LockFactory(new FlockStore($job['lock_dir'])),
-    'pdo'         => new LockFactory(new PdoStore(OperationLockRaceTest::pdo($job), ['db_table' => OperationLockRaceTest::PDO_TABLE])),
-    default       => throw new InvalidArgumentException('Unknown store ' . $job['store']),
+    // A shared store that is down (cold first install: the database is not there yet).
+    'failing' => new LockFactory(new FailingStore(save: true)),
+    'pdo'     => new LockFactory(new PdoStore(OperationLockRaceTest::pdo($job), ['db_table' => OperationLockRaceTest::PDO_TABLE])),
+    default   => throw new InvalidArgumentException('Unknown store ' . $job['store']),
 };
 $lock = new BackupOperationLock($job['lock_dir'], $factory, $job['key'], $job['ttl']);
 
@@ -136,7 +140,7 @@ try {
                 markers: $markers,
                 profiles: ['race' => ['steps' => [['type' => 'race_slow']]]],
                 defaultProfile: 'race',
-                setupLock: new BackupOperationLock($job['lock_dir'], $factory, $job['key'] . '.setup', $job['ttl'], fileName: '.setup.lock', retryAfterSeconds: 30),
+                setupLock: new BackupOperationLock($job['lock_dir'], $factory, $job['key'] . '.setup', $job['ttl'], fileName: '.setup.lock', retryAfterSeconds: 30, localFallback: ($job['fallback'] ?? false) ? new SetupLockFallbackPolicy($markers, null, SetupLockFallbackPolicy::ALWAYS) : null),
             );
             $orchestrator->advance('race', null, true);
             break;

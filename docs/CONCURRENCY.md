@@ -103,16 +103,31 @@ local file. The setup lock falls back to its local lock file only as `setup.lock
 done), because the store is then often the database being set up; `always`; or `never`. On a configured or re-opened
 instance a store outage answers 503, so servers never stop excluding each other.
 
+When the fallback is enabled, the setup lock always takes its local lock file **first** and the shared key second, and
+releases both (1.37+, audit UT2-1). A run that fell back and a run that reached the store a moment later therefore
+still exclude each other on the same host.
+
+`cold_only` treats a durable done store that **throws** as "not done" (cold): it is usually the database that is not
+reachable yet, and the file markers (`setup.done`, `setup.reopened`) decide. On a multi-server deployment whose `var/`
+is ephemeral (the markers are lost on redeploy), a database outage then looks like a cold instance: set
+`setup.lock_fallback_local: never` there.
+
 ## Lock lifetime, store failures and crashes
 
 - **TTL**: `4 × process_timeout + 300` s. Every subprocess is bounded by `process_timeout`, and the lock is refreshed on
   every heartbeat (at least every 2 s during a backup, every progress write during a restore, every 5 s while the
   `mysql` client imports, before each setup step), so a long operation never outlives its lock.
+- **Setup lock limit**: the setup lock is refreshed once per step, so its TTL covers one step. A `sql_file` step with
+  many large files can run longer than `4 × process_timeout + 300` s (each file is bounded by `process_timeout`; the
+  operation lock it holds is refreshed per file and while the client runs, the setup lock is not). Then the setup key
+  may expire mid-step on an expiring store (Redis, database) and a second setup run could start. Keep the import to
+  one dump file, or raise `process_timeout`; `flock()` and `FlockStore` do not expire.
 - **Release**: always in `finally`. A store failure while releasing is logged (`site_backup` channel) and the key
   expires at its TTL; the operation's own result or exception is kept.
 - **Refresh**: a store failure is logged and retried on the next heartbeat (the TTL leaves the margin). A lock lost to
   another holder or expired stops the operation with Symfony Lock's exception; 1.37+: the running subprocess tree is
-  killed before the exception propagates.
+  stopped and killed before the exception propagates (`posix_kill()` with ext-posix, else the `kill` binary, whose
+  failure is logged).
 - **Crash**: `flock()` and a `FlockStore` are freed by the kernel when the process dies. A Redis / database key
   expires at its TTL; until then new operations get 409. A restore whose process died leaves "running" progress that
   stops counting after `restore.stale_after_seconds`.
@@ -148,6 +163,7 @@ the SQL import, and runs the rest under the setup lock like a first install.
 - `SetupWizardReopener` (re-open on a done instance) resets the stored progress without the setup lock. It only runs
   while `setup.done` or the durable store says done, when the wizard is closed and no setup run can hold the progress;
   a run started in the same instant as a re-open is the remaining window.
-- A lost lock stops the operation: the running subprocess (dump, client import) is killed first (1.37+), so it never
-  keeps writing without the lock; what it already wrote stays (a partial dump file is discarded with the failed backup;
-  a partial import is not rolled back).
+- A lost lock stops the operation and its subprocess tree is killed (1.37+), but not instantly: it may write for up to
+  one poll interval (50 ms) plus the kill, and without ext-posix and without a working `kill` binary its descendants
+  can survive (the failure is logged). What was already written stays (a partial dump is discarded with the failed
+  backup's work directory; a partial import is not rolled back).

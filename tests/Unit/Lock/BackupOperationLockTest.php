@@ -13,6 +13,7 @@ use PHPUnit\Framework\TestCase;
 use Symfony\Component\Filesystem\Filesystem;
 use Symfony\Component\Lock\Exception\LockConflictedException;
 use Symfony\Component\Lock\LockFactory;
+use Symfony\Component\Lock\Store\FlockStore;
 use Symfony\Component\Lock\Store\InMemoryStore;
 
 use function sys_get_temp_dir;
@@ -121,13 +122,69 @@ final class BackupOperationLockTest extends TestCase
         $held->release();
     }
 
+    /**
+     * Audit UT2-1: a holder that fell back to the local file and one that reached the store exclude each other.
+     */
+    public function testAFallenBackHolderAndAStoreHolderExcludeEachOther(): void
+    {
+        (new Filesystem())->mkdir($this->dir . '/store');
+        $down = new BackupOperationLock($this->dir, new LockFactory(new FailingStore(save: true)), 'k.setup', 60.0, fileName: '.setup.lock', localFallback: $this->policy(true));
+        $up   = new BackupOperationLock($this->dir, new LockFactory(new FlockStore($this->dir . '/store')), 'k.setup', 60.0, fileName: '.setup.lock', localFallback: $this->policy(true));
+
+        $held = $down->acquire();
+        try {
+            $up->acquire();
+            self::fail('The store holder must wait for the fallen-back holder.');
+        } catch (BackupAlreadyRunningException) {
+        }
+        $held->release();
+
+        $held = $up->acquire();
+        $held->refresh();
+        try {
+            $down->acquire();
+            self::fail('The fallen-back holder must wait for the store holder.');
+        } catch (BackupAlreadyRunningException) {
+        }
+        $held->release();
+        $held->release();
+
+        $down->acquire()->release();
+        $up->acquire()->release();
+        $this->addToAssertionCount(1);
+    }
+
+    public function testASharedConflictReleasesTheLocalFile(): void
+    {
+        $store = new InMemoryStore();
+        $one   = new BackupOperationLock($this->dir . '/one', new LockFactory($store), 'k.setup', 60.0, localFallback: $this->policy(true));
+        $two   = new BackupOperationLock($this->dir . '/two', new LockFactory($store), 'k.setup', 60.0, localFallback: $this->policy(true));
+
+        $held = $one->acquire();
+        try {
+            $two->acquire();
+            self::fail('Expected BackupAlreadyRunningException');
+        } catch (BackupAlreadyRunningException) {
+        }
+        // The local file of the refused caller is free again.
+        (new BackupOperationLock($this->dir . '/two'))->acquire()->release();
+        $held->release();
+        $this->addToAssertionCount(1);
+    }
+
     public function testThePolicyCanRefuseTheLocalFallback(): void
     {
         // A configured instance (audit UT-1): the store outage is reported, servers keep excluding each other.
         $lock = new BackupOperationLock($this->dir, new LockFactory(new FailingStore(save: true)), 'k.setup', 60.0, fileName: '.setup.lock', localFallback: $this->policy(false));
 
-        $this->expectException(OperationLockUnavailableException::class);
-        $lock->acquire();
+        try {
+            $lock->acquire();
+            self::fail('Expected OperationLockUnavailableException');
+        } catch (OperationLockUnavailableException) {
+        }
+        // Nothing stays held.
+        (new BackupOperationLock($this->dir, fileName: '.setup.lock'))->acquire()->release();
+        $this->addToAssertionCount(1);
     }
 
     public function testAStoreFailureWhileRefreshingIsLoggedAndRetried(): void

@@ -39,8 +39,9 @@ use const LOCK_UN;
  * store or an unwritable lock file throws {@see OperationLockUnavailableException} instead (not a conflict); a store
  * failure while refreshing is logged and retried on the next heartbeat (the TTL leaves the margin), losing the lock to
  * another holder aborts the operation; a store failure while releasing is logged and the key expires at its TTL.
- * With a {@see LocalLockFallbackPolicyInterface} (the setup wizard lock, cold instances only) a failing store falls back
- * to the local flock when the policy allows it at that moment. Nothing is kept
+ * With a {@see LocalLockFallbackPolicyInterface} (the setup wizard lock) the local flock is always taken first and the
+ * shared key second (both released); a failing store then keeps only the local flock when the policy allows it at that
+ * moment (cold instances, by default). Nothing is kept
  * on the service between calls (worker mode).
  */
 final class BackupOperationLock
@@ -69,20 +70,56 @@ final class BackupOperationLock
      */
     public function acquire(): BackupOperationLockHandle
     {
-        if ($this->lockFactory instanceof LockFactory) {
-            try {
-                return $this->acquireShared($this->lockFactory);
-            } catch (OperationLockUnavailableException $e) {
-                // 1.37+ (audit UT-1): only while the policy allows it (a cold first install, by default); otherwise a
-                // store outage must not let servers stop excluding each other.
-                if (!$this->localFallback instanceof LocalLockFallbackPolicyInterface || !$this->localFallback->allowsLocalFallback()) {
-                    throw $e;
-                }
-                // Cold instance: the shared store (often the database being set up) may not answer yet.
-                $this->logger->warning('SiteBackup: the lock store is unavailable; using the local lock file.', ['bundle' => 'site_backup', 'lock' => $this->key]);
-            }
+        if (!$this->lockFactory instanceof LockFactory) {
+            return $this->acquireLocal();
+        }
+        if (!$this->localFallback instanceof LocalLockFallbackPolicyInterface) {
+            return $this->acquireShared($this->lockFactory);
         }
 
+        // 1.37+ (audit UT2-1): with a local fallback the local file is ALWAYS taken first, then the shared key. A
+        // caller that fell back (store down) and a caller that reached the store later still exclude each other on
+        // this host.
+        $local = $this->acquireLocal();
+        try {
+            $shared = $this->acquireShared($this->lockFactory);
+        } catch (OperationLockUnavailableException $e) {
+            // 1.37+ (audit UT-1): only while the policy allows it (a cold first install, by default); otherwise a
+            // store outage must not let servers stop excluding each other.
+            if (!$this->localFallback->allowsLocalFallback()) {
+                $local->release();
+
+                throw $e;
+            }
+            // Cold instance: the shared store (often the database being set up) may not answer yet.
+            $this->logger->warning('SiteBackup: the lock store is unavailable; using the local lock file.', ['bundle' => 'site_backup', 'lock' => $this->key]);
+
+            return $local;
+        } catch (BackupAlreadyRunningException $e) {
+            $local->release();
+
+            throw $e;
+        }
+
+        return new BackupOperationLockHandle(
+            refresh: static function () use ($shared): void {
+                $shared->refresh();
+            },
+            release: static function () use ($shared, $local): void {
+                try {
+                    $shared->release();
+                } finally {
+                    $local->release();
+                }
+            },
+        );
+    }
+
+    /**
+     * @throws BackupAlreadyRunningException|OperationLockUnavailableException
+     */
+    private function acquireLocal(): BackupOperationLockHandle
+    {
         try {
             $this->filesystem->mkdir($this->lockDirectory, 0o700);
         } catch (IOException $e) {
