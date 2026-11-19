@@ -98,7 +98,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - A lock file that cannot be opened, or a lock store that fails, was reported as "another operation is running"; it now throws `OperationLockUnavailableException`. A store failure while refreshing is logged and retried on the next heartbeat, and a store failure while releasing is logged instead of replacing the operation's result (the key expires at its TTL).
 - A lost operation lock (the heartbeat refresh throws) now stops and kills the running subprocess tree (dump, client import) before the operation stops, instead of leaving it running without the lock (since 1.28.0). Killing a tree uses `posix_kill()` when ext-posix is available (Debian-based php images have no `kill` binary, so descendants of a timed-out dump could survive); otherwise the `kill` binary, whose failure is now logged.
 - The DBAL setup progress storages update the row when a concurrent insert of the same row won the race, instead of failing.
-- CI "Real MySQL clients (EN-M1)": the client wrappers ran a new `docker run` per call, and a cold container start could exceed the 30 s `mysql --version` probe; the clients now run in long-lived containers through `docker exec`.
+- CI "Real MySQL clients (EN-M1)": the client wrappers ran a new `docker run` per call, and a cold container start could exceed the 30 s `mysql --version` probe; the clients now run in long-lived containers through `docker exec`. CI "Binlog incrementals" no longer installs `bsdtar` through apt (the Ubuntu mirrors timed out): it extracts `mysqlbinlog` in an Alpine container when the runner has no `bsdtar`.
 
 ### Demo
 

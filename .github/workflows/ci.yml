@@ -295,7 +295,6 @@ jobs:
       - name: Start MySQL 9.7 with binary logs and create the Oracle client wrappers
         run: |
           set -eu
-          command -v bsdtar || { sudo apt-get update -q && sudo apt-get install -y -q --no-install-recommends libarchive-tools; }
           # Three throwaway passwords (masked): the app's account, the backup account, the restore account (PP-M4).
           PWA="ci-$(openssl rand -hex 12)"; PWB="ci-$(openssl rand -hex 12)"; PWR="ci-$(openssl rand -hex 12)"
           echo "::add-mask::$PWA"; echo "::add-mask::$PWB"; echo "::add-mask::$PWR"
@@ -317,7 +316,14 @@ jobs:
           curl -fsSL -o "$RUNNER_TEMP/client.rpm" https://repo.mysql.com/yum/mysql-9.7-community/el/9/x86_64/mysql-community-client-9.7.2-1.el9.x86_64.rpm
           echo "888efdbf8f63750686377e520bf2e3df2e98c1cfb5b1cb21ebc8ce65e359b0c5  $RUNNER_TEMP/client.rpm" | sha256sum -c -
           mkdir -p "$RUNNER_TEMP/rpm" "$RUNNER_TEMP/bin"
-          bsdtar -xf "$RUNNER_TEMP/client.rpm" -C "$RUNNER_TEMP/rpm" ./usr/bin/mysqlbinlog
+          # bsdtar from the runner when present, else from an Alpine container: the Ubuntu apt mirrors time out at times
+          # (runs 44522096215, 44523653206), and this job must not depend on them.
+          if command -v bsdtar >/dev/null; then
+            bsdtar -xf "$RUNNER_TEMP/client.rpm" -C "$RUNNER_TEMP/rpm" ./usr/bin/mysqlbinlog
+          else
+            docker run --rm -v "$RUNNER_TEMP:/w" alpine:3.22 sh -c 'apk add -q --no-cache libarchive-tools && bsdtar -xf /w/client.rpm -C /w/rpm ./usr/bin/mysqlbinlog && chown -R '"$(id -u):$(id -g)"' /w/rpm'
+          fi
+          test -x "$RUNNER_TEMP/rpm/usr/bin/mysqlbinlog"
           SHARED="$RUNNER_TEMP/sbb-binlog"
           mkdir -p "$SHARED"
           for tool in mysql mysqldump mysqlbinlog; do
