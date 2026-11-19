@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Process;
 
+use Closure;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Process\Exception\ProcessTimedOutException;
 use Symfony\Component\Process\Process;
@@ -24,6 +25,7 @@ use function glob;
 use function hrtime;
 use function is_dir;
 use function is_string;
+use function posix_get_last_error;
 use function posix_kill;
 use function rtrim;
 use function strrpos;
@@ -51,6 +53,8 @@ final class ProcessDeadline
     private const SIGSTOP_LINUX = 19;
 
     private const SIGKILL_LINUX = 9;
+
+    private const ESRCH = 3;
 
     /** Rounds of stop-and-collect: a stopped process cannot fork, so new descendants stop appearing quickly. */
     private const COLLECT_ROUNDS = 5;
@@ -107,14 +111,16 @@ final class ProcessDeadline
      * 1.37+ (audit UT2-2): with ext-posix the root is stopped (SIGSTOP) first, so a sequential shell cannot start its
      * next command, then descendants are stopped and collected again until no new one appears, and all are killed with
      * `posix_kill()` (no `kill` binary needed: Debian-based php images have none). Without ext-posix the `kill` binary
-     * is used and a failure is logged (the `logger`, else the PHP error log).
+     * is used. A failure (the binary, or a SIGKILL that `posix_kill()` refuses) is logged: to `$logger` when given,
+     * else to the PHP error log (the bundle's own callers pass none, so it is the PHP error log).
      *
      * @param bool|null $usePosix null = ext-posix when available (false only for tests of the fallback)
      * @param string $killBinary the fallback binary (tests)
+     * @param (Closure(int): bool)|null $sigkill @internal test seam for the posix SIGKILL
      *
      * @return bool false when the fallback binary failed (descendants may survive)
      */
-    public static function killTree(Process $process, string $procRoot = '/proc', ?LoggerInterface $logger = null, ?bool $usePosix = null, string $killBinary = 'kill'): bool
+    public static function killTree(Process $process, string $procRoot = '/proc', ?LoggerInterface $logger = null, ?bool $usePosix = null, string $killBinary = 'kill', ?Closure $sigkill = null): bool
     {
         $pid = $process->getPid();
         if ($pid === null) {
@@ -123,13 +129,16 @@ final class ProcessDeadline
             return true;
         }
 
-        $ok = ($usePosix ?? function_exists('posix_kill')) ? self::killWithPosix($pid, $procRoot) : self::killWithBinary($pid, $procRoot, $killBinary, $logger);
+        $ok = ($usePosix ?? function_exists('posix_kill')) ? self::killWithPosix($pid, $procRoot, $logger, $sigkill) : self::killWithBinary($pid, $procRoot, $killBinary, $logger);
         $process->stop(0);
 
         return $ok;
     }
 
-    private static function killWithPosix(int $pid, string $procRoot): bool
+    /**
+     * @param (Closure(int): bool)|null $sigkill test seam: sends SIGKILL, true when delivered or the process is gone
+     */
+    private static function killWithPosix(int $pid, string $procRoot, ?LoggerInterface $logger, ?Closure $sigkill): bool
     {
         $stop = defined('SIGSTOP') ? constant('SIGSTOP') : self::SIGSTOP_LINUX;
         $kill = defined('SIGKILL') ? constant('SIGKILL') : self::SIGKILL_LINUX;
@@ -146,12 +155,30 @@ final class ProcessDeadline
                 $seen[] = $child;
             }
         }
-        foreach ($seen as $child) {
-            @posix_kill($child, $kill);
+        $failed = [];
+        foreach ([...$seen, $pid] as $target) {
+            // A process that exited meanwhile (ESRCH) is not a failure.
+            $delivered = $sigkill instanceof Closure ? $sigkill($target) : (@posix_kill($target, $kill) || posix_get_last_error() === self::ESRCH);
+            if (!$delivered) {
+                $failed[] = $target;
+            }
         }
-        @posix_kill($pid, $kill);
+        if ($failed !== []) {
+            self::report($logger, 'SiteBackup: SIGKILL failed for part of the subprocess tree; it may survive.', $pid);
+
+            return false;
+        }
 
         return true;
+    }
+
+    private static function report(?LoggerInterface $logger, string $message, int $pid): void
+    {
+        if ($logger instanceof LoggerInterface) {
+            $logger->error($message, ['bundle' => 'site_backup', 'pid' => $pid]);
+        } else {
+            error_log($message);
+        }
     }
 
     private static function killWithBinary(int $pid, string $procRoot, string $killBinary, ?LoggerInterface $logger): bool
@@ -162,12 +189,7 @@ final class ProcessDeadline
             $ok = self::signal($killBinary, '-KILL', $descendants) && $ok;
         }
         if (!$ok) {
-            $message = 'SiteBackup: could not signal the subprocess tree (no ext-posix and the kill binary failed); descendants may survive.';
-            if ($logger instanceof LoggerInterface) {
-                $logger->error($message, ['bundle' => 'site_backup', 'pid' => $pid]);
-            } else {
-                error_log($message);
-            }
+            self::report($logger, 'SiteBackup: could not signal the subprocess tree (no ext-posix and the kill binary failed); descendants may survive.', $pid);
         }
 
         return $ok;

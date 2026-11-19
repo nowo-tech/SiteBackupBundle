@@ -321,7 +321,7 @@ jobs:
           if command -v bsdtar >/dev/null; then
             bsdtar -xf "$RUNNER_TEMP/client.rpm" -C "$RUNNER_TEMP/rpm" ./usr/bin/mysqlbinlog
           else
-            docker run --rm -v "$RUNNER_TEMP:/w" alpine:3.22 sh -c 'apk add -q --no-cache libarchive-tools && bsdtar -xf /w/client.rpm -C /w/rpm ./usr/bin/mysqlbinlog && chown -R '"$(id -u):$(id -g)"' /w/rpm'
+            docker run --rm -v "$RUNNER_TEMP/client.rpm:/in/client.rpm:ro" -v "$RUNNER_TEMP/rpm:/out" alpine:3.22 sh -c 'apk add -q --no-cache libarchive-tools && bsdtar -xf /in/client.rpm -C /out ./usr/bin/mysqlbinlog && chown -R '"$(id -u):$(id -g)"' /out'
           fi
           test -x "$RUNNER_TEMP/rpm/usr/bin/mysqlbinlog"
           SHARED="$RUNNER_TEMP/sbb-binlog"

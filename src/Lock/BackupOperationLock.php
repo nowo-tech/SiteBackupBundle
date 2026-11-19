@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Lock;
 
+use Closure;
 use Nowo\SiteBackupBundle\Exception\BackupAlreadyRunningException;
 use Nowo\SiteBackupBundle\Exception\OperationLockUnavailableException;
 use Nowo\SiteBackupBundle\Setup\SetupOrchestrator;
@@ -16,6 +17,7 @@ use Symfony\Component\Lock\Exception\LockConflictedException;
 use Symfony\Component\Lock\Exception\LockReleasingException;
 use Symfony\Component\Lock\LockFactory;
 use Symfony\Component\Lock\LockInterface;
+use Throwable;
 
 use function fclose;
 use function flock;
@@ -51,6 +53,9 @@ final class BackupOperationLock
     /** 1.37+: the setup wizard lock ({@see SetupOrchestrator}): `backup.lock.key` + `.setup`. */
     public const SETUP_KEY = self::DEFAULT_KEY . '.setup';
 
+    /**
+     * @param (Closure(resource): array{0: bool, 1: int})|null $flock @internal test seam for flock(): [locked, wouldBlock]; null = flock()
+     */
     public function __construct(
         private readonly string $lockDirectory,
         private readonly ?LockFactory $lockFactory = null,
@@ -61,6 +66,7 @@ final class BackupOperationLock
         private readonly LoggerInterface $logger = new NullLogger(),
         private readonly int $retryAfterSeconds = 300,
         private readonly ?LocalLockFallbackPolicyInterface $localFallback = null,
+        private readonly ?Closure $flock = null,
     ) {
     }
 
@@ -99,6 +105,11 @@ final class BackupOperationLock
             $local->release();
 
             throw $e;
+        } catch (Throwable $e) {
+            // 1.37+ (audit UT3-5): anything else (a store bug, a type error) never leaves the local file held.
+            $local->release();
+
+            throw $e;
         }
 
         return new BackupOperationLockHandle(
@@ -129,10 +140,21 @@ final class BackupOperationLock
         if ($handle === false) {
             throw new OperationLockUnavailableException('The operation lock file cannot be opened; nothing was started.');
         }
-        if (!flock($handle, LOCK_EX | LOCK_NB)) {
+        $wouldBlock = 0;
+        if ($this->flock instanceof Closure) {
+            [$locked, $wouldBlock] = ($this->flock)($handle);
+        } else {
+            $locked = flock($handle, LOCK_EX | LOCK_NB, $wouldBlock);
+        }
+        if (!$locked) {
             fclose($handle);
+            // 1.37+ (audit UT3-1): only "another process holds it" is a conflict (409). ENOLCK, a file system without
+            // a lock manager (NFS / CIFS) or EBADF cannot lock at all: 503, nothing was started.
+            if ($wouldBlock !== 0) {
+                throw new BackupAlreadyRunningException($this->retryAfterSeconds);
+            }
 
-            throw new BackupAlreadyRunningException($this->retryAfterSeconds);
+            throw new OperationLockUnavailableException('The operation lock file cannot be locked (the file system may not support flock()); nothing was started.');
         }
 
         return new BackupOperationLockHandle(

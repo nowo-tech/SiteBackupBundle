@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Tests\Unit\Lock;
 
+use Error;
 use Nowo\SiteBackupBundle\Exception\BackupAlreadyRunningException;
 use Nowo\SiteBackupBundle\Exception\OperationLockUnavailableException;
 use Nowo\SiteBackupBundle\Lock\BackupOperationLock;
@@ -15,6 +16,7 @@ use Symfony\Component\Lock\Exception\LockConflictedException;
 use Symfony\Component\Lock\LockFactory;
 use Symfony\Component\Lock\Store\FlockStore;
 use Symfony\Component\Lock\Store\InMemoryStore;
+use Throwable;
 
 use function sys_get_temp_dir;
 use function uniqid;
@@ -58,6 +60,44 @@ final class BackupOperationLockTest extends TestCase
         $held->release();
         $held->release();
         $lock->acquire()->release();
+    }
+
+    /**
+     * Audit UT3-1: a flock() that fails without "would block" (ENOLCK, NFS / CIFS without a lock manager) is not a
+     * conflict.
+     */
+    public function testAFlockFailureThatWouldNotBlockIsNotAConflict(): void
+    {
+        $failing = new BackupOperationLock($this->dir, flock: static fn ($handle): array => [false, 0]);
+
+        try {
+            $failing->acquire();
+            self::fail('Expected OperationLockUnavailableException');
+        } catch (OperationLockUnavailableException $e) {
+            self::assertStringContainsString('cannot be locked', $e->getMessage());
+        }
+
+        $busy = new BackupOperationLock($this->dir, flock: static fn ($handle): array => [false, 1]);
+        $this->expectException(BackupAlreadyRunningException::class);
+        $busy->acquire();
+    }
+
+    /**
+     * Audit UT3-5: an unexpected failure of the shared store never leaves the local file held.
+     */
+    public function testAnUnexpectedStoreErrorReleasesTheLocalFile(): void
+    {
+        $lock = new BackupOperationLock($this->dir, new LockFactory(new FailingStore(error: true)), 'k.setup', 60.0, fileName: '.setup.lock', localFallback: $this->policy(true));
+
+        $caught = null;
+        try {
+            $lock->acquire();
+        } catch (Throwable $e) {
+            $caught = $e;
+        }
+        self::assertInstanceOf(Error::class, $caught);
+        self::assertSame('store bug', $caught->getMessage());
+        (new BackupOperationLock($this->dir, fileName: '.setup.lock'))->acquire()->release();
     }
 
     public function testAnUnusableLockFileIsNotAConflict(): void

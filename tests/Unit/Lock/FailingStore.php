@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Tests\Unit\Lock;
 
+use Error;
 use RuntimeException;
 use Symfony\Component\Lock\Exception\LockConflictedException;
 use Symfony\Component\Lock\Key;
@@ -19,6 +20,7 @@ final class FailingStore implements PersistingStoreInterface
         private readonly bool $refresh = false,
         private readonly bool $conflictOnRefresh = false,
         private readonly bool $delete = false,
+        private readonly bool $error = false,
     ) {
     }
 
@@ -26,6 +28,10 @@ final class FailingStore implements PersistingStoreInterface
 
     public function save(Key $key): void
     {
+        if ($this->error) {
+            // Not an \Exception: Lock::acquire() does not wrap it (an unexpected error, audit UT3-5).
+            throw new Error('store bug');
+        }
         if ($this->save) {
             throw new RuntimeException('store down');
         }

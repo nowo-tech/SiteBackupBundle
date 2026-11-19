@@ -156,25 +156,30 @@ Concurrency (REQ-RUNTIME-003, see [CONCURRENCY.md](CONCURRENCY.md)). No configur
   `nowo_site_backup.conflict_response.status: 503`.
 - **Setup runs are serialised.** `SetupOrchestrator::advance()` and `resetProgress()` throw
   `SetupAlreadyRunningException` while another run holds the setup lock (`nowo:site-backup:setup`,
-  `setup-reset` and `setup-token --open` then fail with that message). The lock uses `lock.factory` with the key
-  `<backup.lock.key>.setup`, else `<storage_dir>/.setup.lock`.
+  `setup-reset` and `setup-token --open` then fail with that message). With `lock.factory` the setup lock always takes
+  both the local file `<storage_dir>/.setup.lock` (first) and the key `<backup.lock.key>.setup`, whatever
+  `setup.lock_fallback_local` says; without `lock.factory` it takes the file only. So with `lock.factory`,
+  `storage_dir` must now also be writable and support `flock()` for the setup wizard (a file system without a lock
+  manager answers 503).
 - **Clear status** (`SiteBackupManagerInterface::clearRestoreStatus()`) now takes the operation lock and may throw
-  `BackupAlreadyRunningException`; it never clears a restore that is still running.
+  `BackupAlreadyRunningException`. It never clears a restore that is still running: it throws
+  `RestoreStillRunningException` (the panel shows "A restore is still running"), and
+  `RestoreOrchestrator::clearFailedOrCompleted()` now returns `bool` (false = nothing cleared).
 - **Store failures are not conflicts.** `BackupOperationLock::acquire()` throws `OperationLockUnavailableException`
-  (not `BackupAlreadyRunningException`) when the lock file cannot be opened or the lock store fails. Code that caught
+  (not `BackupAlreadyRunningException`) when the lock file cannot be opened or locked (`flock()` fails without
+  "would block": ENOLCK, NFS / CIFS without a lock manager) or the lock store fails. Code that caught
   `BackupAlreadyRunningException` for those cases should also catch the new exception (both implement
   `SiteBackupException`).
 - **Lock file or store failures, visible effects.** An unopenable lock file now makes `nowo:site-backup:create` exit
   **1** (it exited 75, `EXIT_LOCKED`, as if another backup ran); schedulers that retry on 75 only should treat 1 as an
   error to look at. The `sql_file` setup step with the PDO importer took no lock before: it now fails with "SQL import
   not started" (nothing imported) when a backup holds the lock or the lock store is unavailable; retry the step.
-- **Setup lock fallback.** New `setup.lock_fallback_local` (`cold_only` by default): when the shared lock store fails
-  on a configured or re-opened instance, the wizard now answers 503 instead of falling back to a local lock file. Set
+- **Setup lock fallback.** New `setup.lock_fallback_local` (`cold_only` by default) decides only what happens when the
+  shared lock store fails: keep the local file alone (cold first install) or answer 503 (configured or re-opened
+  instance). The local file is taken either way when `lock.factory` exists. Set
   `always` only with a single server. `cold_only` treats a durable done store that throws as cold; with several
   servers and an ephemeral `var/`, set `never`. Install ext-posix (suggested) so subprocess trees are killed without
   the `kill` binary.
-- **Clear status** while a restore is still running throws `RestoreStillRunningException` (the panel shows "A restore
-  is still running"); `RestoreOrchestrator::clearFailedOrCompleted()` now returns `bool` (false = nothing cleared).
 - **Several servers** sharing the database or the storage need a shared `framework.lock` store (Redis, PDO / DBAL);
   `flock()` serialises one host only.
 - New optional constructor arguments (all with defaults): `BackupOperationLock` (`$fileName`, `$logger`,

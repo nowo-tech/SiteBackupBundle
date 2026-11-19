@@ -26,7 +26,7 @@ controlled by **locks taken before anything changes**:
 | Lock | Key / file | Serialises |
 |------|------------|------------|
 | Operation lock (`BackupOperationLock`) | `backup.lock.key` (default `nowo_site_backup.operation`), else `<storage_dir>/.operation.lock` | backups, incrementals, archive imports, deletes, restores, chain restores, restore drills, `db-import`, the setup SQL import, clearing the restore status |
-| Setup lock (1.37+, service `nowo_site_backup.setup_lock`) | `<backup.lock.key>.setup`, else `<storage_dir>/.setup.lock` | `SetupOrchestrator::advance()` and `resetProgress()`: the wizard page, its JSON API and `nowo:site-backup:setup*` |
+| Setup lock (1.37+, service `nowo_site_backup.setup_lock`) | with `lock.factory`: `<storage_dir>/.setup.lock` **and** `<backup.lock.key>.setup` (always both, file first); without: the file only | `SetupOrchestrator::advance()` and `resetProgress()`: the wizard page, its JSON API and `nowo:site-backup:setup*` |
 
 Both locks are **non-blocking**: a second caller fails at once and does nothing. They use the host's `lock.factory`
 (symfony/lock) when it exists, else `flock()` with `LOCK_EX | LOCK_NB` on the lock file.
@@ -103,9 +103,11 @@ local file. The setup lock falls back to its local lock file only as `setup.lock
 done), because the store is then often the database being set up; `always`; or `never`. On a configured or re-opened
 instance a store outage answers 503, so servers never stop excluding each other.
 
-When the fallback is enabled, the setup lock always takes its local lock file **first** and the shared key second, and
-releases both (1.37+, audit UT2-1). A run that fell back and a run that reached the store a moment later therefore
-still exclude each other on the same host.
+With `lock.factory`, the setup lock always takes its local lock file **first** and the shared key second, and releases
+both (1.37+, audit UT2-1), whatever `setup.lock_fallback_local` says (it only decides what a store failure does). A run
+that fell back and a run that reached the store a moment later therefore still exclude each other on the same host.
+`storage_dir` must be writable and support `flock()`: a `flock()` that fails without "would block" (ENOLCK, NFS / CIFS
+without a lock manager) answers 503 (`OperationLockUnavailableException`), never 409.
 
 `cold_only` treats a durable done store that **throws** as "not done" (cold): it is usually the database that is not
 reachable yet, and the file markers (`setup.done`, `setup.reopened`) decide. On a multi-server deployment whose `var/`
@@ -126,8 +128,9 @@ is ephemeral (the markers are lost on redeploy), a database outage then looks li
   expires at its TTL; the operation's own result or exception is kept.
 - **Refresh**: a store failure is logged and retried on the next heartbeat (the TTL leaves the margin). A lock lost to
   another holder or expired stops the operation with Symfony Lock's exception; 1.37+: the running subprocess tree is
-  stopped and killed before the exception propagates (`posix_kill()` with ext-posix, else the `kill` binary, whose
-  failure is logged).
+  stopped and killed before the exception propagates (`posix_kill()` with ext-posix, else the `kill` binary). A
+  failure (the binary, or a SIGKILL that `posix_kill()` refuses) goes to the **PHP error log**: the bundle's process
+  runners have no logger.
 - **Crash**: `flock()` and a `FlockStore` are freed by the kernel when the process dies. A Redis / database key
   expires at its TTL; until then new operations get 409. A restore whose process died leaves "running" progress that
   stops counting after `restore.stale_after_seconds`.
@@ -165,5 +168,5 @@ the SQL import, and runs the rest under the setup lock like a first install.
   a run started in the same instant as a re-open is the remaining window.
 - A lost lock stops the operation and its subprocess tree is killed (1.37+), but not instantly: it may write for up to
   one poll interval (50 ms) plus the kill, and without ext-posix and without a working `kill` binary its descendants
-  can survive (the failure is logged). What was already written stays (a partial dump is discarded with the failed
+  can survive (the failure goes to the PHP error log). What was already written stays (a partial dump is discarded with the failed
   backup's work directory; a partial import is not rolled back).

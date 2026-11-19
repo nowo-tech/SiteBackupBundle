@@ -147,6 +147,29 @@ final class ProcessDeadlineTest extends TestCase
     /**
      * Audit UT2-2: without ext-posix a missing `kill` binary is reported, never silent.
      */
+    /**
+     * Audit UT3-3: a SIGKILL that posix_kill() cannot deliver (EPERM) is logged and reported.
+     */
+    public function testARefusedSigkillIsReported(): void
+    {
+        if (!is_dir('/proc/self') || !function_exists('posix_kill')) {
+            self::markTestSkipped('Needs a Linux procfs and ext-posix.');
+        }
+
+        $process = $this->pipeline();
+        $logger  = new RecordingLogger();
+        $calls   = 0;
+        self::assertFalse(ProcessDeadline::killTree($process, '/proc', $logger, true, 'kill', static function (int $pid) use (&$calls): bool {
+            ++$calls;
+            // Really kill it, but report the first one as refused.
+            posix_kill($pid, 9);
+
+            return $calls > 1;
+        }));
+        self::assertStringContainsString('SIGKILL failed', $logger->records[0]['message'] ?? '');
+        self::assertSame([], $this->survivors());
+    }
+
     public function testAMissingKillBinaryIsReported(): void
     {
         if (!is_dir('/proc/self')) {
