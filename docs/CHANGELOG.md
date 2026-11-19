@@ -80,6 +80,24 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+
+- Concurrency (REQ-RUNTIME-003): [docs/CONCURRENCY.md](CONCURRENCY.md) lists every write path with its lock and its conflict answer, the codes, the host options, multi-server needs and the residual risks.
+- `conflict_response.status` (409 by default, or 503): the answer of the panel and the setup wizard when another operation holds the lock. The answer carries `Retry-After` and `X-Conflict-Code: CONFLICT_001` (nothing was done, retrying is safe); the setup JSON API answers `{"error": "setup_running", "code": "CONFLICT_001"}`.
+- Setup lock (service `nowo_site_backup.setup_lock`, key `<backup.lock.key>.setup`): `SetupOrchestrator::advance()` and `resetProgress()` run one at a time across requests, workers and console runs; `advance()` takes `resetFirst` to reset and run under one lock. A second caller gets `SetupAlreadyRunningException`. On a cold instance whose shared lock store does not answer yet it falls back to the local lock file.
+- `OperationLockUnavailableException`: the lock store or the lock file failed; nothing was started.
+- Race tests in separate processes on the `flock()` fallback, Symfony Lock `FlockStore` and `PdoStore`, and a CI job "Databases (lock-store races)" on MySQL 8.4, MariaDB 11.4 and PostgreSQL 16. CI job "Demo lock" checks the demo `composer.lock` against the bundle constraints.
+
+### Fixed
+
+- A held operation lock answered HTTP 200 (panel index) or 422 (create form) with only an error message; it now answers 409 (configurable) with `Retry-After` and `X-Conflict-Code: CONFLICT_001`.
+- Two setup runs at the same time (two tabs, a double submit, the page and the console) could run the same step twice; they are now serialised by the setup lock.
+- "Clear status" in the panel could reset the progress of a restore still running in another process, so the loading page stopped covering the half-restored site. It now takes the operation lock and never clears a running restore.
+- The setup `sql_file` step took the operation lock per file (client importer) or not at all (PDO importer): a backup could start between two files or during a PDO import. The lock is now held for the whole step, taken before the restore marker is written.
+- A lock file that cannot be opened, or a lock store that fails, was reported as "another operation is running"; it now throws `OperationLockUnavailableException`. A store failure while refreshing is logged and retried on the next heartbeat, and a store failure while releasing is logged instead of replacing the operation's result (the key expires at its TTL).
+- The DBAL setup progress storages update the row when a concurrent insert of the same row won the race, instead of failing.
+- CI "Real MySQL clients (EN-M1)": the client wrappers ran a new `docker run` per call, and a cold container start could exceed the 30 s `mysql --version` probe; the clients now run in long-lived containers through `docker exec`.
+
 ### Demo
 
 - `Demo smoke` workflow (weekly, on `v*` tags, on demand) runs `make demo-smoke` and expects HTTP 200 (REQ-TEST-011); documented in `docs/DEMO-FRANKENPHP.md`. `make test-e2e` uses the Playwright image that matches `e2e/package.json` (1.65).

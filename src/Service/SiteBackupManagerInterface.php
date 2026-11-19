@@ -74,6 +74,11 @@ interface SiteBackupManagerInterface
      */
     public function restore(string $backupId, ?string $actor = null): RestoreProgress;
 
+    /**
+     * Clears a failed or completed restore status. 1.37+: under the operation lock, never while a restore runs.
+     *
+     * @throws BackupAlreadyRunningException when a backup / restore holds the operation lock (1.37+)
+     */
     public function clearRestoreStatus(): void;
 
     /**

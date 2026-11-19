@@ -328,15 +328,23 @@ final class DoctrineDbalSetupStepJournal implements ResetInterface
     ): void {
         $existing = $this->fetchOne($profile, $stepId);
         if ($existing === null) {
-            $this->executeStatement(
-                sprintf(
-                    'INSERT INTO %s (profile, step_id, status, step_order, started_at, finished_at, updated_at, message) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
-                    $this->quoteTable(),
-                ),
-                [$profile, $stepId, $status, $stepOrder, $startedAt, $finishedAt, $updatedAt, $message],
-            );
+            try {
+                $this->executeStatement(
+                    sprintf(
+                        'INSERT INTO %s (profile, step_id, status, step_order, started_at, finished_at, updated_at, message) VALUES (?, ?, ?, ?, ?, ?, ?, ?)',
+                        $this->quoteTable(),
+                    ),
+                    [$profile, $stepId, $status, $stepOrder, $startedAt, $finishedAt, $updatedAt, $message],
+                );
 
-            return;
+                return;
+            } catch (Throwable $e) {
+                // 1.37+: another process inserted the (profile, step_id) row first: update it instead.
+                $existing = $this->fetchOne($profile, $stepId);
+                if ($existing === null) {
+                    throw $e;
+                }
+            }
         }
 
         $this->executeStatement(

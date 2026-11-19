@@ -9,6 +9,10 @@ use Nowo\SiteBackupBundle\Event\SetupCompletedEvent;
 use Nowo\SiteBackupBundle\Event\SetupStartedEvent;
 use Nowo\SiteBackupBundle\Event\SetupStepCompletedEvent;
 use Nowo\SiteBackupBundle\Event\SetupStepFailedEvent;
+use Nowo\SiteBackupBundle\Exception\BackupAlreadyRunningException;
+use Nowo\SiteBackupBundle\Exception\SetupAlreadyRunningException;
+use Nowo\SiteBackupBundle\Lock\BackupOperationLock;
+use Nowo\SiteBackupBundle\Lock\BackupOperationLockHandle;
 use Nowo\SiteBackupBundle\Log\SecretRedactor;
 use Nowo\SiteBackupBundle\Model\SetupProgress;
 use Nowo\SiteBackupBundle\Setup\Step\CacheClearStep;
@@ -38,6 +42,8 @@ final class SetupOrchestrator
 
     /**
      * @param array<string, array{steps: list<array<string, mixed>>, advance_mode?: string}> $profiles
+     * @param BackupOperationLock|null $setupLock 1.37+: serialises {@see advance()} and {@see resetProgress()} across
+     *                                            requests, workers and console runs (key {@see BackupOperationLock::SETUP_KEY})
      */
     public function __construct(
         private readonly string $projectDir,
@@ -51,6 +57,7 @@ final class SetupOrchestrator
         private readonly ?WorkerRestartSignal $workerRestartSignal = null,
         private readonly ClockInterface $clock = new NativeClock(),
         private readonly LoggerInterface $logger = new NullLogger(),
+        private readonly ?BackupOperationLock $setupLock = null,
     ) {
     }
 
@@ -116,9 +123,30 @@ final class SetupOrchestrator
     /**
      * Start or resume wizard; advances through auto steps until form input is needed or done.
      *
+     * 1.37+: one run at a time (the setup lock, taken before the stored progress is read). A second caller gets
+     * {@see SetupAlreadyRunningException} and nothing is done.
+     *
      * @param bool $forceAutomatic when true (CLI), ignore profile manual advance_mode and chain auto tabs
+     * @param bool $resetFirst 1.37+: reset the stored progress first, under the same lock
+     *
+     * @throws SetupAlreadyRunningException when another request or console run holds the setup lock (1.37+)
      */
-    public function advance(?string $profile = null, ?SetupStepInput $input = null, bool $forceAutomatic = false): SetupProgress
+    public function advance(?string $profile = null, ?SetupStepInput $input = null, bool $forceAutomatic = false, bool $resetFirst = false): SetupProgress
+    {
+        $lock = $this->acquireSetupLock();
+
+        try {
+            if ($resetFirst) {
+                $this->doResetProgress();
+            }
+
+            return $this->doAdvance($profile, $input, $forceAutomatic, $lock);
+        } finally {
+            $lock?->release();
+        }
+    }
+
+    private function doAdvance(?string $profile, ?SetupStepInput $input, bool $forceAutomatic, ?BackupOperationLockHandle $lock): SetupProgress
     {
         $profile = $this->resolveProfileName($profile);
         $steps   = $this->buildSteps($profile);
@@ -167,6 +195,8 @@ final class SetupOrchestrator
                 continue;
             }
 
+            // Each step is bounded by process_timeout; the TTL (4 x process_timeout + 300 s) covers one step.
+            $lock?->refresh();
             $progress = $progress->with(
                 phase: SetupProgress::PHASE_RUNNING,
                 profile: $profile,
@@ -273,10 +303,36 @@ final class SetupOrchestrator
         return $progress;
     }
 
+    /**
+     * @throws SetupAlreadyRunningException when another request or console run holds the setup lock (1.37+)
+     */
     public function resetProgress(): void
+    {
+        $lock = $this->acquireSetupLock();
+
+        try {
+            $this->doResetProgress();
+        } finally {
+            $lock?->release();
+        }
+    }
+
+    private function doResetProgress(): void
     {
         $this->logger->warning('SiteBackup: setup progress reset.', ['bundle' => 'site_backup', 'action' => 'setup_reset']);
         $this->progressStorage->save(new SetupProgress());
+    }
+
+    /**
+     * @throws SetupAlreadyRunningException
+     */
+    private function acquireSetupLock(): ?BackupOperationLockHandle
+    {
+        try {
+            return $this->setupLock?->acquire();
+        } catch (BackupAlreadyRunningException $e) {
+            throw new SetupAlreadyRunningException($e->getRetryAfterSeconds(), $e);
+        }
     }
 
     /**

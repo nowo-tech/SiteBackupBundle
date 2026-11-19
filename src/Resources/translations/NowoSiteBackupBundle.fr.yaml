@@ -81,6 +81,7 @@ panel:
   error:
     invalid_csrf: 'Jeton CSRF invalide.'
     access_denied: 'Accès refusé.'
+    operation_running: 'Une autre sauvegarde ou restauration est en cours. Rien n''a été modifié ; réessayez dans quelques minutes.'
     backup_not_found: 'Sauvegarde introuvable.'
   create:
     intro: 'Archive les chemins configurés et le dump de la base de données dans un .tar.gz avec sommes de contrôle.'
@@ -143,6 +144,7 @@ setup:
   error:
     invalid_csrf: 'Jeton CSRF invalide.'
     invalid_request: 'Requête de configuration invalide.'
+    setup_running: 'Une autre exécution de l''installation est en cours. Rien n''a été modifié ; réessayez dans un instant.'
   reason:
     heading: 'La configuration est requise'
     db_connection: 'La base de données est injoignable avec le DATABASE_URL actuel (absent, incorrect, ou service de base de données arrêté).'

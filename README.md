@@ -138,6 +138,7 @@ make release-check
 - [PSR evaluation (REQ-CS-007)](docs/PSR.md)
 - [Templates (UiKit page contract)](docs/TEMPLATES.md)
 - [Setup Wizard (cold start & post-restore)](docs/SETUP-WIZARD.md)
+- [Concurrency (locks, 409 answers, several servers)](docs/CONCURRENCY.md)
 - [Demo (FrankenPHP)](docs/DEMO-FRANKENPHP.md)
 - [GitHub CI notes](docs/GITHUB_CI.md)
 

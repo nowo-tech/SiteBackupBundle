@@ -142,6 +142,9 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
 
     public const LOGIN_LIMITER_STORAGE_ID = 'nowo_site_backup.login_limiter.storage';
 
+    /** 1.37+: the setup wizard lock (a {@see BackupOperationLock} on key {@see BackupOperationLock::SETUP_KEY}). */
+    public const SETUP_LOCK_ID = 'nowo_site_backup.setup_lock';
+
     /** kernel.request priority of the setup gate with setup.gate guests_and_admins: after the firewall (8), v1.31. */
     public const SETUP_GATE_AFTER_FIREWALL_PRIORITY = 7;
 
@@ -595,7 +598,22 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$lockDirectory', $backup['storage_dir'])
             ->setArgument('$lockFactory', new Reference('lock.factory', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
             ->setArgument('$key', (string) $backup['lock']['key'])
-            ->setArgument('$ttlSeconds', (float) (4 * $timeout + 300));
+            ->setArgument('$ttlSeconds', (float) (4 * $timeout + 300))
+            ->setArgument('$logger', new Reference('logger', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
+            ->addTag('monolog.logger', ['channel' => 'site_backup']);
+
+        // 1.37+ (REQ-RUNTIME-003): one setup wizard run at a time (page, JSON API and console share it).
+        $container->register(self::SETUP_LOCK_ID, BackupOperationLock::class)
+            ->setArgument('$lockDirectory', $backup['storage_dir'])
+            ->setArgument('$lockFactory', new Reference('lock.factory', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
+            ->setArgument('$key', $backup['lock']['key'] . '.setup')
+            ->setArgument('$ttlSeconds', (float) (4 * $timeout + 300))
+            ->setArgument('$fileName', '.setup.lock')
+            ->setArgument('$logger', new Reference('logger', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
+            ->setArgument('$retryAfterSeconds', 30)
+            // A cold instance may not reach the shared store yet (it is often the database being set up).
+            ->setArgument('$fallBackToFlock', true)
+            ->addTag('monolog.logger', ['channel' => 'site_backup']);
     }
 
     /**
@@ -1140,6 +1158,7 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             // 1.35.2+: the configured service itself; PortAliasValidityPass drops the port alias it does not implement.
             ->setArgument('$actorResolver', new Reference($this->actorResolverId($config['security'])))
             ->setArgument('$tokenStorage', new Reference('security.token_storage', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
+            ->setArgument('$conflictStatus', (int) $config['conflict_response']['status'])
             ->setPublic(true);
     }
 
@@ -1327,6 +1346,7 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$customSteps', [])
             ->setArgument('$checkerLocator', new Reference(SetupTabCheckerLocator::class))
             ->setArgument('$dumpImporter', new Reference(DumpImporter::class))
+            ->setArgument('$operationLock', new Reference(BackupOperationLock::class))
             ->setArgument('$restoreMarkerPath', rtrim((string) $config['backup']['storage_dir'], '/') . '/' . RestoreMarker::FILENAME);
 
         /** @var array<string, array{steps?: list<array<string, mixed>>, tabs?: list<array<string, mixed>>, advance_mode?: string|null}> $profiles */
@@ -1384,7 +1404,8 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$defaultProfile', $setup['default_profile'])
             ->setArgument('$eventDispatcher', new Reference('event_dispatcher', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
             ->setArgument('$defaultAdvanceMode', $globalAdvance)
-            ->setArgument('$workerRestartSignal', new Reference(WorkerRestartSignal::class));
+            ->setArgument('$workerRestartSignal', new Reference(WorkerRestartSignal::class))
+            ->setArgument('$setupLock', new Reference(self::SETUP_LOCK_ID));
 
         if ($container->hasDefinition(SetupRequestSubscriber::class)) {
             $sub = $container->getDefinition(SetupRequestSubscriber::class);
@@ -1457,6 +1478,7 @@ final class SiteBackupExtension extends Extension implements PrependExtensionInt
             ->setArgument('$translator', new Reference('translator', ContainerBuilder::IGNORE_ON_INVALID_REFERENCE))
             ->setArgument('$view', new Reference(SiteBackupView::class))
             ->setArgument('$tokenGate', new Reference(SetupTokenGate::class))
+            ->setArgument('$conflictStatus', (int) $config['conflict_response']['status'])
             ->setPublic(true);
     }
 

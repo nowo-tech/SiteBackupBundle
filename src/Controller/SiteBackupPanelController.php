@@ -4,9 +4,11 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Controller;
 
+use Nowo\SiteBackupBundle\Exception\BackupAlreadyRunningException;
 use Nowo\SiteBackupBundle\Form\Panel\CreateBackupType;
 use Nowo\SiteBackupBundle\Form\Panel\PanelActionType;
 use Nowo\SiteBackupBundle\Form\Panel\PanelLoginType;
+use Nowo\SiteBackupBundle\Http\ConflictResponse;
 use Nowo\SiteBackupBundle\Log\SecretRedactor;
 use Nowo\SiteBackupBundle\Model\BackupArtifact;
 use Nowo\SiteBackupBundle\Security\ActorResolverInterface;
@@ -59,6 +61,7 @@ final class SiteBackupPanelController
      * @param array<string, string> $templates page id => template (web_ui.templates; 1.x templates.* keys accepted)
      * @param ActorResolverInterface|PanelActorResolverInterface|null $actorResolver Actor recorded for panel writes (1.33+; the framework-free port 1.35+); null = "panel"
      * @param TokenStorageInterface|null $tokenStorage Source of the user passed to the access checker (1.33+); null = none
+     * @param int $conflictStatus 1.37+: status when another operation holds the lock (`conflict_response.status`, 409 or 503)
      */
     public function __construct(
         private readonly SiteBackupManagerInterface $manager,
@@ -74,6 +77,7 @@ final class SiteBackupPanelController
         ?SiteBackupView $view = null,
         private readonly ActorResolverInterface|PanelActorResolverInterface|null $actorResolver = null,
         private readonly ?TokenStorageInterface $tokenStorage = null,
+        private readonly int $conflictStatus = Response::HTTP_CONFLICT,
     ) {
         $this->view  = $view ?? new SiteBackupView($twig, $pathPrefix, templates: $templates);
         $this->pages = new PanelPages($this->view);
@@ -94,6 +98,7 @@ final class SiteBackupPanelController
         $success         = null;
         $submittedAction = null;
         $submittedForm   = null;
+        $conflict        = null;
 
         if ($request->isMethod('POST')) {
             $submittedAction = $request->request->getString('action');
@@ -121,6 +126,10 @@ final class SiteBackupPanelController
 
                             return new RedirectResponse($this->pathPrefix);
                         }
+                    } catch (BackupAlreadyRunningException $e) {
+                        // 1.37+ (REQ-RUNTIME-003): the lock is taken before anything changes, so retrying is safe.
+                        $conflict = $e;
+                        $error    = $this->message('panel.error.operation_running', 'Another backup or restore is running. Nothing was changed; try again in a few minutes.');
                     } catch (Throwable $e) {
                         // 1.34+: a dump / restore error may quote the DSN or a password; the page shows it redacted.
                         $error = SecretRedactor::fromThrowable($e);
@@ -131,13 +140,17 @@ final class SiteBackupPanelController
 
         if ($submittedAction === 'create' && $submittedForm instanceof FormInterface && $error !== null) {
             // A failed create (invalid CSRF / archiver error) goes back to the form with the message.
-            return $this->view->render('create', [
+            $response = $this->view->render('create', [
                 'page'     => $this->pages->create($submittedForm->createView()),
                 'messages' => $this->messages($error, null),
             ], Response::HTTP_UNPROCESSABLE_ENTITY);
+
+            return $conflict instanceof BackupAlreadyRunningException ? ConflictResponse::apply($response, $this->conflictStatus, $conflict->getRetryAfterSeconds()) : $response;
         }
 
-        return $this->renderIndex($this->messages($error, $success));
+        $response = $this->renderIndex($this->messages($error, $success));
+
+        return $conflict instanceof BackupAlreadyRunningException ? ConflictResponse::apply($response, $this->conflictStatus, $conflict->getRetryAfterSeconds()) : $response;
     }
 
     /**

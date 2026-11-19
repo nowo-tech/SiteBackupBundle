@@ -349,8 +349,14 @@ final class RestoreOrchestrator implements ResetInterface
         }
     }
 
+    /**
+     * 1.37+: a restore still running (fresh progress) is never cleared, so the loading page keeps covering it.
+     */
     public function clearFailedOrCompleted(): void
     {
+        if ($this->isRestoreActive()) {
+            return;
+        }
         $this->progressStorage->save(new RestoreProgress());
     }
 

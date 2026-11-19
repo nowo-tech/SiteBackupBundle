@@ -132,6 +132,30 @@
 
 ## Unreleased
 
+Concurrency (REQ-RUNTIME-003, see [CONCURRENCY.md](CONCURRENCY.md)). No configuration change is required.
+
+- **Lock-conflict status.** When another backup, restore, delete or import holds the operation lock, the panel now
+  answers **409** (it answered 200, or 422 on the create form) with `Retry-After` and `X-Conflict-Code: CONFLICT_001`.
+  The setup wizard answers 409 the same way when another setup run is in progress, and its JSON API answers
+  `409 {"error": "setup_running", "code": "CONFLICT_001"}`. Keep the old retry handling on 503 with
+  `nowo_site_backup.conflict_response.status: 503`.
+- **Setup runs are serialised.** `SetupOrchestrator::advance()` and `resetProgress()` throw
+  `SetupAlreadyRunningException` while another run holds the setup lock (`nowo:site-backup:setup`,
+  `setup-reset` and `setup-token --open` then fail with that message). The lock uses `lock.factory` with the key
+  `<backup.lock.key>.setup`, else `<storage_dir>/.setup.lock`.
+- **Clear status** (`SiteBackupManagerInterface::clearRestoreStatus()`) now takes the operation lock and may throw
+  `BackupAlreadyRunningException`; it never clears a restore that is still running.
+- **Store failures are not conflicts.** `BackupOperationLock::acquire()` throws `OperationLockUnavailableException`
+  (not `BackupAlreadyRunningException`) when the lock file cannot be opened or the lock store fails. Code that caught
+  `BackupAlreadyRunningException` for those cases should also catch the new exception (both implement
+  `SiteBackupException`).
+- **Several servers** sharing the database or the storage need a shared `framework.lock` store (Redis, PDO / DBAL);
+  `flock()` serialises one host only.
+- New optional constructor arguments (all with defaults): `BackupOperationLock` (`$fileName`, `$logger`,
+  `$retryAfterSeconds`, `$fallBackToFlock`), `SetupOrchestrator` (`$setupLock`), `SetupStepFactory` and `SqlFileStep`
+  (`$operationLock`), `SiteBackupPanelController` and `SetupWizardController` (`$conflictStatus`),
+  `DumpImporter::import()` (`$heldLock`).
+
 ## To 1.36.1
 
 From **1.36.0**:

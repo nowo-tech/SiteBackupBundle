@@ -81,6 +81,7 @@ panel:
   error:
     invalid_csrf: 'Token CSRF non valido.'
     access_denied: 'Accesso negato.'
+    operation_running: 'È in corso un altro backup o ripristino. Non è stato modificato nulla; riprova tra qualche minuto.'
     backup_not_found: 'Backup non trovato.'
   create:
     intro: 'Archivia i percorsi configurati e il dump del database in un .tar.gz con checksum.'
@@ -143,6 +144,7 @@ setup:
   error:
     invalid_csrf: 'Token CSRF non valido.'
     invalid_request: 'Richiesta di configurazione non valida.'
+    setup_running: 'È in corso un''altra esecuzione della configurazione. Non è stato modificato nulla; riprova tra un momento.'
   reason:
     heading: 'È necessaria la configurazione'
     db_connection: 'Il database non è raggiungibile con il DATABASE_URL attuale (mancante, errato o servizio DB non attivo).'

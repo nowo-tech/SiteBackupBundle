@@ -81,6 +81,7 @@ panel:
   error:
     invalid_csrf: 'Token CSRF no válido.'
     access_denied: 'Acceso denegado.'
+    operation_running: 'Hay otra copia de seguridad o restauración en curso. No se ha cambiado nada; inténtalo de nuevo en unos minutos.'
     backup_not_found: 'Copia de seguridad no encontrada.'
   create:
     intro: 'Archiva las rutas configuradas y el volcado de la base de datos en un .tar.gz con sumas de verificación.'
@@ -143,6 +144,7 @@ setup:
   error:
     invalid_csrf: 'Token CSRF no válido.'
     invalid_request: 'Solicitud de configuración no válida.'
+    setup_running: 'Hay otra ejecución de la instalación en curso. No se ha cambiado nada; inténtalo de nuevo en un momento.'
   reason:
     heading: 'Hace falta completar la configuración'
     db_connection: 'La base de datos no es alcanzable con el DATABASE_URL actual (falta, es incorrecto o el servicio DB está caído).'

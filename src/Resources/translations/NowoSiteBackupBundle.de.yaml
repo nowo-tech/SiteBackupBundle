@@ -81,6 +81,7 @@ panel:
   error:
     invalid_csrf: 'Ungültiges CSRF-Token.'
     access_denied: 'Zugriff verweigert.'
+    operation_running: 'Eine andere Sicherung oder Wiederherstellung läuft. Es wurde nichts geändert; versuchen Sie es in einigen Minuten erneut.'
     backup_not_found: 'Sicherung nicht gefunden.'
   create:
     intro: 'Archiviert die konfigurierten Pfade und den Datenbank-Dump in einer .tar.gz mit Prüfsummen.'
@@ -143,6 +144,7 @@ setup:
   error:
     invalid_csrf: 'Ungültiges CSRF-Token.'
     invalid_request: 'Ungültige Einrichtungsanfrage.'
+    setup_running: 'Eine andere Einrichtung läuft gerade. Es wurde nichts geändert; versuchen Sie es gleich erneut.'
   reason:
     heading: 'Einrichtung erforderlich'
     db_connection: 'Die Datenbank ist mit der aktuellen DATABASE_URL nicht erreichbar (fehlt, ist falsch oder der Datenbankdienst ist nicht verfügbar).'
