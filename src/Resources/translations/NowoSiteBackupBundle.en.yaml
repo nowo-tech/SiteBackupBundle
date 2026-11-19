@@ -81,6 +81,9 @@ panel:
   error:
     invalid_csrf: 'Invalid CSRF token.'
     access_denied: 'Access denied.'
+    operation_running: 'Another backup or restore is running. Nothing was changed; try again in a few minutes.'
+    restore_still_running: 'A restore is still running; its status was not cleared.'
+    lock_unavailable: 'The operation lock is unavailable. Nothing was changed; try again later.'
     backup_not_found: 'Backup not found.'
   create:
     intro: 'Archives the configured paths and the database dump into a checksummed .tar.gz.'
@@ -143,6 +146,8 @@ setup:
   error:
     invalid_csrf: 'Invalid CSRF token.'
     invalid_request: 'Invalid setup request.'
+    setup_running: 'Another setup run is in progress. Nothing was changed; try again in a moment.'
+    lock_unavailable: 'The setup lock is unavailable. Nothing was changed; try again later.'
   reason:
     heading: 'Setup is required'
     db_connection: 'The database is not reachable with the current DATABASE_URL (missing, wrong, or the DB service is down).'

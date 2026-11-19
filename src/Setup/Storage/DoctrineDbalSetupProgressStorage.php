@@ -165,41 +165,67 @@ final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInte
     private function persistRow(array $params): void
     {
         if ($this->fetchRow() === null) {
-            $this->executeStatement(
-                sprintf(
-                    'INSERT INTO %s (id, phase, profile, current_step_id, percent, started_at, updated_at, completed_at, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
-                    $this->quoteTable(),
-                ),
-                [
-                    $params['id'],
-                    $params['phase'],
-                    $params['profile'],
-                    $params['current_step_id'],
-                    $params['percent'],
-                    $params['started_at'],
-                    $params['updated_at'],
-                    $params['completed_at'],
-                    $params['payload'],
-                ],
-            );
-        } else {
-            $this->executeStatement(
-                sprintf(
-                    'UPDATE %s SET phase = ?, profile = ?, current_step_id = ?, percent = ?, started_at = ?, updated_at = ?, completed_at = ?, payload = ? WHERE id = 1',
-                    $this->quoteTable(),
-                ),
-                [
-                    $params['phase'],
-                    $params['profile'],
-                    $params['current_step_id'],
-                    $params['percent'],
-                    $params['started_at'],
-                    $params['updated_at'],
-                    $params['completed_at'],
-                    $params['payload'],
-                ],
-            );
+            try {
+                $this->insertRow($params);
+
+                return;
+            } catch (Throwable $e) {
+                // 1.37+: another process inserted row 1 first (the "only one" race): update it instead. Any other
+                // failure leaves no row and is rethrown.
+                if ($this->fetchRow() === null) {
+                    throw $e;
+                }
+            }
         }
+
+        $this->updateRow($params);
+    }
+
+    /**
+     * @param array<string, mixed> $params
+     */
+    private function insertRow(array $params): void
+    {
+        $this->executeStatement(
+            sprintf(
+                'INSERT INTO %s (id, phase, profile, current_step_id, percent, started_at, updated_at, completed_at, payload) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)',
+                $this->quoteTable(),
+            ),
+            [
+                $params['id'],
+                $params['phase'],
+                $params['profile'],
+                $params['current_step_id'],
+                $params['percent'],
+                $params['started_at'],
+                $params['updated_at'],
+                $params['completed_at'],
+                $params['payload'],
+            ],
+        );
+    }
+
+    /**
+     * @param array<string, mixed> $params
+     */
+    private function updateRow(array $params): void
+    {
+        $this->executeStatement(
+            sprintf(
+                'UPDATE %s SET phase = ?, profile = ?, current_step_id = ?, percent = ?, started_at = ?, updated_at = ?, completed_at = ?, payload = ? WHERE id = 1',
+                $this->quoteTable(),
+            ),
+            [
+                $params['phase'],
+                $params['profile'],
+                $params['current_step_id'],
+                $params['percent'],
+                $params['started_at'],
+                $params['updated_at'],
+                $params['completed_at'],
+                $params['payload'],
+            ],
+        );
     }
 
     private function syncStepJournal(SetupProgress $progress): void
@@ -319,6 +345,8 @@ final class DoctrineDbalSetupProgressStorage implements SetupProgressStorageInte
 
     /**
      * @return array<string, mixed>|null
+     *
+     * @phpstan-impure
      */
     private function fetchRow(): ?array
     {

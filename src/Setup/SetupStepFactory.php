@@ -6,6 +6,7 @@ namespace Nowo\SiteBackupBundle\Setup;
 
 use InvalidArgumentException;
 use Nowo\SiteBackupBundle\Database\DumpImporter;
+use Nowo\SiteBackupBundle\Lock\BackupOperationLock;
 use Nowo\SiteBackupBundle\Setup\Step\AdminUserStep;
 use Nowo\SiteBackupBundle\Setup\Step\BootstrapModeStep;
 use Nowo\SiteBackupBundle\Setup\Step\CacheClearStep;
@@ -59,6 +60,7 @@ final class SetupStepFactory
         private readonly ?SetupTabCheckerLocator $checkerLocator = null,
         private readonly ?DumpImporter $dumpImporter = null,
         private readonly ?string $restoreMarkerPath = null,
+        private readonly ?BackupOperationLock $operationLock = null,
     ) {
         foreach (array_keys($this->customSteps) as $type) {
             if (in_array($type, self::RESERVED_TYPES, true)) {
@@ -147,6 +149,7 @@ final class SetupStepFactory
                 ($config['importer'] ?? null) === SqlFileStep::IMPORTER_CLIENT ? SqlFileStep::IMPORTER_CLIENT : SqlFileStep::IMPORTER_PDO,
                 $this->dumpImporter,
                 $this->restoreMarkerPath,
+                $this->operationLock,
             ),
             'console' => new ConsoleStep(
                 $id,

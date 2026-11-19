@@ -80,23 +80,35 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
-### Demo
+### Added
 
-- `Demo smoke` workflow (weekly, on `v*` tags, on demand) runs `make demo-smoke` and expects HTTP 200 (REQ-TEST-011); documented in `docs/DEMO-FRANKENPHP.md`. `make test-e2e` uses the Playwright image that matches `e2e/package.json` (1.65).
-- The demo is built on UiKit and FormKit (REQ-DEMO-014 / REQ-DEMO-015): the hand-written shell and token overrides are gone, the demo shell is UiKit's admin and guest layouts with its default theme (also the layouts of the panel and the setup wizard), and the force-setup forms are FormKit types themed by the `demo` profile on UiKit's form theme. No bundle runtime change.
+- Concurrency (REQ-RUNTIME-003): [docs/CONCURRENCY.md](CONCURRENCY.md) lists every write path with its lock and its conflict answer, the codes, the host options, multi-server needs and the residual risks.
+- `conflict_response.status` (409 by default, or 503): the answer of the panel and the setup wizard when another operation holds the lock. The answer carries `Retry-After` and `X-Conflict-Code: CONFLICT_001` (nothing was done, retrying is safe); the setup JSON API answers `{"error": "setup_running", "code": "CONFLICT_001"}`.
+- Setup lock (service `nowo_site_backup.setup_lock`, key `<backup.lock.key>.setup`): `SetupOrchestrator::advance()` and `resetProgress()` run one at a time across requests, workers and console runs; `advance()` takes `resetFirst` to reset and run under one lock. A second caller gets `SetupAlreadyRunningException`. When the shared lock store fails, `setup.lock_fallback_local` decides whether the setup lock may use its local lock file: `cold_only` (default: only before the first install completes), `always` or `never`; otherwise the wizard answers 503. With the fallback enabled the local lock file is always taken first, then the shared key, so a run that fell back and one that reached the store still exclude each other.
+- `OperationLockUnavailableException`: the lock store or the lock file failed; nothing was started. The panel and the wizard answer 503 + `Retry-After` (no conflict code), the setup JSON API `503 {"error":"lock_unavailable"}`.
+- `RestoreStillRunningException`: "Clear status" while a restore is still running; the panel says so instead of reporting the status as cleared.
+- Race tests in separate processes on the `flock()` fallback, Symfony Lock `FlockStore` and `PdoStore`, and a CI job "Databases (lock-store races)" on MySQL 8.4, MariaDB 11.4 and PostgreSQL 16. CI job "Demo lock" checks the demo `composer.lock` against the bundle constraints.
+- **Setup progress fallback warning (UT-2):** `chain` and `cache_doctrine` log one warning per request on the
+  `site_backup` channel when their database layer fails and they fall back to the file / cache copy (storage,
+  operation, fallback, exception class and driver code; never the exception message). They used to swallow the
+  error silently.
 
 ### Changed
 
 - Demo `.gitignore` ignores `/.pnpm-store` (REQ-GITIGNORE-003); demo `config/preload.php` declares strict types (REQ-CS-004)
 - Canonical `.scrutinizer.yml` (REQ-CI-002); Dependabot watches the demo Playwright `e2e/` npm manifest (REQ-GH-002)
 - Spec Kit: the 113 `src/` files added since the 2026-11-01 baseline review are mapped in `code-inventory.md`, with eight new area requirements in `spec.md` (REQ-SPECKIT-001 / REQ-SPECKIT-003)
-- **Setup progress fallback warning (UT-2):** `chain` and `cache_doctrine` log one warning per request on the
-  `site_backup` channel when their database layer fails and they fall back to the file / cache copy (storage,
-  operation, fallback, exception class and driver code; never the exception message). They used to swallow the
-  error silently.
 
 ### Fixed
 
+- A held operation lock answered HTTP 200 (panel index) or 422 (create form) with only an error message; it now answers 409 (configurable) with `Retry-After` and `X-Conflict-Code: CONFLICT_001`.
+- Two setup runs at the same time (two tabs, a double submit, the page and the console) could run the same step twice; they are now serialised by the setup lock.
+- "Clear status" in the panel could reset the progress of a restore still running in another process, so the loading page stopped covering the half-restored site. It now takes the operation lock and never clears a running restore.
+- The setup `sql_file` step took the operation lock per file (client importer) or not at all (PDO importer): a backup could start between two files or during a PDO import. The lock is now held for the whole step, taken before the restore marker is written.
+- A lock file that cannot be opened, or a lock store that fails, was reported as "another operation is running"; it now throws `OperationLockUnavailableException`. A store failure while refreshing is logged and retried on the next heartbeat, and a store failure while releasing is logged instead of replacing the operation's result (the key expires at its TTL).
+- A lost operation lock (the heartbeat refresh throws) now stops and kills the running subprocess tree (dump, client import) before the operation stops, instead of leaving it running without the lock (since 1.28.0). Killing a tree uses `posix_kill()` when ext-posix is available (Debian-based php images have no `kill` binary, so descendants of a timed-out dump could survive); otherwise the `kill` binary, whose failure is now logged.
+- The DBAL setup progress storages update the row when a concurrent insert of the same row won the race, instead of failing.
+- CI "Real MySQL clients (EN-M1)": the client wrappers ran a new `docker run` per call, and a cold container start could exceed the 30 s `mysql --version` probe; the clients now run in long-lived containers through `docker exec`.
 - **Portable DDL for the DBAL setup tables (UT-2):** the runtime `CREATE TABLE` of the setup progress table
   (`setup.progress_table`, affected `>= 1.2.0, < 1.37.0`) and of the per-step journal (`setup.progress_steps_table`,
   affected `>= 1.11.0, < 1.37.0`) used `CLOB` and `DATETIME`, which only SQLite accepts: MySQL / MariaDB failed
@@ -113,6 +125,11 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
   `CREATE TABLE IF NOT EXISTS` is kept where supported; elsewhere, and when two processes create the table at the
   same moment, a failed `CREATE TABLE` is accepted when the table is there. Existing tables are never altered.
   Covered by real-server tests on MySQL 8.4, MariaDB 11.4, PostgreSQL 16 and SQLite (new CI job).
+
+### Demo
+
+- `Demo smoke` workflow (weekly, on `v*` tags, on demand) runs `make demo-smoke` and expects HTTP 200 (REQ-TEST-011); documented in `docs/DEMO-FRANKENPHP.md`. `make test-e2e` uses the Playwright image that matches `e2e/package.json` (1.65).
+- The demo is built on UiKit and FormKit (REQ-DEMO-014 / REQ-DEMO-015): the hand-written shell and token overrides are gone, the demo shell is UiKit's admin and guest layouts with its default theme (also the layouts of the panel and the setup wizard), and the force-setup forms are FormKit types themed by the `demo` profile on UiKit's form theme. No bundle runtime change.
 
 ## [1.36.1] - 2026-11-14
 

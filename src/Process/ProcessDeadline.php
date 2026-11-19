@@ -4,19 +4,27 @@ declare(strict_types=1);
 
 namespace Nowo\SiteBackupBundle\Process;
 
+use Psr\Log\LoggerInterface;
 use Symfony\Component\Process\Exception\ProcessTimedOutException;
 use Symfony\Component\Process\Process;
+use Throwable;
 
+use function array_diff;
 use function array_map;
 use function array_merge;
 use function array_shift;
 use function array_values;
+use function constant;
+use function defined;
+use function error_log;
 use function explode;
 use function file_get_contents;
+use function function_exists;
 use function glob;
 use function hrtime;
 use function is_dir;
 use function is_string;
+use function posix_kill;
 use function rtrim;
 use function strrpos;
 use function substr;
@@ -39,6 +47,13 @@ use function usleep;
 final class ProcessDeadline
 {
     private const POLL_MICROSECONDS = 50_000;
+
+    private const SIGSTOP_LINUX = 19;
+
+    private const SIGKILL_LINUX = 9;
+
+    /** Rounds of stop-and-collect: a stopped process cannot fork, so new descendants stop appearing quickly. */
+    private const COLLECT_ROUNDS = 5;
 
     /**
      * Meant for subprocesses that write little to their own stdout / stderr (`tar`, a dump redirected to a file,
@@ -70,7 +85,15 @@ final class ProcessDeadline
             // Idle-timeout safety net (same value as the hard deadline).
             $process->checkTimeout();
             if ($tick !== null) {
-                $tick();
+                try {
+                    $tick();
+                } catch (Throwable $e) {
+                    // 1.37+ (audit UT-3): a failing callback (a lost operation lock) stops the operation; the
+                    // subprocess must not keep writing without the lock.
+                    self::killTree($process, $procRoot);
+
+                    throw $e;
+                }
             }
             usleep(self::POLL_MICROSECONDS);
         }
@@ -80,18 +103,89 @@ final class ProcessDeadline
 
     /**
      * Kills every descendant of the process (SIGKILL), then the process itself.
+     *
+     * 1.37+ (audit UT2-2): with ext-posix the root is stopped (SIGSTOP) first, so a sequential shell cannot start its
+     * next command, then descendants are stopped and collected again until no new one appears, and all are killed with
+     * `posix_kill()` (no `kill` binary needed: Debian-based php images have none). Without ext-posix the `kill` binary
+     * is used and a failure is logged (the `logger`, else the PHP error log).
+     *
+     * @param bool|null $usePosix null = ext-posix when available (false only for tests of the fallback)
+     * @param string $killBinary the fallback binary (tests)
+     *
+     * @return bool false when the fallback binary failed (descendants may survive)
      */
-    public static function killTree(Process $process, string $procRoot = '/proc'): void
+    public static function killTree(Process $process, string $procRoot = '/proc', ?LoggerInterface $logger = null, ?bool $usePosix = null, string $killBinary = 'kill'): bool
     {
-        $pid         = $process->getPid();
-        $descendants = $pid !== null ? self::descendantPids($pid, $procRoot) : [];
-        if ($descendants !== []) {
-            (new Process(array_merge(['kill', '-KILL'], array_map('strval', $descendants))))
-                ->setTimeout(5.0)
-                ->run();
+        $pid = $process->getPid();
+        if ($pid === null) {
+            $process->stop(0);
+
+            return true;
         }
 
+        $ok = ($usePosix ?? function_exists('posix_kill')) ? self::killWithPosix($pid, $procRoot) : self::killWithBinary($pid, $procRoot, $killBinary, $logger);
         $process->stop(0);
+
+        return $ok;
+    }
+
+    private static function killWithPosix(int $pid, string $procRoot): bool
+    {
+        $stop = defined('SIGSTOP') ? constant('SIGSTOP') : self::SIGSTOP_LINUX;
+        $kill = defined('SIGKILL') ? constant('SIGKILL') : self::SIGKILL_LINUX;
+
+        @posix_kill($pid, $stop);
+        $seen = [];
+        for ($round = 0; $round < self::COLLECT_ROUNDS; ++$round) {
+            $new = array_values(array_diff(self::descendantPids($pid, $procRoot), $seen));
+            if ($new === []) {
+                break;
+            }
+            foreach ($new as $child) {
+                @posix_kill($child, $stop);
+                $seen[] = $child;
+            }
+        }
+        foreach ($seen as $child) {
+            @posix_kill($child, $kill);
+        }
+        @posix_kill($pid, $kill);
+
+        return true;
+    }
+
+    private static function killWithBinary(int $pid, string $procRoot, string $killBinary, ?LoggerInterface $logger): bool
+    {
+        $ok          = self::signal($killBinary, '-STOP', [$pid]);
+        $descendants = self::descendantPids($pid, $procRoot);
+        if ($descendants !== []) {
+            $ok = self::signal($killBinary, '-KILL', $descendants) && $ok;
+        }
+        if (!$ok) {
+            $message = 'SiteBackup: could not signal the subprocess tree (no ext-posix and the kill binary failed); descendants may survive.';
+            if ($logger instanceof LoggerInterface) {
+                $logger->error($message, ['bundle' => 'site_backup', 'pid' => $pid]);
+            } else {
+                error_log($message);
+            }
+        }
+
+        return $ok;
+    }
+
+    /**
+     * @param list<int> $pids
+     */
+    private static function signal(string $killBinary, string $signal, array $pids): bool
+    {
+        try {
+            $kill = new Process(array_merge([$killBinary, $signal], array_map('strval', $pids)));
+            $kill->setTimeout(5.0)->run();
+
+            return $kill->isSuccessful();
+        } catch (Throwable) {
+            return false;
+        }
     }
 
     /**

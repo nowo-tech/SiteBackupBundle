@@ -42,10 +42,6 @@ final class SetupCommand extends Command
     {
         $io = new SymfonyStyle($input, $output);
 
-        if ($input->getOption('reset')) {
-            $this->orchestrator->resetProgress();
-        }
-
         $data = [];
         if ($input->getOption('admin-email')) {
             $data['email'] = (string) $input->getOption('admin-email');
@@ -67,8 +63,9 @@ final class SetupCommand extends Command
 
         try {
             // Loop: form steps need another advance with filled input
-            $guard    = 0;
-            $progress = $this->orchestrator->advance($profile, new SetupStepInput($data), true);
+            $guard = 0;
+            // 1.37+: --reset runs under the same setup lock as the first advance.
+            $progress = $this->orchestrator->advance($profile, new SetupStepInput($data), true, (bool) $input->getOption('reset'));
             while ($progress->getPhase() === SetupProgress::PHASE_WAITING && $guard < 20) {
                 ++$guard;
                 if ($data === []) {

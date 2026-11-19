@@ -171,7 +171,10 @@ jobs:
           for flavour in oracle mariadb; do
             if [ "$flavour" = oracle ]; then IMAGE=mysql:8.4; BIN=mysql; else IMAGE=mariadb:11.8; BIN=mariadb; fi
             docker pull -q "$IMAGE" >/dev/null
-            printf '#!/bin/sh\nexec docker run --rm -i --network host --user %s -e MYSQL_PWD -v "%s:%s" %s %s "$@"\n' "$(id -u):$(id -g)" "$SHARED" "$SHARED" "$IMAGE" "$BIN" > "$RUNNER_TEMP/bin/$flavour-client"
+            # One long-lived client container per flavour: a cold `docker run` per call could exceed the importer's
+            # 30 s `mysql --version` probe on a busy runner (run 44087518905).
+            docker run -d --name "sbb-client-$flavour" --network host --user "$(id -u):$(id -g)" -v "$SHARED:$SHARED" --entrypoint sleep "$IMAGE" infinity >/dev/null
+            printf '#!/bin/sh\nexec docker exec -i -e MYSQL_PWD %s %s "$@"\n' "sbb-client-$flavour" "$BIN" > "$RUNNER_TEMP/bin/$flavour-client"
             chmod +x "$RUNNER_TEMP/bin/$flavour-client"
             "$RUNNER_TEMP/bin/$flavour-client" --version
           done
@@ -187,7 +190,76 @@ jobs:
 
       - name: Stop MySQL
         if: always()
-        run: docker rm -f sbb-mysql >/dev/null 2>&1 || true
+        run: docker rm -f sbb-mysql sbb-client-oracle sbb-client-mariadb >/dev/null 2>&1 || true
+
+  # REQ-RUNTIME-003: separate PHP processes race on a shared lock store (Symfony Lock PdoStore) on each server; only
+  # one backup / restore / setup run may hold the operation lock. Sessions use a 5 s lock wait, children a hard timeout.
+  lock-store-races:
+    name: Databases (lock-store races)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+
+    services:
+      mysql:
+        image: mysql:8.4
+        env:
+          MYSQL_ROOT_PASSWORD: race
+          MYSQL_DATABASE: race
+        ports: ['127.0.0.1:3306:3306']
+        options: >-
+          --health-cmd="mysqladmin ping -h 127.0.0.1 -prace" --health-interval=5s --health-timeout=5s --health-retries=30
+      mariadb:
+        image: mariadb:11.4
+        env:
+          MARIADB_ROOT_PASSWORD: race
+          MARIADB_DATABASE: race
+        ports: ['127.0.0.1:3307:3306']
+        options: >-
+          --health-cmd="healthcheck.sh --connect --innodb_initialized" --health-interval=5s --health-timeout=5s --health-retries=30
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_PASSWORD: race
+          POSTGRES_DB: race
+        ports: ['127.0.0.1:5432:5432']
+        options: >-
+          --health-cmd="pg_isready -U postgres" --health-interval=5s --health-timeout=5s --health-retries=30
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Setup PHP
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.4'
+          extensions: json, zip, pdo_mysql, pdo_pgsql
+          coverage: none
+          tools: composer:v2
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Races on the flock fallback, FlockStore and PdoStore (MySQL 8.4, MariaDB 11.4, PostgreSQL 16)
+        timeout-minutes: 10
+        env:
+          SBB_RACE_MYSQL: 'mysql:host=127.0.0.1;port=3306;dbname=race|root|race'
+          SBB_RACE_MARIADB: 'mysql:host=127.0.0.1;port=3307;dbname=race|root|race'
+          SBB_RACE_PGSQL: 'pgsql:host=127.0.0.1;port=5432;dbname=race|postgres|race'
+        run: vendor/bin/phpunit --no-coverage --display-skipped --fail-on-skipped tests/Integration/Concurrency
+
+  # The demo installs the bundle from a path repository; its lock (when present) must satisfy the bundle's
+  # nowo-tech requirements. No nowo-tech/transaction-* dependency, so no dependency-floor job.
+  demo-lock:
+    name: Demo lock
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v7
+
+      - name: Demo lock satisfies the bundle's nowo-tech requirements
+        run: python3 .scripts/check-demo-lock.py . --only 'nowo-tech/*'
 
   # 1.36+ (Beacon E0 items 9-11): binlog incrementals against a real MySQL 9 server and the Oracle client tools.
   binlog-incrementals:

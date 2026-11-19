@@ -5,6 +5,8 @@ declare(strict_types=1);
 namespace Nowo\SiteBackupBundle\Controller;
 
 use JsonException;
+use Nowo\SiteBackupBundle\Exception\OperationLockUnavailableException;
+use Nowo\SiteBackupBundle\Exception\SetupAlreadyRunningException;
 use Nowo\SiteBackupBundle\Form\Setup\AdminUserType;
 use Nowo\SiteBackupBundle\Form\Setup\BootstrapModeType;
 use Nowo\SiteBackupBundle\Form\Setup\ContinueType;
@@ -12,6 +14,7 @@ use Nowo\SiteBackupBundle\Form\Setup\DatabaseUrlType;
 use Nowo\SiteBackupBundle\Form\Setup\ResetType;
 use Nowo\SiteBackupBundle\Form\Setup\SampleDataType;
 use Nowo\SiteBackupBundle\Form\Setup\SetupTokenType;
+use Nowo\SiteBackupBundle\Http\ConflictResponse;
 use Nowo\SiteBackupBundle\Model\SetupProgress;
 use Nowo\SiteBackupBundle\Routing\SetupPathPrefixResolver;
 use Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator;
@@ -69,6 +72,7 @@ final class SetupWizardController
 
     /**
      * @param array<string, string> $templates page id => template (web_ui.templates; 1.x templates.* keys accepted)
+     * @param int $conflictStatus 1.37+: status when another setup run holds the lock (`conflict_response.status`, 409 or 503)
      */
     public function __construct(
         private readonly SetupOrchestrator $orchestrator,
@@ -86,6 +90,7 @@ final class SetupWizardController
         ?SetupTokenGate $tokenGate = null,
         private readonly ?SetupAccessTokenStore $accessTokens = null,
         private readonly bool $allowWithoutToken = false,
+        private readonly int $conflictStatus = Response::HTTP_CONFLICT,
     ) {
         $this->view      = $view ?? new SiteBackupView($twig, guestLayoutTemplate: $templates['setup_layout'] ?? null, templates: $templates);
         $this->pages     = new SetupPages($this->view, $brandName);
@@ -118,6 +123,8 @@ final class SetupWizardController
         $steps       = $this->orchestrator->getSteps($progress->getProfile());
         $currentStep = $this->findCurrentStep($steps, $progress);
         $wizardForm  = $this->createSetupForm($progress, $currentStep, $reasons);
+        $conflict    = null;
+        $unavailable = false;
 
         if ($request->isMethod('POST')) {
             if (!$this->csrfTokenManager instanceof CsrfTokenManagerInterface) {
@@ -138,17 +145,27 @@ final class SetupWizardController
                         $profile = $postedProfile;
                     }
                     $input = new SetupStepInput($request->request->all());
-                    if ($request->request->getString('reset') === '1') {
-                        $this->orchestrator->resetProgress();
-                    }
-                    $progress = $this->orchestrator->advance($profile, $input);
-                    if ($progress->getPhase() === SetupProgress::PHASE_COMPLETED) {
-                        $this->accessTokens?->clear();
 
-                        return new RedirectResponse(rtrim($pathPrefix, '/') . '/done');
-                    }
-                    if ($progress->getPhase() === SetupProgress::PHASE_FAILED) {
-                        $error = $progress->getError();
+                    try {
+                        // 1.37+: the reset and the run share one setup lock (a second tab / the CLI gets a 409).
+                        $progress = $this->orchestrator->advance($profile, $input, resetFirst: $request->request->getString('reset') === '1');
+                        if ($progress->getPhase() === SetupProgress::PHASE_COMPLETED) {
+                            $this->accessTokens?->clear();
+
+                            return new RedirectResponse(rtrim($pathPrefix, '/') . '/done');
+                        }
+                        if ($progress->getPhase() === SetupProgress::PHASE_FAILED) {
+                            $error = $progress->getError();
+                        }
+                    } catch (SetupAlreadyRunningException $e) {
+                        $conflict = $e;
+                        $error    = $this->message('setup.error.setup_running', 'Another setup run is in progress. Nothing was changed; try again in a moment.');
+                        $progress = $this->orchestrator->getProgress();
+                    } catch (OperationLockUnavailableException) {
+                        // 1.37+ (audit UT-1): the shared lock store failed on a configured instance; nothing ran.
+                        $unavailable = true;
+                        $error       = $this->message('setup.error.lock_unavailable', 'The setup lock is unavailable. Nothing was changed; try again later.');
+                        $progress    = $this->orchestrator->getProgress();
                     }
                     $steps       = $this->orchestrator->getSteps($progress->getProfile());
                     $currentStep = $this->findCurrentStep($steps, $progress);
@@ -163,7 +180,7 @@ final class SetupWizardController
 
         $wizardView = $wizardForm?->createView();
 
-        return $this->view->render('setup_wizard', $this->setupViewVars([
+        $response = $this->view->render('setup_wizard', $this->setupViewVars([
             'page'        => $this->pages->wizard($steps, $progress, $currentStep, $wizardView),
             'progress'    => $progress,
             'steps'       => $steps,
@@ -177,6 +194,12 @@ final class SetupWizardController
             // database_url and the SQL import, and the orchestrator refuses to run them.
             'reopened' => $this->orchestrator->isReopened(),
         ], $pathPrefix));
+
+        if ($conflict instanceof SetupAlreadyRunningException) {
+            return ConflictResponse::apply($response, $this->conflictStatus, $conflict->getRetryAfterSeconds());
+        }
+
+        return $unavailable ? ConflictResponse::unavailable($response, 30) : $response;
     }
 
     public function done(): Response
@@ -236,7 +259,20 @@ final class SetupWizardController
             ? (is_string($payload['profile'] ?? null) ? $payload['profile'] : null)
             : $current->getProfile();
 
-        $progress = $this->orchestrator->advance($profile, new SetupStepInput($payload));
+        try {
+            $progress = $this->orchestrator->advance($profile, new SetupStepInput($payload));
+        } catch (SetupAlreadyRunningException $e) {
+            // 1.37+ (REQ-RUNTIME-003): same error shape as the other answers, the code added.
+            $response = new JsonResponse(['error' => 'setup_running', 'code' => ConflictResponse::RETRY_SAFE]);
+            ConflictResponse::apply($response, $this->conflictStatus, $e->getRetryAfterSeconds());
+
+            return $response;
+        } catch (OperationLockUnavailableException) {
+            $response = new JsonResponse(['error' => 'lock_unavailable']);
+            ConflictResponse::unavailable($response, 30);
+
+            return $response;
+        }
         if ($progress->getPhase() === SetupProgress::PHASE_COMPLETED) {
             $this->accessTokens?->clear();
         }
