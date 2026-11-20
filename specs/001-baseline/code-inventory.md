@@ -2,7 +2,7 @@
 
 **Baseline spec**: [`spec.md`](spec.md)  
 **Package**: `nowo-tech/site-backup-bundle`  
-**Last audited**: 2026-11-16 (sweep: 2026-11-01 baseline + later sources) (v1.26.0 + unreleased REQ-SEC-004 CG fix; features 002–007 included; feature IDs are prefixed with their spec number, e.g. `004 FR-PERF-001` → [`specs/004-worker-perf-dump-hardening/`](../004-worker-perf-dump-hardening/spec.md))
+**Last audited**: 2026-11-20 (v1.37.0; earlier: 2026-11-16 sweep: 2026-11-01 baseline + later sources) (v1.26.0 + unreleased REQ-SEC-004 CG fix; features 002–007 included; feature IDs are prefixed with their spec number, e.g. `004 FR-PERF-001` → [`specs/004-worker-perf-dump-hardening/`](../004-worker-perf-dump-hardening/spec.md))
 
 Every production source under `src/` is listed exactly once, grouped by domain (REQ-SPECKIT-001 / REQ-SPECKIT-003).
 
@@ -270,7 +270,7 @@ Every production source under `src/` is listed exactly once, grouped by domain (
 
 ## Sources added after the last baseline review (sweep 2026-11-16)
 
-These 113 `src/` files were added by releases after the last review. Each row maps the file to the requirement already used for its neighbours in the same directory; the description comes from the class docblock. With them, every file under `src/` is listed in this inventory.
+These 121 `src/` files were added by releases after the last review. Each row maps the file to the requirement already used for its neighbours in the same directory; the description comes from the class docblock. With them, every file under `src/` is listed in this inventory.
 
 | Source file | Requirement IDs |
 | --- | --- |
@@ -387,6 +387,14 @@ These 113 `src/` files were added by releases after the last review. Each row ma
 | `Setup/InitialInstallOnlyStepInterface.php` | FR-SETUP-001 |
 | `Setup/InitialInstallOnlySteps.php` | FR-SETUP-001 |
 | `Signing/BackupSigner.php` | FR-SIGNING-001 |
+| `Exception/OperationLockUnavailableException.php` | FR-EXCEPTION-001, FR-LOCK-001 |
+| `Exception/RestoreStillRunningException.php` | FR-EXCEPTION-001, FR-LOCK-001 |
+| `Exception/SetupAlreadyRunningException.php` | FR-EXCEPTION-001, FR-LOCK-001, FR-SETUP-002 |
+| `Http/ConflictResponse.php` | FR-LOCK-001 |
+| `Lock/LocalLockFallbackPolicyInterface.php` | FR-LOCK-001 |
+| `Setup/SetupLockFallbackPolicy.php` | FR-LOCK-001, FR-SETUP-002 |
+| `Setup/Storage/SetupProgressFallbackWarning.php` | FR-SETUP-002 |
+| `Setup/Storage/SetupTableDdl.php` | FR-SETUP-002, FR-DI-003 |
 
 ## Coverage summary
 
@@ -410,6 +418,6 @@ These 113 `src/` files were added by releases after the last review. Each row ma
 | Twig & UiKit page views | 5 |
 | Twig templates | 18 |
 | Translations | 7 |
-| **Total production sources** | **277** |
+| **Total production sources** | **293** |
 
-Audit command: `git ls-files src | wc -l` → 164.
+Audit command: `git ls-files src | wc -l` → 293.
