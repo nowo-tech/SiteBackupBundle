@@ -2,87 +2,93 @@
 
 {% block title %}Site Backup Bundle — demo features{% endblock %}
 
+{% block nowo_ui_page_header %}
+    {% set _toolbar %}<a class="nowo-ui-btn nowo-ui-btn--primary" href="/_site_backup">Open the backup panel</a>{% endset %}
+    {{ include(nowo_ui_partial('page_header'), {
+        title: 'Site Backup Bundle — demo',
+        intro: 'Showcases the bundle features: backup panel and setup wizard on the UiKit page contract (host layouts + theme), locale-in-path, custom gate detector, custom tab checker.',
+        toolbar: _toolbar,
+    }) }}
+{% endblock %}
+
 {% block body %}
-    <div class="nowo-ui-page-header"><h1 class="nowo-ui-page-header__title">Site Backup Bundle — demo</h1></div>
-    <p>Showcases the bundle features: backup panel and setup wizard on the UiKit page contract (host layouts + theme), locale-in-path, custom gate detector, custom tab checker.</p>
-    <p>
-        <span class="nowo-ui-badge nowo-ui-badge--neutral">nowo_ui_kit.css_framework={{ css_framework }}</span>
-        <span class="nowo-ui-badge nowo-ui-badge--neutral">locale.in_path=both</span>
-        <span class="nowo-ui-badge nowo-ui-badge--neutral">progress_storage=chain</span>
-    </p>
+    {% embed '@NowoUiKit/demo_platform/_section.html.twig' with {title: 'Configuration', kind: 'content', css_framework: css_framework} %}
+        {% block section_body %}
+            <span class="nowo-ui-badge nowo-ui-badge--neutral">nowo_ui_kit.css_framework={{ css_framework }}</span>
+            <span class="nowo-ui-badge nowo-ui-badge--neutral">locale.in_path=both</span>
+            <span class="nowo-ui-badge nowo-ui-badge--neutral">progress_storage=chain</span>
+        {% endblock %}
+    {% endembed %}
 
-    <section class="nowo-ui-card">
-        <div class="nowo-ui-card__header"><h2 class="nowo-ui-card__title">Quick links</h2></div>
-        <div class="nowo-ui-card__body">
-        <ul>
-            <li><a href="/_site_backup">Backup panel</a> (password: <code class="nowo-ui-code">password</code>) — UiKit scaffolds inside <code class="nowo-ui-code">layouts/admin.html.twig</code></li>
-            <li><a href="/_setup">Setup wizard</a> (bare URL redirects to <code class="nowo-ui-code">/en/_setup</code>)</li>
-            <li><a href="/es/_setup">Setup in Spanish path</a></li>
-            <li><a href="{{ path('demo_setup_token_gate') }}">Setup token gate preview</a> — <code class="nowo-ui-code">setup.token_gate</code> illustration (WebP + PNG fallback) and how-to steps (v1.22)</li>
-            <li>CLI: <code class="nowo-ui-code">php bin/console nowo:site-backup:create -l demo</code></li>
-            <li>Health exclusion: <a href="/health">/health</a></li>
-        </ul></div>
-    </section>
+    {% embed '@NowoUiKit/demo_platform/_section.html.twig' with {title: 'Quick links', kind: 'list'} %}
+        {% block section_body %}
+            <ul>
+                <li><a href="/_site_backup">Backup panel</a> (password: <code class="nowo-ui-code">password</code>) — UiKit scaffolds inside the demo shell</li>
+                <li><a href="/_setup">Setup wizard</a> (bare URL redirects to <code class="nowo-ui-code">/en/_setup</code>)</li>
+                <li><a href="/es/_setup">Setup in Spanish path</a></li>
+                <li><a href="{{ path('demo_setup_token_gate') }}">Setup token gate preview</a> — <code class="nowo-ui-code">setup.token_gate</code> illustration (WebP + PNG fallback) and how-to steps (v1.22)</li>
+                <li>CLI: <code class="nowo-ui-code">php bin/console nowo:site-backup:create -l demo</code></li>
+                <li>Health exclusion: <a href="/health">/health</a></li>
+            </ul>
+        {% endblock %}
+    {% endembed %}
 
-    <section class="nowo-ui-card">
-        <div class="nowo-ui-card__header"><h2 class="nowo-ui-card__title">Custom setup-need detector (v1.8)</h2></div>
-        <div class="nowo-ui-card__body">
-        <p>
-            <code class="nowo-ui-code">DemoForceSetupNeedDetector</code> (<code class="nowo-ui-code">#[AsSetupNeedDetector]</code>) opens the site gate when
-            <code class="nowo-ui-code">var/site-backup/demo-force-setup</code> exists — distinct from tab <code class="nowo-ui-code">checker:</code>.
-        </p>
-        <p>
-            Flag status:
-            {% if force_setup_active %}
-                <strong class="nowo-ui-badge nowo-ui-badge--warning">ACTIVE</strong> (visitors redirect to setup)
-            {% else %}
-                <strong class="nowo-ui-badge nowo-ui-badge--success">off</strong>
-            {% endif %}
-        </p>
-        <div class="nowo-ui-card__toolbar">
-            {{ form_start(force_setup_on_form) }}
-                {% for child in force_setup_on_form %}{% if not child.rendered %}{{ form_row(child) }}{% endif %}{% endfor %}
-                <button class="nowo-ui-btn nowo-ui-btn--primary" type="submit">Enable force-setup flag</button>
-            {{ form_end(force_setup_on_form) }}
-            {{ form_start(force_setup_off_form) }}
-                {% for child in force_setup_off_form %}{% if not child.rendered %}{{ form_row(child) }}{% endif %}{% endfor %}
-                <button class="nowo-ui-btn nowo-ui-btn--outline" type="submit">Clear flag</button>
-            {{ form_end(force_setup_off_form) }}
-        </div></div>
-    </section>
+    {% embed '@NowoUiKit/demo_platform/_section.html.twig' with {title: 'Custom setup-need detector (v1.8)', kind: 'form', force_setup_active: force_setup_active, force_setup_on_form: force_setup_on_form, force_setup_off_form: force_setup_off_form} %}
+        {% block section_body %}
+            <p>
+                <code class="nowo-ui-code">DemoForceSetupNeedDetector</code> (<code class="nowo-ui-code">#[AsSetupNeedDetector]</code>) opens the site gate when
+                <code class="nowo-ui-code">var/site-backup/demo-force-setup</code> exists — distinct from tab <code class="nowo-ui-code">checker:</code>.
+            </p>
+            <p>
+                Flag status:
+                {% if force_setup_active %}
+                    <span class="nowo-ui-badge nowo-ui-badge--warning">ACTIVE</span> (visitors redirect to setup)
+                {% else %}
+                    <span class="nowo-ui-badge nowo-ui-badge--success">off</span>
+                {% endif %}
+            </p>
+            <div class="nowo-ui-row-actions">
+                {{ form_start(force_setup_on_form) }}
+                    {% for child in force_setup_on_form %}{% if not child.rendered %}{{ form_row(child) }}{% endif %}{% endfor %}
+                    <button class="nowo-ui-btn nowo-ui-btn--outline" type="submit">Enable force-setup flag</button>
+                {{ form_end(force_setup_on_form) }}
+                {{ form_start(force_setup_off_form) }}
+                    {% for child in force_setup_off_form %}{% if not child.rendered %}{{ form_row(child) }}{% endif %}{% endfor %}
+                    <button class="nowo-ui-btn nowo-ui-btn--outline" type="submit">Clear flag</button>
+                {{ form_end(force_setup_off_form) }}
+            </div>
+        {% endblock %}
+    {% endembed %}
 
-    <section class="nowo-ui-card">
-        <div class="nowo-ui-card__header"><h2 class="nowo-ui-card__title">Custom tab + checker (v1.3)</h2></div>
-        <div class="nowo-ui-card__body">
-        <p>
-            Profile <code class="nowo-ui-code">demo_features</code>: custom tab with <code class="nowo-ui-code">DemoSeedTabChecker</code> +
-            <code class="nowo-ui-code">app:demo:seed-catalog</code> runner, then <code class="nowo-ui-code">marker</code>.
-        </p>
-        <p>
-            Seed file:
-            {% if seed_done %}
-                <strong class="nowo-ui-badge nowo-ui-badge--success">present</strong> (<code class="nowo-ui-code">var/site-backup/demo-seed.ok</code>)
-            {% else %}
-                <strong class="nowo-ui-badge nowo-ui-badge--warning">missing</strong>
-            {% endif %}
-        </p>
-        <div class="nowo-ui-card__toolbar">
-            <a class="nowo-ui-btn nowo-ui-btn--primary" href="/_setup?profile=demo_features">Open demo_features wizard</a>
-            <a class="nowo-ui-btn nowo-ui-btn--outline" href="/es/_setup?profile=demo_features">ES path</a>
-        </div>
-        <p>
-            Reset markers: <code class="nowo-ui-code">php bin/console nowo:site-backup:setup-reset --mark-required=demo_features -y</code>
-        </p></div>
-    </section>
+    {% embed '@NowoUiKit/demo_platform/_section.html.twig' with {title: 'Custom tab + checker (v1.3)', kind: 'content', seed_done: seed_done} %}
+        {% block section_actions %}<a class="nowo-ui-btn nowo-ui-btn--outline nowo-ui-btn--sm" href="/_setup?profile=demo_features">Open demo_features wizard</a><a class="nowo-ui-btn nowo-ui-btn--outline nowo-ui-btn--sm" href="/es/_setup?profile=demo_features">ES path</a>{% endblock %}
+        {% block section_body %}
+            <p>
+                Profile <code class="nowo-ui-code">demo_features</code>: custom tab with <code class="nowo-ui-code">DemoSeedTabChecker</code> +
+                <code class="nowo-ui-code">app:demo:seed-catalog</code> runner, then <code class="nowo-ui-code">marker</code>.
+            </p>
+            <p>
+                Seed file:
+                {% if seed_done %}
+                    <span class="nowo-ui-badge nowo-ui-badge--success">present</span> (<code class="nowo-ui-code">var/site-backup/demo-seed.ok</code>)
+                {% else %}
+                    <span class="nowo-ui-badge nowo-ui-badge--warning">missing</span>
+                {% endif %}
+            </p>
+            <p>
+                Reset markers: <code class="nowo-ui-code">php bin/console nowo:site-backup:setup-reset --mark-required=demo_features -y</code>
+            </p>
+        {% endblock %}
+    {% endembed %}
 
-    <section class="nowo-ui-card">
-        <div class="nowo-ui-card__header"><h2 class="nowo-ui-card__title">Feature map</h2></div>
-        <div class="nowo-ui-card__body">
-        <ul>
-            <li><strong>1.21</strong> — REQ-UI-003 page contract: <code class="nowo-ui-code">page/list</code>, <code class="nowo-ui-code">page/form</code>, <code class="nowo-ui-code">page/confirm</code> (type-to-confirm restore), <code class="nowo-ui-code">page/auth</code>, <code class="nowo-ui-code">page/wizard</code>; <code class="nowo-ui-code">web_ui.*</code> keys</li>
-            <li><strong>1.7</strong> — <code class="nowo-ui-code">setup.locale.in_path: both</code> (en/es)</li>
-            <li><strong>1.8</strong> — <code class="nowo-ui-code">#[AsSetupNeedDetector]</code> (toggle above)</li>
-        </ul>
-        <p>FrankenPHP worker: <code class="nowo-ui-code">FRANKENPHP_MODE=worker</code>. See <code class="nowo-ui-code">docs/DEMO-FRANKENPHP.md</code>.</p></div>
-    </section>
+    {% embed '@NowoUiKit/demo_platform/_section.html.twig' with {title: 'Feature map', kind: 'list'} %}
+        {% block section_body %}
+            <ul>
+                <li><strong>1.21</strong> — REQ-UI-003 page contract: <code class="nowo-ui-code">page/list</code>, <code class="nowo-ui-code">page/form</code>, <code class="nowo-ui-code">page/confirm</code> (type-to-confirm restore), <code class="nowo-ui-code">page/auth</code>, <code class="nowo-ui-code">page/wizard</code>; <code class="nowo-ui-code">web_ui.*</code> keys</li>
+                <li><strong>1.7</strong> — <code class="nowo-ui-code">setup.locale.in_path: both</code> (en/es)</li>
+                <li><strong>1.8</strong> — <code class="nowo-ui-code">#[AsSetupNeedDetector]</code> (toggle above)</li>
+            </ul>
+            <p>FrankenPHP worker: <code class="nowo-ui-code">FRANKENPHP_MODE=worker</code>. See <code class="nowo-ui-code">docs/DEMO-FRANKENPHP.md</code>.</p>
+        {% endblock %}
+    {% endembed %}
 {% endblock %}

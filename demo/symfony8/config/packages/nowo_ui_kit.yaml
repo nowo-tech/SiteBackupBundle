@@ -1,7 +1,9 @@
 # UiKit page contract (REQ-UI-003) and REQ-DEMO-014: UiKit's default theme, unchanged (no CSS framework, no CDN, no
-# token override). The Site Backup panel uses the admin layout, the panel sign-in and the setup wizard the guest layout.
+# token override); the demo platform shell (templates/base.html.twig) is the layout of every page. The Site Backup panel
+# uses the admin layout, the panel sign-in and the setup wizard the guest layout (the shell plus the demo gate escape).
 nowo_ui_kit:
     css_framework: custom
+    base_stylesheet: true
     icon_set: none
     row_actions_display: text
     layouts:

@@ -57,7 +57,7 @@ test.describe('backup panel', () => {
     await expect(page.locator('[data-nowo-ui-page="auth"]')).toBeVisible();
     await page.locator('input[name="password"]').fill('wrong');
     await page.getByRole('button', { name: 'Sign in' }).click();
-    await expect(page.locator('.nowo-ui-flash--error')).toHaveText('Invalid password.');
+    await expect(page.locator('.nowo-ui-flash--error')).toContainText('Invalid password.');
     await page.close();
   });
 
