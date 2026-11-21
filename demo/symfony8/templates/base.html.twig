@@ -1,24 +1,21 @@
-{#- REQ-DEMO-014: the demo shell is UiKit's admin layout with UiKit's default theme (nowo-ui.css from the bundle's own
-    asset package, no CSS framework, no CDN). The Site Backup panel pages render in it too (nowo_ui_kit.layouts.admin). -#}
-{% extends '@NowoUiKit/layout/admin.html.twig' %}
+{#- REQ-DEMO-014: the demo runs inside UiKit's shared demo platform shell (@NowoUiKit/demo_platform/layout.html.twig):
+    the same top bar, aside, content width, theme and footer as every other nowo-tech bundle demo. This file only
+    declares the demo (nowo_ui_demo_platform). The Site Backup panel pages render in it too (nowo_ui_kit.layouts.admin). -#}
+{% extends '@NowoUiKit/demo_platform/layout.html.twig' %}
+{% set nowo_ui_demo_platform = {
+    bundle: 'Site Backup',
+    home_route: 'homepage',
+    repository: 'https://github.com/nowo-tech/SiteBackupBundle',
+    translation_domain: false,
+    locales: [],
+    nav: [
+        {label: 'Home', route: 'homepage', section: 'Demo'},
+        {label: 'Panel', route: 'nowo_site_backup_panel', active: ['nowo_site_backup_panel', 'nowo_site_backup_create', 'nowo_site_backup_restore_confirm', 'nowo_site_backup_delete_confirm', 'nowo_site_backup_history'], section: 'Site Backup'},
+        {label: 'Setup', route: 'nowo_site_backup_setup', params: {_locale: 'en'}, section: 'Site Backup', testid: 'demo-nav-setup-en'},
+        {label: 'Setup (es)', route: 'nowo_site_backup_setup', params: {_locale: 'es'}, section: 'Site Backup', testid: 'demo-nav-setup-es'},
+        {label: 'Setup token gate', route: 'demo_setup_token_gate', section: 'Site Backup'},
+        {label: 'Health', href: '/health', active: [], section: 'Site Backup', testid: 'demo-nav-health'},
+    ],
+} %}
 
 {% block nowo_ui_document_title %}{% block title %}Site Backup Bundle demo{% endblock %}{% endblock %}
-
-{% block nowo_ui_navigation %}
-    {% set _path = app.request.pathInfo %}
-    <header class="nowo-ui-header" data-testid="demo-masthead">
-        <a class="nowo-ui-brand" href="{{ path('homepage') }}">Site Backup Bundle Demo</a>
-        <nav class="nowo-ui-menu" aria-label="Site Backup Bundle">
-            <a class="nowo-ui-link" href="{{ path('homepage') }}"{% if _path == '/' %} aria-current="page"{% endif %}>Home</a>
-            <a class="nowo-ui-link" href="/_site_backup"{% if _path starts with '/_site_backup' %} aria-current="page"{% endif %}>Panel</a>
-            <a class="nowo-ui-link" href="/en/_setup">Setup</a>
-            <a class="nowo-ui-link" href="/es/_setup">Setup (es)</a>
-            <a class="nowo-ui-link" href="/health">Health</a>
-        </nav>
-        <div class="nowo-ui-header__end">
-            {{ include('@NowoUiKitBundle/partials/_theme_toggle.html.twig', { compact: true }, false) }}
-        </div>
-    </header>
-{% endblock %}
-
-{% block nowo_ui_content %}{% block body %}{% endblock %}{% endblock %}

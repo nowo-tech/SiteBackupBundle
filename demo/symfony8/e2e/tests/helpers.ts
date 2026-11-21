@@ -22,7 +22,7 @@ export async function createBackup(page: Page, label: string): Promise<string> {
   await page.getByRole('button', { name: 'Create integral backup' }).click();
   const flash = page.locator('.nowo-ui-flash--success', { hasText: 'Backup created:' });
   await expect(flash).toBeVisible({ timeout: 60_000 });
-  const id = ((await flash.textContent()) ?? '').replace('Backup created:', '').trim();
+  const id = (((await flash.textContent()) ?? '').split('Backup created:')[1] ?? '').trim();
   expect(id).not.toBe('');
 
   return id;
