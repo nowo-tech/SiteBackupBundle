@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.38.1](#to-1381)
 - [To 1.38.0](#to-1380)
 - [To 1.37.1](#to-1371)
 - [To 1.37.0](#to-1370)
@@ -134,6 +135,14 @@
   - [Breaking changes](#breaking-changes-1)
 
 ## Unreleased
+
+## To 1.38.1
+
+From **1.38.0**:
+
+```bash
+composer update nowo-tech/site-backup-bundle
+```
 
 **Form actions order.** With UiKit **2.66.1** the create-backup form puts the primary first again, then Cancel (UiKit's
 default `theme.form_actions_order: primary_first`). Hosts that want Cancel first set
