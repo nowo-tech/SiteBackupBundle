@@ -4,7 +4,7 @@
         "Read more about it at https://getcomposer.org/doc/01-basic-usage.md#installing-dependencies",
         "This file is @generated automatically"
     ],
-    "content-hash": "7c3d6cf23aa711daa1a6488916cd3117",
+    "content-hash": "e9699930edb02cb4242c9de19fd16252",
     "packages": [
         {
             "name": "doctrine/collections",
@@ -260,16 +260,16 @@
         },
         {
             "name": "nowo-tech/ui-kit-bundle",
-            "version": "v2.51.0",
+            "version": "v2.66.0",
             "source": {
                 "type": "git",
                 "url": "https://github.com/nowo-tech/UiKitBundle.git",
-                "reference": "bd14774abdb7fb3bb755bf8fb2bf4aaee0258d15"
+                "reference": "3329edba6da30d5ef5a1ad3c3add578dc081ebe1"
             },
             "dist": {
                 "type": "zip",
-                "url": "https://api.github.com/repos/nowo-tech/UiKitBundle/zipball/bd14774abdb7fb3bb755bf8fb2bf4aaee0258d15",
-                "reference": "bd14774abdb7fb3bb755bf8fb2bf4aaee0258d15",
+                "url": "https://api.github.com/repos/nowo-tech/UiKitBundle/zipball/3329edba6da30d5ef5a1ad3c3add578dc081ebe1",
+                "reference": "3329edba6da30d5ef5a1ad3c3add578dc081ebe1",
                 "shasum": ""
             },
             "require": {
@@ -316,7 +316,8 @@
                 "symfony/validator": "Colour validation in the optional appearance forms"
             },
             "bin": [
-                "bin/nowo-ui-token-lint"
+                "bin/nowo-ui-token-lint",
+                "bin/nowo-ui-demo-style-lint"
             ],
             "type": "symfony-bundle",
             "autoload": {
@@ -358,8 +359,8 @@
                 "issues": "https://github.com/nowo-tech/UiKitBundle/issues",
                 "source": "https://github.com/nowo-tech/UiKitBundle"
             },
-            "time": "2026-11-13T16:47:40+00:00",
-            "published-time": "2026-11-13T16:53:34+00:00"
+            "time": "2026-11-22T14:50:44+00:00",
+            "published-time": "2026-11-22T14:52:58+00:00"
         },
         {
             "name": "psr/cache",

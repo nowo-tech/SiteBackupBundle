@@ -82,6 +82,14 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Form actions order (Beacon UX-017):** the panel's create-backup form puts Cancel first, then the primary on the
+  right, like the restore / delete confirm pages and the UiKit dialogs: the order comes from the UiKit form scaffold.
+  Requires `nowo-tech/ui-kit-bundle` **^2.66** (was ^2.2). The page contract tests check the order
+  (`formActionsOrderChecked()`); the setup wizard's two-choice steps (guided / full database, load / skip sample) are
+  choices, not Cancel rows, and keep their first submit button (Enter submits it).
+
 ### Fixed
 
 - demo: the demo `doctrine.yaml` no longer sets the ORM mapping `alias` option, deprecated since DoctrineBundle 3.4 (`doctrine.orm.entity_managers.<em>.mappings.<name>.alias`). The bundle itself prepends its mappings without `alias`; a test now asserts it. Demo and tests only, no release needed.

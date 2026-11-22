@@ -18,6 +18,11 @@ final class PageContractGermanTest extends PageContractTestCase
         return PageContractTest::pageFixtures();
     }
 
+    protected static function formActionsOrderChecked(): bool
+    {
+        return true;
+    }
+
     protected static function locale(): string
     {
         return 'de';
