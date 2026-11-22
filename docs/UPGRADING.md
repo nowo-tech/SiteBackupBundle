@@ -135,6 +135,10 @@
 
 ## Unreleased
 
+**Form actions order.** With UiKit **2.66.1** the create-backup form puts the primary first again, then Cancel (UiKit's
+default `theme.form_actions_order: primary_first`). Hosts that want Cancel first set
+`nowo_ui_kit.theme.form_actions_order: cancel_first`. The restore / delete confirm pages keep Cancel first either way.
+
 ## To 1.38.0
 
 From **1.37.1**:

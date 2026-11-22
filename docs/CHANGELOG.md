@@ -83,6 +83,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- **Form actions order follows UiKit again (UiKit 2.66.1, owner decision 2026-11-22):** the panel's create-backup form
+  gets its order from the UiKit form scaffold, which follows `theme.form_actions_order`: from UiKit 2.66.1 the primary
+  first, then Cancel (the 1.37 order), unless the host sets `form_actions_order: cancel_first`. The restore / delete
+  confirm pages keep Cancel first. Still `nowo-tech/ui-kit-bundle` **^2.66**.
+- Tests: `testCreateFollowsTheConfiguredOrderAndConfirmPagesPutCancelFirst` (was
+  `testCreateAndConfirmPagesPutCancelFirst`) checks the create form against the stub theme's configured order instead
+  of a hard-coded Cancel first (green on UiKit 2.66.0 and 2.66.1).
+
 ## [1.38.0] - 2026-11-22
 
 ### Changed
