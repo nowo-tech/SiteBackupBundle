@@ -87,6 +87,29 @@ final class FormKitProfileTest extends TestCase
         self::assertSame('panel.index.label_placeholder', $view->children['label']->vars['attr']['placeholder'] ?? null);
     }
 
+    public function testPrependAddsNoOrmMappingWithADeprecatedAliasKey(): void
+    {
+        $container = new ContainerBuilder();
+        (new SiteBackupExtension())->prepend($container);
+
+        foreach ($container->getExtensionConfig('doctrine') as $config) {
+            foreach ($config['orm']['mappings'] ?? [] as $mapping) {
+                self::assertArrayNotHasKey('alias', $mapping, 'DoctrineBundle 3.4 deprecates the ORM mapping alias option');
+            }
+        }
+        self::assertSame([], $container->getExtensionConfig('doctrine'));
+    }
+
+    public function testTheShippedDemoDoctrineConfigHasNoMappingAlias(): void
+    {
+        $file = __DIR__ . '/../../../demo/symfony8/config/packages/doctrine.yaml';
+        if (!is_file($file)) {
+            self::markTestSkipped('The demo is not part of this checkout.');
+        }
+
+        self::assertDoesNotMatchRegularExpression('/^\s+alias:/m', (string) file_get_contents($file));
+    }
+
     public function testPrependSkipsHostsWithoutFormKit(): void
     {
         $container = new ContainerBuilder();
