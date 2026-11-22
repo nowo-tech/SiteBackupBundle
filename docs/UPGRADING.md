@@ -3,6 +3,7 @@
 ## Table of contents
 
 - [Unreleased](#unreleased)
+- [To 1.38.0](#to-1380)
 - [To 1.37.1](#to-1371)
 - [To 1.37.0](#to-1370)
 - [To 1.36.1](#to-1361)
@@ -133,6 +134,14 @@
   - [Breaking changes](#breaking-changes-1)
 
 ## Unreleased
+
+## To 1.38.0
+
+From **1.37.1**:
+
+```bash
+composer update nowo-tech/site-backup-bundle
+```
 
 Requires `nowo-tech/ui-kit-bundle` **^2.66** (form actions order, Beacon UX-017): the create-backup form puts Cancel
 first, then the primary. UiKit's `theme.form_actions_order: primary_first` restores the old order host-wide.
