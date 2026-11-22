@@ -339,7 +339,7 @@ final class EoAuditFixesTest extends TestCase
         // A flipped byte inside an AES entry: integrity failure (1), not "wrong password" (2).
         $zip        = $archiver->create((new BackupOptions(format: ArchiveFormat::Zip))->withPassword(ArchivePassword::fromString(self::PHRASE)));
         $bytes      = (string) file_get_contents($zip->getAbsolutePath());
-        $at         = self::middleOfFirstEntryData($bytes);
+        $at         = $this->middleOfFirstEntryData($bytes);
         $bytes[$at] = $bytes[$at] === 'A' ? 'B' : 'A';
         file_put_contents($this->root . '/in/tampered.zip', $bytes);
         self::assertNotSame(VerifyFileResult::OK, $archiver->verifyFile($this->root . '/in/tampered.zip', ArchivePassword::fromString(self::PHRASE))->status);
@@ -385,7 +385,7 @@ final class EoAuditFixesTest extends TestCase
     /**
      * Offset of a byte inside the first encrypted payload (not a header field the reader may ignore).
      */
-    private static function middleOfFirstEntryData(string $bytes): int
+    private function middleOfFirstEntryData(string $bytes): int
     {
         $offset = 0;
         while (substr($bytes, $offset, 4) === "PK\x03\x04") {

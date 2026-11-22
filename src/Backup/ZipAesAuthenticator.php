@@ -136,7 +136,7 @@ final class ZipAesAuthenticator
 
             $mac = hash_init('sha1', HASH_HMAC, substr($keys, self::KEY_LENGTH, self::KEY_LENGTH));
             for ($left = $cipherSize; $left > 0; $left -= self::CHUNK) {
-                hash_update($mac, self::read($stream, (int) min(self::CHUNK, $left)));
+                hash_update($mac, self::read($stream, min(self::CHUNK, $left)));
             }
             $stored = self::read($stream, self::MAC_LENGTH);
         } finally {
@@ -224,7 +224,7 @@ final class ZipAesAuthenticator
     {
         fseek($handle, 0, SEEK_END);
         $fileSize = (int) ftell($handle);
-        $tailSize = (int) min($fileSize, self::END_SCAN_BYTES);
+        $tailSize = min($fileSize, self::END_SCAN_BYTES);
         $tail     = self::readAt($handle, $fileSize - $tailSize, $tailSize);
         $eocd     = (int) strrpos($tail, self::END_RECORD);
         /** @var array{count: int, size: int, offset: int} $end */
@@ -324,7 +324,7 @@ final class ZipAesAuthenticator
 
         try {
             $size  = (int) @filesize($path);
-            $start = (int) max(0, $size - self::END_SCAN_BYTES);
+            $start = max(0, $size - self::END_SCAN_BYTES);
             fseek($handle, $start, SEEK_SET);
             $tail = (string) fread($handle, self::END_SCAN_BYTES);
         } finally {

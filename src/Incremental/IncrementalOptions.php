@@ -7,6 +7,7 @@ namespace Nowo\SiteBackupBundle\Incremental;
 use InvalidArgumentException;
 use Nowo\SiteBackupBundle\Enum\ArchiveFormat;
 use Nowo\SiteBackupBundle\Exception\InvalidBackupOptionsException;
+use Nowo\SiteBackupBundle\Model\ArchivePassword;
 use Nowo\SiteBackupBundle\Model\BackupArtifact;
 use Nowo\SiteBackupBundle\Model\BackupOptions;
 
@@ -89,8 +90,8 @@ final class IncrementalOptions
         if ($format !== ArchiveFormat::SqlGz && $base->format !== $format) {
             throw new InvalidBackupOptionsException(sprintf('Backup %s is a %s archive: every backup of a chain uses the same format (start a new chain to change it).', $parentId, $format->value));
         }
-        if (($base->password !== null) !== $encrypted || ($encrypted && $base->keyId !== $keyId)) {
-            throw new InvalidBackupOptionsException(sprintf('Backup %s is %s: every backup of a chain uses the same encryption and key id (start a new chain to rotate the key).', $parentId, $encrypted ? 'encrypted with key id "' . (string) $keyId . '"' : 'not encrypted'));
+        if (($base->password instanceof ArchivePassword) !== $encrypted || ($encrypted && $base->keyId !== $keyId)) {
+            throw new InvalidBackupOptionsException(sprintf('Backup %s is %s: every backup of a chain uses the same encryption and key id (start a new chain to rotate the key).', $parentId, $encrypted ? 'encrypted with key id "' . $keyId . '"' : 'not encrypted'));
         }
 
         return new BackupOptions(

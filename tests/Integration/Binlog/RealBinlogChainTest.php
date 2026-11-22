@@ -24,6 +24,7 @@ use Nowo\SiteBackupBundle\Incremental\IncrementalArtifact;
 use Nowo\SiteBackupBundle\Incremental\MysqlBinlogTool;
 use Nowo\SiteBackupBundle\Incremental\MysqlClientBinlogServer;
 use Nowo\SiteBackupBundle\Model\BackupArtifact;
+use Nowo\SiteBackupBundle\Model\BackupHistoryEntry;
 use Nowo\SiteBackupBundle\Model\BackupOptions;
 use Nowo\SiteBackupBundle\Restore\ChainRestorer;
 use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
@@ -442,7 +443,7 @@ final class RealBinlogChainTest extends TestCase
             self::assertNotSame('', $password, $name . ' needs a password for this assertion');
             self::assertStringNotContainsString($password, $argv, $name);
             self::assertStringNotContainsString($password, implode("\n", $this->logger->lines()), $name);
-            self::assertStringNotContainsString($password, (string) json_encode(array_map(static fn ($e): array => $e->toArray(), $this->history->list(500))), $name);
+            self::assertStringNotContainsString($password, (string) json_encode(array_map(static fn (BackupHistoryEntry $e): array => $e->toArray(), $this->history->list(500))), $name);
             self::assertStringNotContainsString($password, (string) json_encode(array_map(static fn (BackupArtifact $a): array => $a->getMeta(), $artifacts)), $name);
         }
     }

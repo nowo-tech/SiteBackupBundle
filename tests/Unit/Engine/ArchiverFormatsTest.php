@@ -131,7 +131,7 @@ final class ArchiverFormatsTest extends TestCase
         $archiver = $this->archiver(includePaths: ['config']);
 
         $cases = [
-            'slip'      => static fn (ZipArchive $z) => $z->addFromString('../evil.php', 'x'),
+            'slip'      => static fn (ZipArchive $z): bool => $z->addFromString('../evil.php', 'x'),
             'encrypted' => static function (ZipArchive $z): void {
                 $z->addFromString('MANIFEST.json', '{}');
                 $z->setEncryptionName('MANIFEST.json', ZipArchive::EM_AES_256, 'canary-zip-0000000');
@@ -184,7 +184,7 @@ final class ArchiverFormatsTest extends TestCase
         $archiver  = $this->archiver(includePaths: ['config'], dumper: $dumper);
 
         try {
-            $artifact = $archiver->create(new BackupOptions(includeFiles: false, format: ArchiveFormat::SqlGz, tableRules: ['event_log' => TableRule::StructureOnly]));
+            $artifact = $archiver->create(new BackupOptions(includeFiles: false, tableRules: ['event_log' => TableRule::StructureOnly], format: ArchiveFormat::SqlGz));
 
             self::assertSame('database', $artifact->getContent());
             self::assertSame(['event_log' => 'structure'], $artifact->getTableRules());

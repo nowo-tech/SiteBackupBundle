@@ -279,7 +279,7 @@ final class ChainRestorer
                 $programs[] = $object;
             }
         }
-        if ($decoded !== null && self::createsStoredPrograms($decoded)) {
+        if ($decoded !== null && $this->createsStoredPrograms($decoded)) {
             $programs[] = 'CREATE TRIGGER / FUNCTION in the binary logs';
         }
         if ($programs === []) {
@@ -291,7 +291,7 @@ final class ChainRestorer
         }
     }
 
-    private static function createsStoredPrograms(string $decoded): bool
+    private function createsStoredPrograms(string $decoded): bool
     {
         $handle = @fopen($decoded, 'r');
         if ($handle === false) {
@@ -422,7 +422,7 @@ final class ChainRestorer
         if ($binlogLinks === []) {
             return $root->snapshotAt ?? $root->createdAt;
         }
-        $last = $chain->links[(int) array_key_last($binlogLinks)];
+        $last = $chain->links[array_key_last($binlogLinks)];
         $head = $last->lastEventAt ?? $last->createdAt;
 
         return $until instanceof DateTimeImmutable && $until < $head ? $until : $head;
@@ -437,7 +437,7 @@ final class ChainRestorer
             return null;
         }
 
-        return $chain->links[$fileLinks === [] ? 0 : (int) array_key_last($fileLinks)]->createdAt;
+        return $chain->links[$fileLinks === [] ? 0 : array_key_last($fileLinks)]->createdAt;
     }
 
     private function hasFiles(BackupArtifact $artifact): bool

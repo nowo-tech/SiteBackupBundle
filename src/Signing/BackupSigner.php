@@ -129,7 +129,7 @@ final class BackupSigner
         }
 
         return [
-            'signature'      => base64_encode(sodium_crypto_sign_detached(self::message($fields), $this->secretKey)),
+            'signature'      => base64_encode(sodium_crypto_sign_detached($this->message($fields), $this->secretKey)),
             'signing_key_id' => $this->keyId,
         ];
     }
@@ -146,7 +146,7 @@ final class BackupSigner
         }
         self::assertSodium();
 
-        return sodium_crypto_sign_verify_detached($raw, self::message($fields), $key);
+        return sodium_crypto_sign_verify_detached($raw, $this->message($fields), $key);
     }
 
     /**
@@ -221,7 +221,7 @@ final class BackupSigner
     /**
      * @param array<string, scalar|null> $fields
      */
-    private static function message(array $fields): string
+    private function message(array $fields): string
     {
         ksort($fields);
 

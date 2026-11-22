@@ -47,7 +47,7 @@ final class ArchivePassword
 
     private function __construct(#[SensitiveParameter] string $value)
     {
-        self::store($this, $value);
+        $this->store($this, $value);
     }
 
     public function __clone()
@@ -68,7 +68,7 @@ final class ArchivePassword
         return ['value' => '***'];
     }
 
-    private static function store(self $password, #[SensitiveParameter] string $value): void
+    private function store(self $password, #[SensitiveParameter] string $value): void
     {
         // Object-keyed weak map: each entry dies with its ArchivePassword (or on wipe()), so no value outlives the
         // object that carries it, in a FrankenPHP worker too.

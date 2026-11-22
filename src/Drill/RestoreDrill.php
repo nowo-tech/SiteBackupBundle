@@ -68,7 +68,7 @@ final class RestoreDrill
         if (!$this->restrictedAccount && isset($artifact->getMeta()['imported_from'])) {
             throw new InvalidArgumentException('Drilling an imported archive needs backup.drill.database_url (an account granted only on the drill schema): with the live account a hostile dump could write to the live database.');
         }
-        $expected = self::expected($artifact);
+        $expected = $this->expected($artifact);
 
         $started = hrtime(true);
         $work    = PrivateTempDirectory::create('nowo-site-backup-drill-', $this->workDir ?? sys_get_temp_dir());
@@ -131,7 +131,7 @@ final class RestoreDrill
     /**
      * @return array<string, array{rows: int, checksum: ?string}>
      */
-    private static function expected(BackupArtifact $artifact): array
+    private function expected(BackupArtifact $artifact): array
     {
         $raw = $artifact->getMeta()['table_stats'] ?? null;
         if (!is_array($raw) || $raw === []) {

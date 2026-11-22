@@ -97,11 +97,11 @@ final class AgeEncryptionTest extends TestCase
     public function testAvailabilityChecks(): void
     {
         $cases = [
-            'missing binary'  => fn () => new AgeBinaryEncryptor($this->bin . '/nope'),
-            'missing on PATH' => static fn () => new AgeBinaryEncryptor('nowo-no-such-age-binary'),
-            'too old'         => fn () => new AgeBinaryEncryptor(EngineFixtures::fakeAge($this->root . '/old', 'v1.2.1')),
-            'no plugin'       => fn () => new AgeBinaryEncryptor(EngineFixtures::fakeAge($this->root . '/noplugin', 'v1.3.1', false)),
-            'no version'      => fn () => new AgeBinaryEncryptor(EngineFixtures::fakeAge($this->root . '/garbled', 'age development build')),
+            'missing binary'  => fn (): AgeBinaryEncryptor => new AgeBinaryEncryptor($this->bin . '/nope'),
+            'missing on PATH' => static fn (): AgeBinaryEncryptor => new AgeBinaryEncryptor('nowo-no-such-age-binary'),
+            'too old'         => fn (): AgeBinaryEncryptor => new AgeBinaryEncryptor(EngineFixtures::fakeAge($this->root . '/old', 'v1.2.1')),
+            'no plugin'       => fn (): AgeBinaryEncryptor => new AgeBinaryEncryptor(EngineFixtures::fakeAge($this->root . '/noplugin', 'v1.3.1', false)),
+            'no version'      => fn (): AgeBinaryEncryptor => new AgeBinaryEncryptor(EngineFixtures::fakeAge($this->root . '/garbled', 'age development build')),
         ];
         (new Filesystem())->mkdir([$this->root . '/old', $this->root . '/noplugin', $this->root . '/garbled']);
 

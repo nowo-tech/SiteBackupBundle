@@ -101,11 +101,11 @@ final class RealDatabaseSetupStorageTest extends TestCase
             phase: SetupProgress::PHASE_RUNNING,
             profile: 'default',
             currentStepId: 'migrations',
-            completedStepIds: ['database_url', 'sql_file'],
             percent: 42.5,
-            startedAt: new DateTimeImmutable('2026-11-19 10:00:00'),
-            updatedAt: new DateTimeImmutable('2026-11-19 10:05:00'),
             message: str_repeat('long message ', 2000),
+            completedStepIds: ['database_url', 'sql_file'],
+            updatedAt: new DateTimeImmutable('2026-11-19 10:05:00'),
+            startedAt: new DateTimeImmutable('2026-11-19 10:00:00'),
         );
         $storage->save($progress);
 
@@ -271,7 +271,7 @@ final class RealDatabaseSetupStorageTest extends TestCase
      *
      * @return class-string
      */
-    private static function dbal(string $class): string
+    private function dbal(string $class): string
     {
         /** @var class-string $name */
         $name = 'Doctrine\\DBAL\\' . $class;
@@ -282,7 +282,7 @@ final class RealDatabaseSetupStorageTest extends TestCase
     /**
      * @param class-string $class
      */
-    private static function make(string $class, mixed ...$arguments): mixed
+    private function make(string $class, mixed ...$arguments): mixed
     {
         return new $class(...$arguments);
     }
@@ -292,8 +292,8 @@ final class RealDatabaseSetupStorageTest extends TestCase
      */
     private function connect(string $server, bool $sameTables = false): array
     {
-        $driverManager = self::dbal('DriverManager');
-        $dsnParser     = self::dbal('Tools\\DsnParser');
+        $driverManager = $this->dbal('DriverManager');
+        $dsnParser     = $this->dbal('Tools\\DsnParser');
         if (!class_exists($driverManager) || !class_exists($dsnParser)) {
             self::markTestSkipped('doctrine/dbal >= 3.6 is not installed (soft dependency; the CI job installs it).');
         }
@@ -311,7 +311,7 @@ final class RealDatabaseSetupStorageTest extends TestCase
             if (!is_string($url) || $url === '') {
                 self::markTestSkipped($server . ' is not set.');
             }
-            $parser = self::make($dsnParser, ['mysql' => 'pdo_mysql', 'mariadb' => 'pdo_mysql', 'pgsql' => 'pdo_pgsql', 'postgres' => 'pdo_pgsql']);
+            $parser = $this->make($dsnParser, ['mysql' => 'pdo_mysql', 'mariadb' => 'pdo_mysql', 'pgsql' => 'pdo_pgsql', 'postgres' => 'pdo_pgsql']);
             $params = $parser->parse($url);
         }
 
@@ -319,11 +319,11 @@ final class RealDatabaseSetupStorageTest extends TestCase
         /** @var mixed $connection */
         $connection = $driverManager::getConnection($params);
         $platform   = $connection->getDatabasePlatform();
-        if (is_a($platform, self::dbal('Platforms\\AbstractMySQLPlatform'))) {
+        if (is_a($platform, $this->dbal('Platforms\\AbstractMySQLPlatform'))) {
             $connection->executeStatement('SET SESSION innodb_lock_wait_timeout = 5, lock_wait_timeout = 5');
             $isMariaDb = str_contains((string) $connection->fetchOne('SELECT VERSION()'), 'MariaDB');
             $connection->executeStatement($isMariaDb ? 'SET SESSION max_statement_time = 30' : 'SET SESSION max_execution_time = 30000');
-        } elseif (is_a($platform, self::dbal('Platforms\\PostgreSQLPlatform'))) {
+        } elseif (is_a($platform, $this->dbal('Platforms\\PostgreSQLPlatform'))) {
             $connection->executeStatement("SET lock_timeout = '5s'");
             $connection->executeStatement("SET statement_timeout = '30s'");
         } else {

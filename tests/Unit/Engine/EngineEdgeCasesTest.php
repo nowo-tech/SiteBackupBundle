@@ -165,14 +165,14 @@ final class EngineEdgeCasesTest extends TestCase
         $names   = EngineFixtures::script($this->root . '/bin', 'names-mysql', 'case "$*" in *information_schema*) printf "bad-name\n";; esac');
 
         $cases = [
-            static fn () => (new DumpImporter('sqlite:///x'))->databaseName(),
+            static fn (): string => (new DumpImporter('sqlite:///x'))->databaseName(),
             static fn () => (new DumpImporter('mysql://u@h/d'))->createSchema('bad name'),
             static fn () => (new DumpImporter('sqlite:///x'))->dropSchema('ok_name'),
             static fn () => (new DumpImporter('mysql://u@h/d', $slow, false, 1))->createSchema('ok_name'),
             static fn () => (new DumpImporter('mysql://u@h/d', $failing))->dropSchema('ok_name'),
-            static fn () => (new TableStatsCollector('sqlite:///x'))->collect(),
-            static fn () => (new TableStatsCollector('mysql://u@h/d', $slow, false, 1))->collect(),
-            static fn () => (new TableStatsCollector('mysql://u@h/d', $failing))->collect(),
+            static fn (): array => (new TableStatsCollector('sqlite:///x'))->collect(),
+            static fn (): array => (new TableStatsCollector('mysql://u@h/d', $slow, false, 1))->collect(),
+            static fn (): array => (new TableStatsCollector('mysql://u@h/d', $failing))->collect(),
         ];
         foreach ($cases as $i => $case) {
             try {

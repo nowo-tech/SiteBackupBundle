@@ -7,6 +7,7 @@ namespace Nowo\SiteBackupBundle\Command;
 use InvalidArgumentException;
 use JsonException;
 use Nowo\SiteBackupBundle\Backup\VerifyFileResult;
+use Nowo\SiteBackupBundle\Enum\ArchiveFormat;
 use Nowo\SiteBackupBundle\Log\SecretRedactor;
 use Nowo\SiteBackupBundle\Model\ArchivePassword;
 use Nowo\SiteBackupBundle\Service\SiteBackupManagerInterface;
@@ -130,7 +131,7 @@ final class VerifyBackupCommand extends Command
         $result  = $this->manager->verifyFile($file, $password, is_string($sha) ? $sha : null, $sidecar, (bool) $input->getOption('allow-plaintext'), is_bool($require) ? $require : null);
 
         if ($result->isOk()) {
-            $io->success(sprintf('Integrity OK (%s%s, %d files).', $result->format !== null ? $result->format->value : '?', $result->encryption !== null ? ', ' . $result->encryption : '', count($result->checksums)));
+            $io->success(sprintf('Integrity OK (%s%s, %d files).', $result->format instanceof ArchiveFormat ? $result->format->value : '?', $result->encryption !== null ? ', ' . $result->encryption : '', count($result->checksums)));
 
             return VerifyFileResult::OK;
         }

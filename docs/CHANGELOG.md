@@ -84,6 +84,19 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Changed
+
+- CI: new `release-gates` job (full mode) runs the four `make release-check` gates on every PR and push: `rector-dry`,
+  `validate-phpdoc`, `validate-translations` and `check-twig-extra`, so a green CI can no longer fail at release time.
+  CI only, no runtime change.
+- Internal: `make rector-dry` is clean again. Applied Rector's internal refactors (private static helpers made
+  non-static, `!== null` on object-typed values written as `instanceof`, redundant casts and ternaries removed,
+  `Command::INVALID` instead of the literal `2`, arrow-function return types in tests). No public signature changes
+  and no behaviour change. Rector rules that would have changed public API are skipped narrowly with the reason in
+  `rector.php`: `EventSubscriberToAttributeRector` on the four event subscribers (they keep `EventSubscriberInterface`)
+  and `RemoveUnusedPublicMethodParameterRector` on the `ArchivePassword` VarDumper caster and the test's fake DBAL
+  platforms.
+
 ## [1.38.1] - 2026-11-22
 
 ### Changed

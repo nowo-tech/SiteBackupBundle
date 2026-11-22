@@ -158,7 +158,7 @@ final class BinlogPrerequisites implements BinlogPrerequisitesInterface
         } catch (Throwable $e) {
             return Check::warning('schemas', 'SHOW DATABASES failed: ' . mb_substr(SecretRedactor::redact($e->getMessage()), 0, 200));
         }
-        $own    = $this->database !== null ? self::databaseName($this->database) : null;
+        $own    = $this->database !== null ? $this->databaseName($this->database) : null;
         $others = [];
         foreach ($schemas as $schema) {
             if (!in_array(strtolower($schema), ['mysql', 'information_schema', 'performance_schema', 'sys'], true) && $schema !== $own) {
@@ -175,7 +175,7 @@ final class BinlogPrerequisites implements BinlogPrerequisitesInterface
             : Check::ok('schemas', $detail . ' binlog_capture: filtered keeps only this schema\'s events.');
     }
 
-    private static function databaseName(string $url): ?string
+    private function databaseName(string $url): ?string
     {
         try {
             return MysqlDumpCommandFactory::databaseName($url);

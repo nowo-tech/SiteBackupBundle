@@ -153,7 +153,7 @@ final class ZipArchiveTrustTest extends TestCase
     {
         $zip = $this->root . '/in/trailing.zip';
         $this->aesZip($zip);
-        file_put_contents($zip, (string) file_get_contents($zip) . 'trailing');
+        file_put_contents($zip, file_get_contents($zip) . 'trailing');
 
         $this->expectException(CorruptArchiveException::class);
         $this->expectExceptionMessage('data after the end of central directory record');

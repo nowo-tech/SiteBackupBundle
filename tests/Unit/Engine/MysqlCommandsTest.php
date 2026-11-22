@@ -7,6 +7,7 @@ namespace Nowo\SiteBackupBundle\Tests\Unit\Engine;
 use InvalidArgumentException;
 use Nowo\SiteBackupBundle\Database\BuiltinMysqlDumper;
 use Nowo\SiteBackupBundle\Database\DumpImporter;
+use Nowo\SiteBackupBundle\Database\DumpReport;
 use Nowo\SiteBackupBundle\Database\MysqlClientSchemaInspector;
 use Nowo\SiteBackupBundle\Database\MysqlDumpCommandFactory;
 use Nowo\SiteBackupBundle\Database\SchemaSnapshot;
@@ -152,10 +153,10 @@ final class MysqlCommandsTest extends TestCase
         }
 
         $cases = [
-            static fn () => (new BuiltinMysqlDumper('postgres://u@h/d'))->dump('/nonexistent/x.sql'),
-            fn () => (new BuiltinMysqlDumper(self::URL, $this->dir . '/missing-binary'))->dump($this->dir . '/x.sql'),
-            fn () => (new BuiltinMysqlDumper(self::URL, EngineFixtures::fakeMysqldump($this->dir)))->dump($this->dir . '/x.sql', ['t' => TableRule::Skip]),
-            fn () => (new BuiltinMysqlDumper(self::URL, extraOptions: ['--tab=/tmp']))->dump($this->dir . '/x.sql'),
+            static fn (): DumpReport => (new BuiltinMysqlDumper('postgres://u@h/d'))->dump('/nonexistent/x.sql'),
+            fn (): DumpReport => (new BuiltinMysqlDumper(self::URL, $this->dir . '/missing-binary'))->dump($this->dir . '/x.sql'),
+            fn (): DumpReport => (new BuiltinMysqlDumper(self::URL, EngineFixtures::fakeMysqldump($this->dir)))->dump($this->dir . '/x.sql', ['t' => TableRule::Skip]),
+            fn (): DumpReport => (new BuiltinMysqlDumper(self::URL, extraOptions: ['--tab=/tmp']))->dump($this->dir . '/x.sql'),
         ];
         foreach ($cases as $case) {
             try {

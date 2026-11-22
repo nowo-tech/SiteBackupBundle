@@ -87,28 +87,28 @@ final class BackupOptionsTest extends TestCase
      */
     public static function invalidOptions(): iterable
     {
-        yield 'nothing' => [static fn () => new BackupOptions(includeDatabase: false, includeFiles: false)];
-        yield 'sql.gz with files' => [static fn () => new BackupOptions(format: ArchiveFormat::SqlGz)];
-        yield 'sql.gz without database' => [static fn () => new BackupOptions(includeDatabase: false, includeFiles: false, format: ArchiveFormat::SqlGz)];
-        yield 'level 10' => [static fn () => new BackupOptions(compressionLevel: 10)];
-        yield 'level -1' => [static fn () => new BackupOptions(compressionLevel: -1)];
-        yield 'sql.gz level 0' => [static fn () => new BackupOptions(includeFiles: false, format: ArchiveFormat::SqlGz, compressionLevel: 0)];
-        yield 'rules without database' => [static fn () => new BackupOptions(includeDatabase: false, tableRules: ['t' => TableRule::Skip])];
-        yield 'rule name injection' => [static fn () => new BackupOptions(tableRules: ['t --result-file=/x' => TableRule::Skip])];
-        yield 'rule name with dot' => [static fn () => new BackupOptions(tableRules: ['db.t' => TableRule::Skip])];
-        yield 'numeric rule key' => [static fn () => new BackupOptions(tableRules: [0 => TableRule::Skip])]; // @phpstan-ignore argument.type
-        yield 'rule value' => [static fn () => new BackupOptions(tableRules: ['t' => 'skip'])]; // @phpstan-ignore argument.type
-        yield 'path escape' => [static fn () => new BackupOptions(includePaths: ['config/../../etc'])];
-        yield 'path control char' => [static fn () => new BackupOptions(includePaths: ["config\n"])];
-        yield 'path not string' => [static fn () => new BackupOptions(includePaths: [1])]; // @phpstan-ignore argument.type
-        yield 'empty label' => [static fn () => new BackupOptions(label: '  ')];
-        yield 'long label' => [static fn () => new BackupOptions(label: str_repeat('a', 256))];
-        yield 'control label' => [static fn () => new BackupOptions(label: "a\x07")];
-        yield 'long actor' => [static fn () => new BackupOptions(createdBy: str_repeat('a', 129))];
-        yield 'secret-looking meta key' => [static fn () => new BackupOptions(extraMeta: ['api_token' => 'x'])];
-        yield 'bad meta key' => [static fn () => new BackupOptions(extraMeta: ['Plan' => 'x'])];
-        yield 'array meta value' => [static fn () => new BackupOptions(extraMeta: ['plan' => ['x']])]; // @phpstan-ignore argument.type
-        yield 'long meta value' => [static fn () => new BackupOptions(extraMeta: ['plan' => str_repeat('x', 256)])];
+        yield 'nothing' => [static fn (): BackupOptions => new BackupOptions(includeDatabase: false, includeFiles: false)];
+        yield 'sql.gz with files' => [static fn (): BackupOptions => new BackupOptions(format: ArchiveFormat::SqlGz)];
+        yield 'sql.gz without database' => [static fn (): BackupOptions => new BackupOptions(includeDatabase: false, includeFiles: false, format: ArchiveFormat::SqlGz)];
+        yield 'level 10' => [static fn (): BackupOptions => new BackupOptions(compressionLevel: 10)];
+        yield 'level -1' => [static fn (): BackupOptions => new BackupOptions(compressionLevel: -1)];
+        yield 'sql.gz level 0' => [static fn (): BackupOptions => new BackupOptions(includeFiles: false, format: ArchiveFormat::SqlGz, compressionLevel: 0)];
+        yield 'rules without database' => [static fn (): BackupOptions => new BackupOptions(includeDatabase: false, tableRules: ['t' => TableRule::Skip])];
+        yield 'rule name injection' => [static fn (): BackupOptions => new BackupOptions(tableRules: ['t --result-file=/x' => TableRule::Skip])];
+        yield 'rule name with dot' => [static fn (): BackupOptions => new BackupOptions(tableRules: ['db.t' => TableRule::Skip])];
+        yield 'numeric rule key' => [static fn (): BackupOptions => new BackupOptions(tableRules: [0 => TableRule::Skip])]; // @phpstan-ignore argument.type
+        yield 'rule value' => [static fn (): BackupOptions => new BackupOptions(tableRules: ['t' => 'skip'])]; // @phpstan-ignore argument.type
+        yield 'path escape' => [static fn (): BackupOptions => new BackupOptions(includePaths: ['config/../../etc'])];
+        yield 'path control char' => [static fn (): BackupOptions => new BackupOptions(includePaths: ["config\n"])];
+        yield 'path not string' => [static fn (): BackupOptions => new BackupOptions(includePaths: [1])]; // @phpstan-ignore argument.type
+        yield 'empty label' => [static fn (): BackupOptions => new BackupOptions(label: '  ')];
+        yield 'long label' => [static fn (): BackupOptions => new BackupOptions(label: str_repeat('a', 256))];
+        yield 'control label' => [static fn (): BackupOptions => new BackupOptions(label: "a\x07")];
+        yield 'long actor' => [static fn (): BackupOptions => new BackupOptions(createdBy: str_repeat('a', 129))];
+        yield 'secret-looking meta key' => [static fn (): BackupOptions => new BackupOptions(extraMeta: ['api_token' => 'x'])];
+        yield 'bad meta key' => [static fn (): BackupOptions => new BackupOptions(extraMeta: ['Plan' => 'x'])];
+        yield 'array meta value' => [static fn (): BackupOptions => new BackupOptions(extraMeta: ['plan' => ['x']])]; // @phpstan-ignore argument.type
+        yield 'long meta value' => [static fn (): BackupOptions => new BackupOptions(extraMeta: ['plan' => str_repeat('x', 256)])];
     }
 
     #[DataProvider('invalidOptions')]
@@ -120,7 +120,7 @@ final class BackupOptionsTest extends TestCase
 
     public function testStoreLevelIsAllowedForArchives(): void
     {
-        self::assertSame(0, (new BackupOptions(compressionLevel: 0, format: ArchiveFormat::Zip))->compressionLevel);
+        self::assertSame(0, (new BackupOptions(format: ArchiveFormat::Zip, compressionLevel: 0))->compressionLevel);
     }
 
     public function testFormatHelpers(): void

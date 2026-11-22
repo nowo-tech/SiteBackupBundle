@@ -135,7 +135,7 @@ final class MysqlClientBinlogServer implements BinlogServerInterface
      */
     public function schemaObjects(string $schema): ?array
     {
-        $schema = self::schemaName($schema);
+        $schema = $this->schemaName($schema);
         if ($this->query("SELECT SCHEMA_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = '" . $schema . "'") === []) {
             return null;
         }
@@ -161,7 +161,7 @@ final class MysqlClientBinlogServer implements BinlogServerInterface
      */
     public function createSchema(string $schema, bool $replace = false): void
     {
-        $schema  = self::schemaName($schema);
+        $schema  = $this->schemaName($schema);
         $options = '';
         if ($replace) {
             $rows = $this->query("SELECT DEFAULT_CHARACTER_SET_NAME, DEFAULT_COLLATION_NAME FROM information_schema.SCHEMATA WHERE SCHEMA_NAME = '" . $schema . "'");
@@ -172,7 +172,7 @@ final class MysqlClientBinlogServer implements BinlogServerInterface
         $this->query(($replace ? 'DROP DATABASE IF EXISTS `' . $schema . '`; ' : '') . 'CREATE DATABASE `' . $schema . '`' . $options);
     }
 
-    private static function schemaName(string $schema): string
+    private function schemaName(string $schema): string
     {
         if (preg_match('/^[A-Za-z0-9_]{1,64}$/', $schema) !== 1) {
             throw new InvalidArgumentException('Schema names must match [A-Za-z0-9_]{1,64}.');

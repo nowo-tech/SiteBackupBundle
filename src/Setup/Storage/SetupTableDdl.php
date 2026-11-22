@@ -110,7 +110,7 @@ final class SetupTableDdl
             return true;
         }
 
-        $classes = [$platform::class, ...(class_parents($platform) ?: [])];
+        $classes = [$platform::class, ...class_parents($platform)];
         foreach ($classes as $class) {
             if (preg_match('/(?:mysql|mariadb|postgre|sqlite)[a-z0-9]*platform$/i', $class) === 1) {
                 return true;

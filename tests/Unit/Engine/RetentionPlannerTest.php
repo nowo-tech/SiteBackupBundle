@@ -86,7 +86,7 @@ final class RetentionPlannerTest extends TestCase
             $items[] = new RetentionItem(sprintf('b%02d', $i), $this->now->modify(sprintf('-%d days -6 hours', $i)));
         }
 
-        $delete = RetentionPlanner::plan($items, new RetentionPolicy(keepDaily: 3, keepWeekly: 2, keepMonthly: 3, keepLast: 0), 'a00', $this->now);
+        $delete = RetentionPlanner::plan($items, new RetentionPolicy(keepLast: 0, keepDaily: 3, keepWeekly: 2, keepMonthly: 3), 'a00', $this->now);
         $kept   = [];
         foreach ($items as $item) {
             if (!in_array($item->id, $delete, true)) {
@@ -133,7 +133,7 @@ final class RetentionPlannerTest extends TestCase
             self::assertNotContains($created->id, $delete);
             $newest = null;
             foreach ($items as $item) {
-                if ($item->succeeded && ($newest === null || [$item->createdAt, $item->id] > [$newest->createdAt, $newest->id])) {
+                if ($item->succeeded && (!$newest instanceof RetentionItem || [$item->createdAt, $item->id] > [$newest->createdAt, $newest->id])) {
                     $newest = $item;
                 }
                 if (!$item->succeeded) {
@@ -173,6 +173,6 @@ final class RetentionPlannerTest extends TestCase
      */
     private function daily(int $n): array
     {
-        return array_map(fn (int $i) => new RetentionItem('d' . $i, $this->now->modify(sprintf('-%d days', $i))), range(0, $n - 1));
+        return array_map(fn (int $i): RetentionItem => new RetentionItem('d' . $i, $this->now->modify(sprintf('-%d days', $i))), range(0, $n - 1));
     }
 }

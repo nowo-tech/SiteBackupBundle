@@ -109,7 +109,7 @@ final class RemotePublisherTest extends TestCase
             {
                 $object = parent::head($key);
 
-                return $object === null ? null : new RemoteObject($object->key, $object->sizeBytes, $object->lastModified, ['nowo-sha256' => 'nope']);
+                return $object instanceof RemoteObject ? new RemoteObject($object->key, $object->sizeBytes, $object->lastModified, ['nowo-sha256' => 'nope']) : null;
             }
         };
         $this->expectException(RemoteTargetException::class);
@@ -204,7 +204,7 @@ final class RemotePublisherTest extends TestCase
         self::assertSame(['b/' . $ids[0] . '.tar.gz', 'b/' . $ids[1] . '.tar.gz'], $report->deletedKeys);
         self::assertSame(['b/broken.tar.gz.backup.json' => 'UnreadableSidecar'], $report->errors);
         $target->delete('b/broken.tar.gz.backup.json');
-        $left = array_map(static fn (RemoteObject $o) => $o->key, iterator_to_array($target->list(''), false));
+        $left = array_map(static fn (RemoteObject $o): string => $o->key, iterator_to_array($target->list(''), false));
         self::assertContains('b/foreign.bin', $left);
         self::assertContains('b/orphan.tar.gz', $left);
         self::assertContains('c/x.tar.gz', $left);
@@ -213,10 +213,10 @@ final class RemotePublisherTest extends TestCase
 
         // A failed run (id not uploaded) prunes nothing; a filter limits the plan.
         self::assertSame([], $publisher->prune($target, 'b/', new RetentionPolicy(keepLast: 0), 'never-uploaded')->deletedKeys);
-        self::assertSame([], $publisher->prune($target, 'b/', new RetentionPolicy(keepLast: 0), $ids[3], static fn (array $s) => false)->deletedKeys);
+        self::assertSame([], $publisher->prune($target, 'b/', new RetentionPolicy(keepLast: 0), $ids[3], static fn (array $s): false => false)->deletedKeys);
         self::assertSame(['b/' . $ids[2] . '.tar.gz'], $publisher->prune($target, 'b/', new RetentionPolicy(keepLast: 0), $ids[3])->deletedKeys);
 
-        $orphans = array_map(static fn (RemoteObject $o) => $o->key, $publisher->orphans($target, 'b/', 0));
+        $orphans = array_map(static fn (RemoteObject $o): string => $o->key, $publisher->orphans($target, 'b/', 0));
         self::assertEqualsCanonicalizing(['b/foreign.bin', 'b/orphan.tar.gz', 'b/broken.tar.gz'], $orphans);
         self::assertSame([], $publisher->orphans($target, 'b/', 999_999_999));
     }

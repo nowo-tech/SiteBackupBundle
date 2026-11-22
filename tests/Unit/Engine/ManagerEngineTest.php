@@ -12,8 +12,10 @@ use Nowo\SiteBackupBundle\Event\BackupFailedEvent;
 use Nowo\SiteBackupBundle\Event\BackupStartedEvent;
 use Nowo\SiteBackupBundle\Exception\BackupAlreadyRunningException;
 use Nowo\SiteBackupBundle\Lock\BackupOperationLock;
+use Nowo\SiteBackupBundle\Model\BackupArtifact;
 use Nowo\SiteBackupBundle\Model\BackupOptions;
 use Nowo\SiteBackupBundle\Model\BackupProgress;
+use Nowo\SiteBackupBundle\Model\RestoreProgress;
 use Nowo\SiteBackupBundle\Restore\RestoreOrchestrator;
 use Nowo\SiteBackupBundle\Retention\RetentionPolicy;
 use Nowo\SiteBackupBundle\Service\SiteBackupManager;
@@ -94,9 +96,9 @@ final class ManagerEngineTest extends TestCase
 
         try {
             foreach ([
-                static fn () => $manager->createBackup(),
+                static fn (): BackupArtifact => $manager->createBackup(),
                 static fn () => $manager->deleteBackup('x'),
-                static fn () => $manager->restore('x'),
+                static fn (): RestoreProgress => $manager->restore('x'),
             ] as $operation) {
                 try {
                     $operation();
@@ -172,14 +174,14 @@ final class ManagerEngineTest extends TestCase
             $clock->sleep(60);
         }
 
-        $left = array_map(static fn ($a) => $a->getId(), $tarManager->listBackups());
+        $left = array_map(static fn (BackupArtifact $a): string => $a->getId(), $tarManager->listBackups());
         self::assertSame([$ids[3], $ids[2]], $left);
         $deletes = 0;
         foreach ($this->events as $event) {
             $deletes += $event instanceof BackupDeletedEvent ? 1 : 0;
         }
         self::assertSame(2, $deletes);
-        self::assertCount(4, array_filter($this->events, static fn ($e) => $e instanceof BackupCreatedEvent));
+        self::assertCount(4, array_filter($this->events, static fn ($e): bool => $e instanceof BackupCreatedEvent));
     }
 
     public function testEmptyRetentionPolicyKeepsEverything(): void

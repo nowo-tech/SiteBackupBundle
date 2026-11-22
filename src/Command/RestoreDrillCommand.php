@@ -56,7 +56,7 @@ final class RestoreDrillCommand extends Command
         if (!$artifact instanceof BackupArtifact || !is_numeric($tolerance) || (int) $tolerance < 0) {
             $io->error('Unknown backup id or invalid --row-tolerance.');
 
-            return 2;
+            return Command::INVALID;
         }
 
         try {
@@ -66,7 +66,7 @@ final class RestoreDrillCommand extends Command
         } catch (Throwable $e) {
             $io->error(SecretRedactor::redact($e->getMessage()));
 
-            return 2;
+            return Command::INVALID;
         }
 
         if ((bool) $input->getOption('json')) {
