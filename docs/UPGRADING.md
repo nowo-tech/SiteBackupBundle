@@ -134,6 +134,9 @@
 
 ## Unreleased
 
+Requires `nowo-tech/ui-kit-bundle` **^2.66** (form actions order, Beacon UX-017): the create-backup form puts Cancel
+first, then the primary. UiKit's `theme.form_actions_order: primary_first` restores the old order host-wide.
+
 If your host mapping still sets the ORM mapping `alias` option (deprecated since DoctrineBundle 3.4), remove it: hosts using the `Xxx:` short alias must use FQCNs. The bundle's own mappings carry no `alias`.
 
 ## To 1.37.1

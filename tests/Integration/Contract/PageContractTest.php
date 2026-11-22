@@ -118,6 +118,20 @@ final class PageContractTest extends PageContractTestCase
         self::assertStringNotContainsString('pattern=', $delete);
     }
 
+    /** Beacon UX-017 (UiKit 2.66): the create form and the restore / delete confirm pages put Cancel first. */
+    public function testCreateAndConfirmPagesPutCancelFirst(): void
+    {
+        $create = $this->renderPage(new PageFixture('@NowoSiteBackupBundle/panel/create.html.twig', PageFixtures::create()));
+        self::assertSame([['cancel', 'primary']], $create->formActionsRows());
+
+        foreach (['restore', 'delete'] as $kind) {
+            $rows = $this->renderPage(new PageFixture('@NowoSiteBackupBundle/panel/confirm.html.twig', PageFixtures::confirm($kind)))->formActionsRows();
+            self::assertCount(1, $rows, $kind);
+            self::assertSame('cancel', $rows[0][0], $kind . ': Cancel comes first.');
+            self::assertCount(2, $rows[0], $kind);
+        }
+    }
+
     public function testSetupWizardRendersStepsReasonsAndAutoAdvance(): void
     {
         $html = $this->renderPage(new PageFixture('@NowoSiteBackupBundle/setup/wizard.html.twig', PageFixtures::wizard('database_url')))->html;
@@ -334,6 +348,12 @@ final class PageContractTest extends PageContractTestCase
         $page = (string) $controller->done()->getContent();
         self::assertStringContainsString('data-testid="nowo-sbb-setup-done"', $page);
         self::assertStringContainsString('Setup complete', $page);
+    }
+
+    /** UiKit 2.66 (Beacon UX-017): every form actions row puts Cancel first, then the primary. */
+    protected static function formActionsOrderChecked(): bool
+    {
+        return true;
     }
 
     protected static function inlineTemplates(): array

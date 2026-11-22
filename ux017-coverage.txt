@@ -1,0 +1,458 @@
+
+
+Code Coverage Report:
+  2026-11-22 14:44:18
+
+ Summary:
+  Classes: 87.50% (196/224)
+  Methods: 94.99% (1194/1257)
+  Lines:   99.00% (10547/10653)
+
+Nowo\SiteBackupBundle\Attribute\AsSetupNeedDetector
+  Methods: 100.00% ( 1/ 1)   Lines: 100.00% (  1/  1)
+Nowo\SiteBackupBundle\Attribute\AsSetupStep
+  Methods: 100.00% ( 1/ 1)   Lines: 100.00% (  1/  1)
+Nowo\SiteBackupBundle\Backup\BackupArchiver
+  Methods:  72.73% (56/77)   Lines:  96.81% (1092/1128)
+Nowo\SiteBackupBundle\Backup\PrivateTempDirectory
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% ( 10/ 10)
+Nowo\SiteBackupBundle\Backup\RuntimeStatePaths
+  Methods: 100.00% ( 4/ 4)   Lines: 100.00% ( 34/ 34)
+Nowo\SiteBackupBundle\Backup\SecretPathPolicy
+  Methods:  85.71% ( 6/ 7)   Lines:  98.25% ( 56/ 57)
+Nowo\SiteBackupBundle\Backup\VerifyFileResult
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% (  2/  2)
+Nowo\SiteBackupBundle\Backup\ZipAesAuthenticator
+  Methods:  92.31% (12/13)   Lines:  98.66% (147/149)
+Nowo\SiteBackupBundle\Command\BinlogCheckCommand
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% ( 12/ 12)
+Nowo\SiteBackupBundle\Command\CleanupCommand
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 10/ 10)
+Nowo\SiteBackupBundle\Command\CreateBackupCommand
+  Methods: 100.00% ( 4/ 4)   Lines: 100.00% (115/115)
+Nowo\SiteBackupBundle\Command\DatabaseDumpCommand
+  Methods: 100.00% ( 5/ 5)   Lines: 100.00% ( 58/ 58)
+Nowo\SiteBackupBundle\Command\DatabaseImportCommand
+  Methods:  66.67% ( 2/ 3)   Lines:  84.21% ( 16/ 19)
+Nowo\SiteBackupBundle\Command\HashPasswordCommand
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% ( 10/ 10)
+Nowo\SiteBackupBundle\Command\ImportArchiveCommand
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 49/ 49)
+Nowo\SiteBackupBundle\Command\ListBackupsCommand
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% ( 17/ 17)
+Nowo\SiteBackupBundle\Command\PasswordInput
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% ( 18/ 18)
+Nowo\SiteBackupBundle\Command\RestoreBackupCommand
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 16/ 16)
+Nowo\SiteBackupBundle\Command\RestoreChainCommand
+  Methods: 100.00% ( 5/ 5)   Lines: 100.00% ( 62/ 62)
+Nowo\SiteBackupBundle\Command\RestoreDrillCommand
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 27/ 27)
+Nowo\SiteBackupBundle\Command\SetupCommand
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 41/ 41)
+Nowo\SiteBackupBundle\Command\SetupResetCommand
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 21/ 21)
+Nowo\SiteBackupBundle\Command\SetupStatusCommand
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% ( 16/ 16)
+Nowo\SiteBackupBundle\Command\SetupTokenCommand
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 23/ 23)
+Nowo\SiteBackupBundle\Command\SigningKeygenCommand
+  Methods: 100.00% ( 1/ 1)   Lines: 100.00% (  4/  4)
+Nowo\SiteBackupBundle\Command\VerifyBackupCommand
+  Methods: 100.00% ( 4/ 4)   Lines: 100.00% ( 55/ 55)
+Nowo\SiteBackupBundle\Command\WorkerRestartCommand
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 18/ 18)
+Nowo\SiteBackupBundle\Controller\SetupUnlocalizedLocaleRedirectController
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% ( 16/ 16)
+Nowo\SiteBackupBundle\Controller\SetupWizardController
+  Methods: 100.00% (16/16)   Lines: 100.00% (174/174)
+Nowo\SiteBackupBundle\Controller\SiteBackupPanelController
+  Methods:  96.77% (30/31)   Lines:  99.49% (197/198)
+Nowo\SiteBackupBundle\Crypto\AgeBinaryEncryptor
+  Methods:  90.00% ( 9/10)   Lines:  98.02% ( 99/101)
+Nowo\SiteBackupBundle\Database\BuiltinMysqlDumper
+  Methods:  77.78% ( 7/ 9)   Lines:  97.22% (105/108)
+Nowo\SiteBackupBundle\Database\DatabaseUrlSafety
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% ( 22/ 22)
+Nowo\SiteBackupBundle\Database\DumpImporter
+  Methods: 100.00% (14/14)   Lines: 100.00% ( 94/ 94)
+Nowo\SiteBackupBundle\Database\DumpReport
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% ( 11/ 11)
+Nowo\SiteBackupBundle\Database\MysqlClientSchemaInspector
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 36/ 36)
+Nowo\SiteBackupBundle\Database\MysqlDumpCommandFactory
+  Methods: 100.00% ( 7/ 7)   Lines: 100.00% ( 61/ 61)
+Nowo\SiteBackupBundle\Database\MysqlOptionFile
+  Methods: 100.00% ( 4/ 4)   Lines: 100.00% ( 28/ 28)
+Nowo\SiteBackupBundle\Database\SchemaSnapshot
+  Methods: 100.00% ( 6/ 6)   Lines: 100.00% ( 20/ 20)
+Nowo\SiteBackupBundle\Database\TableSafetyChecker
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% ( 32/ 32)
+Nowo\SiteBackupBundle\Database\TableStatsCollector
+  Methods:  66.67% ( 2/ 3)   Lines:  97.06% ( 33/ 34)
+Nowo\SiteBackupBundle\DependencyInjection\Compiler\CsrfProtectionPass
+  Methods: 100.00% ( 1/ 1)   Lines: 100.00% (  8/  8)
+Nowo\SiteBackupBundle\DependencyInjection\Compiler\LegacyPortDeprecationPass
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% ( 22/ 22)
+Nowo\SiteBackupBundle\DependencyInjection\Compiler\LoginThrottleStoragePass
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 15/ 15)
+Nowo\SiteBackupBundle\DependencyInjection\Compiler\PortAliasValidityPass
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 24/ 24)
+Nowo\SiteBackupBundle\DependencyInjection\Compiler\SetupReopenDetectorsPass
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% ( 21/ 21)
+Nowo\SiteBackupBundle\DependencyInjection\Compiler\SetupStepsPass
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% ( 27/ 27)
+Nowo\SiteBackupBundle\DependencyInjection\Compiler\TwigPathsPass
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 25/ 25)
+Nowo\SiteBackupBundle\DependencyInjection\Configuration
+  Methods: 100.00% (25/25)   Lines: 100.00% (1019/1019)
+Nowo\SiteBackupBundle\DependencyInjection\SiteBackupExtension
+  Methods:  94.59% (35/37)   Lines:  99.67% (894/897)
+Nowo\SiteBackupBundle\Drill\DrillReport
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% (  7/  7)
+Nowo\SiteBackupBundle\Drill\RestoreDrill
+  Methods: 100.00% ( 4/ 4)   Lines: 100.00% ( 48/ 48)
+Nowo\SiteBackupBundle\Enum\ArchiveFormat
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% (  8/  8)
+Nowo\SiteBackupBundle\Enum\LocaleInPathMode
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% (  2/  2)
+Nowo\SiteBackupBundle\EventSubscriber\ColdStartSchemaGateSubscriber
+  Methods: 100.00% ( 8/ 8)   Lines: 100.00% ( 50/ 50)
+Nowo\SiteBackupBundle\EventSubscriber\LongRequestTimeLimitSubscriber
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 16/ 16)
+Nowo\SiteBackupBundle\EventSubscriber\ProductionSecretsGuardSubscriber
+  Methods: 100.00% ( 8/ 8)   Lines: 100.00% ( 64/ 64)
+Nowo\SiteBackupBundle\EventSubscriber\RestoreRequestSubscriber
+  Methods: 100.00% ( 8/ 8)   Lines: 100.00% ( 83/ 83)
+Nowo\SiteBackupBundle\EventSubscriber\SetupDbDoneRedirectSubscriber
+  Methods: 100.00% ( 5/ 5)   Lines: 100.00% ( 22/ 22)
+Nowo\SiteBackupBundle\EventSubscriber\SetupRequestSubscriber
+  Methods: 100.00% ( 4/ 4)   Lines: 100.00% ( 40/ 40)
+Nowo\SiteBackupBundle\EventSubscriber\UnlocalizedDefaultLocaleSubscriber
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 17/ 17)
+Nowo\SiteBackupBundle\Event\BackupCreatedEvent
+  Methods: 100.00% ( 6/ 6)   Lines: 100.00% (  6/  6)
+Nowo\SiteBackupBundle\Event\BackupDeletedEvent
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% (  3/  3)
+Nowo\SiteBackupBundle\Event\BackupFailedEvent
+  Methods: 100.00% ( 6/ 6)   Lines: 100.00% (  6/  6)
+Nowo\SiteBackupBundle\Event\BackupImportedEvent
+  Methods: 100.00% ( 5/ 5)   Lines: 100.00% (  7/  7)
+Nowo\SiteBackupBundle\Event\BackupStartedEvent
+  Methods: 100.00% ( 4/ 4)   Lines: 100.00% (  4/  4)
+Nowo\SiteBackupBundle\Event\RemoteBackupPrunedEvent
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% (  3/  3)
+Nowo\SiteBackupBundle\Event\RemoteBackupUploadedEvent
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% (  3/  3)
+Nowo\SiteBackupBundle\Event\RestoreCompletedEvent
+  Methods: 100.00% ( 4/ 4)   Lines: 100.00% (  4/  4)
+Nowo\SiteBackupBundle\Event\RestoreFailedEvent
+  Methods: 100.00% ( 6/ 6)   Lines: 100.00% (  6/  6)
+Nowo\SiteBackupBundle\Event\RestoreStartedEvent
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% (  3/  3)
+Nowo\SiteBackupBundle\Event\SetupCompletedEvent
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% (  2/  2)
+Nowo\SiteBackupBundle\Event\SetupStartedEvent
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% (  2/  2)
+Nowo\SiteBackupBundle\Event\SetupStepCompletedEvent
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% (  3/  3)
+Nowo\SiteBackupBundle\Event\SetupStepFailedEvent
+  Methods: 100.00% ( 4/ 4)   Lines: 100.00% (  4/  4)
+Nowo\SiteBackupBundle\Event\WorkerRestartRequiredEvent
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% (  2/  2)
+Nowo\SiteBackupBundle\Exception\BackupAlreadyRunningException
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% (  2/  2)
+Nowo\SiteBackupBundle\Exception\BinlogFilterException
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% (  8/  8)
+Nowo\SiteBackupBundle\Exception\BinlogGapException
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% (  2/  2)
+Nowo\SiteBackupBundle\Exception\ChainBrokenException
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% (  7/  7)
+Nowo\SiteBackupBundle\Exception\ChainRestoreException
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% ( 15/ 15)
+Nowo\SiteBackupBundle\Exception\InsufficientDiskException
+  Methods: 100.00% ( 1/ 1)   Lines: 100.00% (  1/  1)
+Nowo\SiteBackupBundle\Exception\OperationLockUnavailableException
+  Methods: 100.00% ( 1/ 1)   Lines: 100.00% (  1/  1)
+Nowo\SiteBackupBundle\Exception\RestoreStillRunningException
+  Methods: 100.00% ( 1/ 1)   Lines: 100.00% (  1/  1)
+Nowo\SiteBackupBundle\Exception\SecretsInArchiveException
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% (  2/  2)
+Nowo\SiteBackupBundle\Exception\SetupAlreadyRunningException
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% (  2/  2)
+Nowo\SiteBackupBundle\Exception\UnsafeTableRuleException
+  Methods: 100.00% ( 5/ 5)   Lines: 100.00% ( 12/ 12)
+Nowo\SiteBackupBundle\Exclusion\SiteBackupExclusionMatcher
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% ( 23/ 23)
+Nowo\SiteBackupBundle\Form\AbstractSiteBackupFormType
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 14/ 14)
+Nowo\SiteBackupBundle\Form\Panel\CreateBackupType
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% ( 13/ 13)
+Nowo\SiteBackupBundle\Form\Panel\PanelActionType
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 17/ 17)
+Nowo\SiteBackupBundle\Form\Panel\PanelLoginType
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% ( 13/ 13)
+Nowo\SiteBackupBundle\Form\Setup\AdminUserType
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% ( 14/ 14)
+Nowo\SiteBackupBundle\Form\Setup\BootstrapModeType
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% (  6/  6)
+Nowo\SiteBackupBundle\Form\Setup\ContinueType
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% (  5/  5)
+Nowo\SiteBackupBundle\Form\Setup\DatabaseUrlType
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 22/ 22)
+Nowo\SiteBackupBundle\Form\Setup\ResetType
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% (  5/  5)
+Nowo\SiteBackupBundle\Form\Setup\SampleDataType
+  Methods: 100.00% ( 1/ 1)   Lines: 100.00% (  1/  1)
+Nowo\SiteBackupBundle\Form\Setup\SetupTokenType
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 15/ 15)
+Nowo\SiteBackupBundle\Http\ConflictResponse
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% (  9/  9)
+Nowo\SiteBackupBundle\Incremental\BackupChain
+  Methods: 100.00% ( 4/ 4)   Lines: 100.00% (  6/  6)
+Nowo\SiteBackupBundle\Incremental\BinlogBoundaries
+  Methods:  83.33% (10/12)   Lines:  98.26% (113/115)
+Nowo\SiteBackupBundle\Incremental\BinlogCapture
+  Methods:  80.00% ( 4/ 5)   Lines:  97.92% ( 94/ 96)
+Nowo\SiteBackupBundle\Incremental\BinlogCoordinates
+  Methods: 100.00% ( 8/ 8)   Lines: 100.00% ( 35/ 35)
+Nowo\SiteBackupBundle\Incremental\BinlogEventTimes
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% ( 25/ 25)
+Nowo\SiteBackupBundle\Incremental\BinlogFilterResult
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% (  2/  2)
+Nowo\SiteBackupBundle\Incremental\BinlogPrerequisites
+  Methods: 100.00% ( 7/ 7)   Lines: 100.00% ( 94/ 94)
+Nowo\SiteBackupBundle\Incremental\BinlogReplayer
+  Methods: 100.00% ( 8/ 8)   Lines: 100.00% ( 37/ 37)
+Nowo\SiteBackupBundle\Incremental\BinlogSchemaFilter
+  Methods: 100.00% ( 9/ 9)   Lines: 100.00% (171/171)
+Nowo\SiteBackupBundle\Incremental\BinlogStatementClassifier
+  Methods: 100.00% ( 8/ 8)   Lines: 100.00% ( 99/ 99)
+Nowo\SiteBackupBundle\Incremental\CapturedBinlog
+  Methods: 100.00% ( 1/ 1)   Lines: 100.00% (  4/  4)
+Nowo\SiteBackupBundle\Incremental\ChainLink
+  Methods: 100.00% ( 9/ 9)   Lines: 100.00% ( 48/ 48)
+Nowo\SiteBackupBundle\Incremental\ChainPaths
+  Methods: 100.00% ( 1/ 1)   Lines: 100.00% (  1/  1)
+Nowo\SiteBackupBundle\Incremental\ChainRestoreReport
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% (  6/  6)
+Nowo\SiteBackupBundle\Incremental\ChainRestoreStep
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% (  4/  4)
+Nowo\SiteBackupBundle\Incremental\ChainVerifier
+  Methods: 100.00% ( 5/ 5)   Lines: 100.00% ( 85/ 85)
+Nowo\SiteBackupBundle\Incremental\Check
+  Methods: 100.00% ( 6/ 6)   Lines: 100.00% ( 10/ 10)
+Nowo\SiteBackupBundle\Incremental\DumpCoordinatesParser
+  Methods: 100.00% ( 1/ 1)   Lines: 100.00% ( 30/ 30)
+Nowo\SiteBackupBundle\Incremental\DumpObjects
+  Methods: 100.00% ( 1/ 1)   Lines: 100.00% ( 13/ 13)
+Nowo\SiteBackupBundle\Incremental\FileManifest
+  Methods: 100.00% (10/10)   Lines: 100.00% ( 38/ 38)
+Nowo\SiteBackupBundle\Incremental\IncrementalArtifact
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 14/ 14)
+Nowo\SiteBackupBundle\Incremental\IncrementalOptions
+  Methods: 100.00% ( 1/ 1)   Lines: 100.00% ( 50/ 50)
+Nowo\SiteBackupBundle\Incremental\MysqlBinlogTool
+  Methods: 100.00% ( 5/ 5)   Lines: 100.00% ( 36/ 36)
+Nowo\SiteBackupBundle\Incremental\MysqlClientBinlogServer
+  Methods: 100.00% (15/15)   Lines: 100.00% ( 86/ 86)
+Nowo\SiteBackupBundle\Incremental\MysqlToolVersion
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% (  9/  9)
+Nowo\SiteBackupBundle\Incremental\RestoreMarker
+  Methods:  66.67% ( 2/ 3)   Lines:  90.32% ( 28/ 31)
+Nowo\SiteBackupBundle\Lock\BackupOperationLock
+  Methods: 100.00% ( 7/ 7)   Lines: 100.00% ( 74/ 74)
+Nowo\SiteBackupBundle\Lock\BackupOperationLockHandle
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% (  7/  7)
+Nowo\SiteBackupBundle\Log\SecretRedactor
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 19/ 19)
+Nowo\SiteBackupBundle\Model\ArchivePassword
+  Methods: 100.00% (12/12)   Lines: 100.00% ( 27/ 27)
+Nowo\SiteBackupBundle\Model\BackupArtifact
+  Methods: 100.00% (19/19)   Lines: 100.00% ( 80/ 80)
+Nowo\SiteBackupBundle\Model\BackupHistoryEntry
+  Methods: 100.00% ( 9/ 9)   Lines: 100.00% ( 26/ 26)
+Nowo\SiteBackupBundle\Model\BackupOptions
+  Methods: 100.00% (19/19)   Lines: 100.00% (121/121)
+Nowo\SiteBackupBundle\Model\BackupProgress
+  Methods: 100.00% ( 1/ 1)   Lines: 100.00% (  1/  1)
+Nowo\SiteBackupBundle\Model\ImportOptions
+  Methods: 100.00% ( 1/ 1)   Lines: 100.00% (  1/  1)
+Nowo\SiteBackupBundle\Model\RestoreProgress
+  Methods: 100.00% (15/15)   Lines: 100.00% ( 66/ 66)
+Nowo\SiteBackupBundle\Model\SetupProgress
+  Methods: 100.00% (19/19)   Lines: 100.00% ( 79/ 79)
+Nowo\SiteBackupBundle\NowoSiteBackupBundle
+  Methods: 100.00% ( 4/ 4)   Lines: 100.00% ( 39/ 39)
+Nowo\SiteBackupBundle\Process\ProcessDeadline
+  Methods: 100.00% ( 7/ 7)   Lines: 100.00% ( 82/ 82)
+Nowo\SiteBackupBundle\Remote\FlysystemRemoteTarget
+  Methods: 100.00% ( 6/ 6)   Lines: 100.00% ( 16/ 16)
+Nowo\SiteBackupBundle\Remote\InMemoryRemoteTarget
+  Methods:  75.00% ( 6/ 8)   Lines:  91.67% ( 22/ 24)
+Nowo\SiteBackupBundle\Remote\PruneReport
+  Methods: 100.00% ( 1/ 1)   Lines: 100.00% (  1/  1)
+Nowo\SiteBackupBundle\Remote\RemoteBackupPublisher
+  Methods:  78.95% (15/19)   Lines:  97.55% (239/245)
+Nowo\SiteBackupBundle\Remote\RemoteObject
+  Methods: 100.00% ( 1/ 1)   Lines: 100.00% (  1/  1)
+Nowo\SiteBackupBundle\Restore\ChainRestorer
+  Methods:  68.00% (17/25)   Lines:  96.04% (315/328)
+Nowo\SiteBackupBundle\Restore\RestoreOrchestrator
+  Methods:  89.47% (17/19)   Lines:  97.91% (187/191)
+Nowo\SiteBackupBundle\Restore\RestorePathGuard
+  Methods: 100.00% ( 4/ 4)   Lines: 100.00% ( 22/ 22)
+Nowo\SiteBackupBundle\Retention\RetentionItem
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 11/ 11)
+Nowo\SiteBackupBundle\Retention\RetentionPlanner
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% ( 64/ 64)
+Nowo\SiteBackupBundle\Retention\RetentionPolicy
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% (  6/  6)
+Nowo\SiteBackupBundle\Routing\PanelRouteLoader
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% (  8/  8)
+Nowo\SiteBackupBundle\Routing\SetupLocales
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 24/ 24)
+Nowo\SiteBackupBundle\Routing\SetupPathPrefixResolver
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% ( 24/ 24)
+Nowo\SiteBackupBundle\Routing\SetupRouteLoader
+  Methods: 100.00% ( 6/ 6)   Lines: 100.00% ( 46/ 46)
+Nowo\SiteBackupBundle\Security\AllowAllSiteBackupAccessChecker
+  Methods: 100.00% ( 1/ 1)   Lines: 100.00% (  1/  1)
+Nowo\SiteBackupBundle\Security\ConfigurableSiteBackupAccessChecker
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% (  7/  7)
+Nowo\SiteBackupBundle\Security\HttpFoundationPanelSession
+  Methods: 100.00% ( 5/ 5)   Lines: 100.00% (  5/  5)
+Nowo\SiteBackupBundle\Security\PanelRequestContext
+  Methods: 100.00% ( 1/ 1)   Lines: 100.00% (  1/  1)
+Nowo\SiteBackupBundle\Security\PanelRequestContextFactory
+  Methods: 100.00% ( 1/ 1)   Lines: 100.00% (  5/  5)
+Nowo\SiteBackupBundle\Security\PasswordSiteBackupAccessGate
+  Methods: 100.00% ( 7/ 7)   Lines: 100.00% ( 26/ 26)
+Nowo\SiteBackupBundle\Security\SecurityTokenActorResolver
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 12/ 12)
+Nowo\SiteBackupBundle\Security\StaticActorResolver
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% (  2/  2)
+Nowo\SiteBackupBundle\Security\ThrottledSiteBackupAccessGate
+  Methods: 100.00% ( 8/ 8)   Lines: 100.00% ( 33/ 33)
+Nowo\SiteBackupBundle\Service\SiteBackupManager
+  Methods:  95.83% (23/24)   Lines:  98.92% (276/279)
+Nowo\SiteBackupBundle\Setup\AdminUserData
+  Methods: 100.00% ( 9/ 9)   Lines: 100.00% ( 13/ 13)
+Nowo\SiteBackupBundle\Setup\ColdStart\ColdStartRequestAttributes
+  Methods: 100.00% ( 1/ 1)   Lines: 100.00% (  1/  1)
+Nowo\SiteBackupBundle\Setup\ColdStart\MemoizedSchemaExistenceChecker
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% (  8/  8)
+Nowo\SiteBackupBundle\Setup\ColdStart\MysqlSchemaExistenceChecker
+  Methods:  85.71% ( 6/ 7)   Lines:  98.53% ( 67/ 68)
+Nowo\SiteBackupBundle\Setup\ConsoleProcessRunner
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 13/ 13)
+Nowo\SiteBackupBundle\Setup\Detector\DoctrineConnectDetector
+  Methods: 100.00% ( 4/ 4)   Lines: 100.00% ( 20/ 20)
+Nowo\SiteBackupBundle\Setup\Detector\DoctrineSchemaEmptyDetector
+  Methods:  75.00% ( 3/ 4)   Lines:  96.15% ( 25/ 26)
+Nowo\SiteBackupBundle\Setup\Detector\IncompleteSetupProgressDetector
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 15/ 15)
+Nowo\SiteBackupBundle\Setup\Detector\MarkerFileDetector
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 11/ 11)
+Nowo\SiteBackupBundle\Setup\Detector\SetupNeedEvaluator
+  Methods: 100.00% ( 6/ 6)   Lines: 100.00% ( 48/ 48)
+Nowo\SiteBackupBundle\Setup\InitialInstallOnlySteps
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% ( 11/ 11)
+Nowo\SiteBackupBundle\Setup\Memo\WorkerTtlMemo
+  Methods: 100.00% ( 5/ 5)   Lines: 100.00% (  5/  5)
+Nowo\SiteBackupBundle\Setup\NullAdminUserProvisioner
+  Methods: 100.00% ( 4/ 4)   Lines: 100.00% (  4/  4)
+Nowo\SiteBackupBundle\Setup\NullDurableSetupDoneStore
+  Methods:  66.67% ( 2/ 3)   Lines:  66.67% (  2/  3)
+Nowo\SiteBackupBundle\Setup\SetupAccessTokenStore
+  Methods: 100.00% ( 6/ 6)   Lines: 100.00% ( 13/ 13)
+Nowo\SiteBackupBundle\Setup\SetupContext
+  Methods: 100.00% (13/13)   Lines: 100.00% ( 14/ 14)
+Nowo\SiteBackupBundle\Setup\SetupDbDoneGuard
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 27/ 27)
+Nowo\SiteBackupBundle\Setup\SetupLockFallbackPolicy
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 11/ 11)
+Nowo\SiteBackupBundle\Setup\SetupOrchestrator
+  Methods: 100.00% (16/16)   Lines: 100.00% (174/174)
+Nowo\SiteBackupBundle\Setup\SetupStepFactory
+  Methods: 100.00% (10/10)   Lines: 100.00% (115/115)
+Nowo\SiteBackupBundle\Setup\SetupStepInput
+  Methods: 100.00% ( 4/ 4)   Lines: 100.00% (  7/  7)
+Nowo\SiteBackupBundle\Setup\SetupStepResult
+  Methods: 100.00% ( 8/ 8)   Lines: 100.00% (  8/  8)
+Nowo\SiteBackupBundle\Setup\SetupTabCheckResult
+  Methods: 100.00% ( 9/ 9)   Lines: 100.00% (  9/  9)
+Nowo\SiteBackupBundle\Setup\SetupTabCheckerLocator
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% ( 14/ 14)
+Nowo\SiteBackupBundle\Setup\SetupWizardReopener
+  Methods: 100.00% ( 4/ 4)   Lines: 100.00% ( 20/ 20)
+Nowo\SiteBackupBundle\Setup\Step\AbstractSetupStep
+  Methods: 100.00% ( 6/ 6)   Lines: 100.00% (  6/  6)
+Nowo\SiteBackupBundle\Setup\Step\AdminUserStep
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 23/ 23)
+Nowo\SiteBackupBundle\Setup\Step\BootstrapModeStep
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 24/ 24)
+Nowo\SiteBackupBundle\Setup\Step\CacheClearStep
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% (  5/  5)
+Nowo\SiteBackupBundle\Setup\Step\ConditionalAnswerStep
+  Methods: 100.00% ( 8/ 8)   Lines: 100.00% ( 11/ 11)
+Nowo\SiteBackupBundle\Setup\Step\ConsoleStep
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% (  5/  5)
+Nowo\SiteBackupBundle\Setup\Step\CustomSetupStep
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% (  4/  4)
+Nowo\SiteBackupBundle\Setup\Step\DatabaseCreateStep
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% (  5/  5)
+Nowo\SiteBackupBundle\Setup\Step\DatabaseUrlStep
+  Methods: 100.00% ( 4/ 4)   Lines: 100.00% ( 27/ 27)
+Nowo\SiteBackupBundle\Setup\Step\MarkerStep
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% (  4/  4)
+Nowo\SiteBackupBundle\Setup\Step\MigrationsStep
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% (  5/  5)
+Nowo\SiteBackupBundle\Setup\Step\RequirementsStep
+  Methods:  50.00% ( 1/ 2)   Lines:  92.00% ( 23/ 25)
+Nowo\SiteBackupBundle\Setup\Step\SampleDataStep
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 17/ 17)
+Nowo\SiteBackupBundle\Setup\Step\SchemaUpdateStep
+  Methods: 100.00% ( 2/ 2)   Lines: 100.00% (  5/  5)
+Nowo\SiteBackupBundle\Setup\Step\SqlFileStep
+  Methods:  88.89% ( 8/ 9)   Lines:  97.56% ( 80/ 82)
+Nowo\SiteBackupBundle\Setup\Step\SqlImportPath
+  Methods: 100.00% ( 1/ 1)   Lines: 100.00% ( 11/ 11)
+Nowo\SiteBackupBundle\Setup\Step\TabStep
+  Methods: 100.00% (11/11)   Lines: 100.00% ( 30/ 30)
+Nowo\SiteBackupBundle\Setup\Storage\CacheDoctrineSetupProgressStorage
+  Methods: 100.00% ( 7/ 7)   Lines: 100.00% ( 40/ 40)
+Nowo\SiteBackupBundle\Setup\Storage\CacheSetupProgressStorage
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 21/ 21)
+Nowo\SiteBackupBundle\Setup\Storage\ChainSetupProgressStorage
+  Methods: 100.00% ( 4/ 4)   Lines: 100.00% ( 15/ 15)
+Nowo\SiteBackupBundle\Setup\Storage\DoctrineDbalSetupProgressStorage
+  Methods:  94.44% (17/18)   Lines:  98.77% (160/162)
+Nowo\SiteBackupBundle\Setup\Storage\DoctrineDbalSetupStepJournal
+  Methods: 100.00% (17/17)   Lines: 100.00% (227/227)
+Nowo\SiteBackupBundle\Setup\Storage\FilesystemSetupProgressStorage
+  Methods:  66.67% ( 2/ 3)   Lines:  87.50% ( 21/ 24)
+Nowo\SiteBackupBundle\Setup\Storage\SetupMarkerManager
+  Methods: 100.00% (13/13)   Lines: 100.00% ( 29/ 29)
+Nowo\SiteBackupBundle\Setup\Storage\SetupProgressFallbackWarning
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 18/ 18)
+Nowo\SiteBackupBundle\Setup\Storage\SetupTableDdl
+  Methods: 100.00% ( 6/ 6)   Lines: 100.00% ( 48/ 48)
+Nowo\SiteBackupBundle\Signing\BackupSigner
+  Methods:  91.67% (11/12)   Lines:  98.61% ( 71/ 72)
+Nowo\SiteBackupBundle\Storage\FilesystemBackupHistoryStorage
+  Methods:  66.67% ( 2/ 3)   Lines:  92.00% ( 23/ 25)
+Nowo\SiteBackupBundle\Storage\FilesystemRestoreProgressStorage
+  Methods:  66.67% ( 2/ 3)   Lines:  87.50% ( 21/ 24)
+Nowo\SiteBackupBundle\Twig\SiteBackupExtension
+  Methods: 100.00% ( 6/ 6)   Lines: 100.00% ( 18/ 18)
+Nowo\SiteBackupBundle\View\PanelPages
+  Methods: 100.00% (10/10)   Lines: 100.00% ( 91/ 91)
+Nowo\SiteBackupBundle\View\SetupPages
+  Methods:  85.71% ( 6/ 7)   Lines:  98.11% ( 52/ 53)
+Nowo\SiteBackupBundle\View\SetupTokenGate
+  Methods: 100.00% ( 3/ 3)   Lines: 100.00% ( 28/ 28)
+Nowo\SiteBackupBundle\View\SiteBackupView
+  Methods: 100.00% (15/15)   Lines: 100.00% ( 49/ 49)
+Nowo\SiteBackupBundle\Worker\WorkerRestartSignal
+  Methods: 100.00% ( 6/ 6)   Lines: 100.00% ( 22/ 22)
