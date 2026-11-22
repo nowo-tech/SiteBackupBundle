@@ -82,6 +82,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Fixed
+
+- demo: the demo `doctrine.yaml` no longer sets the ORM mapping `alias` option, deprecated since DoctrineBundle 3.4 (`doctrine.orm.entity_managers.<em>.mappings.<name>.alias`). The bundle itself prepends its mappings without `alias`; a test now asserts it. Demo and tests only, no release needed.
+
 ### Changed
 
 - Demo: runs in UiKit's demo platform shell (`nowo-tech/ui-kit-bundle` ^2.60); the demo's own header is gone and the pages use the shell page headers and section cards. Demo only, no bundle change.
