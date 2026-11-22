@@ -18,6 +18,7 @@ use Nowo\SiteBackupBundle\View\SiteBackupView;
 use Nowo\UiKitBundle\Test\PageContractTestCase;
 use Nowo\UiKitBundle\Test\PageFixture;
 use Nowo\UiKitBundle\Test\StubHost;
+use Nowo\UiKitBundle\Theme\Theme;
 use Nowo\UiKitBundle\View\ListPage;
 use PHPUnit\Framework\Attributes\DataProvider;
 use Symfony\Bridge\Twig\Extension\TranslationExtension;
@@ -118,11 +119,15 @@ final class PageContractTest extends PageContractTestCase
         self::assertStringNotContainsString('pattern=', $delete);
     }
 
-    /** Beacon UX-017 (UiKit 2.66): the create form and the restore / delete confirm pages put Cancel first. */
-    public function testCreateAndConfirmPagesPutCancelFirst(): void
+    /**
+     * UiKit 2.66.1 (owner decision 2026-11-22): the create form gets its actions row from the UiKit form scaffold, in the
+     * stub theme's theme.form_actions_order (primary_first by default since 2.66.1, cancel_first on 2.66.0); the restore
+     * / delete confirm pages keep Cancel first (confirm anatomy).
+     */
+    public function testCreateFollowsTheConfiguredOrderAndConfirmPagesPutCancelFirst(): void
     {
         $create = $this->renderPage(new PageFixture('@NowoSiteBackupBundle/panel/create.html.twig', PageFixtures::create()));
-        self::assertSame([['cancel', 'primary']], $create->formActionsRows());
+        self::assertSame(Theme::fromConfig('none', StubHost::theme())->formActionsOrder() === 'primary_first' ? [['primary', 'cancel']] : [['cancel', 'primary']], $create->formActionsRows());
 
         foreach (['restore', 'delete'] as $kind) {
             $rows = $this->renderPage(new PageFixture('@NowoSiteBackupBundle/panel/confirm.html.twig', PageFixtures::confirm($kind)))->formActionsRows();
@@ -350,7 +355,11 @@ final class PageContractTest extends PageContractTestCase
         self::assertStringContainsString('Setup complete', $page);
     }
 
-    /** UiKit 2.66 (Beacon UX-017): every form actions row puts Cancel first, then the primary. */
+    /**
+     * UiKit 2.66 (Beacon UX-017): every form actions row is checked. On UiKit 2.66.1 the rule follows the configured order
+     * (page forms in theme.form_actions_order, confirm / wizard / dialog rows Cancel first); on 2.66.0 it checks Cancel
+     * first everywhere.
+     */
     protected static function formActionsOrderChecked(): bool
     {
         return true;
