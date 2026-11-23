@@ -86,6 +86,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ### Changed
 
+- Dev: Igor 0.11 (REQ-CS-008) — the existing `@igor-ignore` on the idempotent `AbstractCloner::$defaultCasters` registration moves onto the flagged lines (Igor 0.11 reads only the flagged line or the one above). `igor-php/igor-php` accepts `^0.11.0` (supersedes #86).
 - CI: new `release-gates` job (full mode) runs the four `make release-check` gates on every PR and push: `rector-dry`,
   `validate-phpdoc`, `validate-translations` and `check-twig-extra`, so a green CI can no longer fail at release time.
   CI only, no runtime change.

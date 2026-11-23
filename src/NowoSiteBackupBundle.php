@@ -74,12 +74,10 @@ final class NowoSiteBackupBundle extends Bundle
     public static function registerVarDumperCasters(): void
     {
         if (class_exists(AbstractCloner::class)) {
-            // @igor-ignore - Process-wide, idempotent caster registration (same value on every boot).
             // @phpstan-ignore-next-line (idempotent, same value for every request)
-            AbstractCloner::$defaultCasters[ArchivePassword::class] = [ArchivePassword::class, 'castForVarDumper'];
-            // @igor-ignore - Process-wide, idempotent caster registration (same value on every boot).
+            AbstractCloner::$defaultCasters[ArchivePassword::class] = [ArchivePassword::class, 'castForVarDumper']; // @igor-ignore - Process-wide, idempotent caster registration (same value on every boot).
             // @phpstan-ignore-next-line (idempotent, same value for every request)
-            AbstractCloner::$defaultCasters[AdminUserData::class] = [AdminUserData::class, 'castForVarDumper'];
+            AbstractCloner::$defaultCasters[AdminUserData::class] = [AdminUserData::class, 'castForVarDumper']; // @igor-ignore - Process-wide, idempotent caster registration (same value on every boot).
         }
     }
 
