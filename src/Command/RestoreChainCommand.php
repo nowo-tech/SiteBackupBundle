@@ -111,7 +111,7 @@ final class RestoreChainCommand extends Command
 
         $this->render($io, $report);
         if (!$report->complete) {
-            $io->warning('The restore is INCOMPLETE: some files were not written (see the files step). ' . (string) $report->error);
+            $io->warning('The restore is INCOMPLETE: some files were not written (see the files step). ' . $report->error);
 
             return Command::FAILURE;
         }

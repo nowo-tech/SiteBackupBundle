@@ -191,7 +191,7 @@ final readonly class BackupOptions
             'compression_level' => $this->compressionLevel,
             'has_label'         => $this->label !== null,
             'allow_unsafe'      => $this->allowUnsafeTableRules,
-            'encrypted'         => $this->password !== null,
+            'encrypted'         => $this->password instanceof ArchivePassword,
             'key_id'            => $this->keyId,
         ] + ($this->isChainMember() ? [
             // 1.36+: only for chain backups, so the payload of other backups stays as it was.
@@ -289,12 +289,12 @@ final readonly class BackupOptions
             }
         }
 
-        if ($this->keyId !== null && ($this->password === null || preg_match('/^[A-Za-z0-9_.-]{1,64}$/', $this->keyId) !== 1)) {
+        if ($this->keyId !== null && (!$this->password instanceof ArchivePassword || preg_match('/^[A-Za-z0-9_.-]{1,64}$/', $this->keyId) !== 1)) {
             throw new InvalidBackupOptionsException('keyId needs a password and must match [A-Za-z0-9_.-]{1,64}.');
         }
 
-        self::assertText('label', $this->label, 255);
-        self::assertText('createdBy', $this->createdBy, 128);
+        $this->assertText('label', $this->label, 255);
+        $this->assertText('createdBy', $this->createdBy, 128);
 
         foreach ($this->extraMeta as $key => $value) {
             if (!is_string($key) || preg_match(self::EXTRA_META_KEY_PATTERN, $key) !== 1 || preg_match(self::EXTRA_META_FORBIDDEN, $key) === 1) {
@@ -357,7 +357,7 @@ final readonly class BackupOptions
         }
     }
 
-    private static function assertText(string $field, ?string $value, int $max): void
+    private function assertText(string $field, ?string $value, int $max): void
     {
         if ($value === null) {
             return;

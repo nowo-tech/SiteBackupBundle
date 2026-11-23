@@ -147,7 +147,7 @@ final class MysqlDumpCommandFactory
         if ($connection['socket'] !== null) {
             $command[] = '--socket=' . $connection['socket'];
         } else {
-            $command[] = '--host=' . (string) $connection['host'];
+            $command[] = '--host=' . $connection['host'];
             $command[] = '--port=' . $connection['port'];
         }
 

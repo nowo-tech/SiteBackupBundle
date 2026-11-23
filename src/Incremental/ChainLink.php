@@ -87,7 +87,7 @@ final readonly class ChainLink
             snapshotAt: self::date($meta, 'snapshot_at'),
             // A sql.gz full backup continues as tar.gz (same container family and encryption).
             storage: ($artifact->getFormat() === ArchiveFormat::SqlGz ? ArchiveFormat::TarGz->value : $artifact->getFormat()->value)
-                . ($artifact->isEncrypted() ? ' encrypted, key id "' . (string) ($meta['key_id'] ?? '') . '"' : ' plaintext'),
+                . ($artifact->isEncrypted() ? ' encrypted, key id "' . ($meta['key_id'] ?? '') . '"' : ' plaintext'),
         );
     }
 

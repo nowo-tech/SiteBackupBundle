@@ -7,6 +7,7 @@ namespace Nowo\SiteBackupBundle\Incremental;
 use Nowo\SiteBackupBundle\Exception\ChainBrokenException;
 
 use function count;
+use function in_array;
 use function sprintf;
 
 /**
@@ -128,7 +129,7 @@ final class ChainVerifier
         }
 
         $problems = [];
-        if ($link->binlogCapture !== null && $link->binlogCapture !== IncrementalArtifact::RAW && $link->binlogCapture !== IncrementalArtifact::FILTERED) {
+        if (!in_array($link->binlogCapture, [null, IncrementalArtifact::RAW, IncrementalArtifact::FILTERED], true)) {
             $problems[] = sprintf('Backup %s has an unknown binlog capture mode.', $link->id);
         }
         if ($parent->isIncremental() && $link->binlogCapture !== $parent->binlogCapture) {

@@ -270,7 +270,7 @@ final class DrillFlysystemTest extends TestCase
         }
 
         self::assertNull($target->head('backups/missing'));
-        $keys = array_map(static fn (RemoteObject $o) => $o->key, iterator_to_array($target->list('backups/'), false));
+        $keys = array_map(static fn (RemoteObject $o): string => $o->key, iterator_to_array($target->list('backups/'), false));
         self::assertCount(6, $keys);
         $sidecar = json_decode((string) stream_get_contents($target->openRead('backups/' . $ids[0] . '.tar.gz.backup.json')), true);
         self::assertSame($ids[0], $sidecar['id'] ?? null);

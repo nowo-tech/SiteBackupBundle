@@ -7,6 +7,7 @@ namespace Nowo\SiteBackupBundle\Backup;
 use Closure;
 use Composer\InstalledVersions;
 use DeflateContext;
+use HashContext;
 use InvalidArgumentException;
 use JsonException;
 use Nowo\SiteBackupBundle\Crypto\AgeBinaryEncryptor;
@@ -282,7 +283,7 @@ final class BackupArchiver
 
         $format   = $options->format;
         $id       = $this->clock->now()->format('Ymd-His') . '-' . bin2hex(random_bytes(4));
-        $ageWrap  = $options->password !== null && $format !== ArchiveFormat::Zip;
+        $ageWrap  = $options->password instanceof ArchivePassword && $format !== ArchiveFormat::Zip;
         $filename = $id . '.' . $format->extension() . ($ageWrap ? $this->requireEncryptor()->suffix() : '');
         $target   = rtrim($this->storageDir, '/\\') . '/' . $filename;
         // Owner-only staging tree under an unpredictable name (CG L1): it holds the plaintext dump.
@@ -293,7 +294,7 @@ final class BackupArchiver
 
         $this->filesystem->mkdir($payloadDir, 0o700);
         // EN-I3: lets the next run remove this directory at once if this process dies (SIGTERM / OOM).
-        @file_put_contents($workDir . '/.owner', self::ownerTag());
+        @file_put_contents($workDir . '/.owner', $this->ownerTag());
 
         try {
             $beat     = $this->heartbeat($options->heartbeat);
@@ -323,11 +324,11 @@ final class BackupArchiver
                 'php_version'       => PHP_VERSION,
                 'format'            => $format->value,
                 'compression_level' => $options->compressionLevel,
-                'encrypted'         => $options->password !== null,
-                'encryption'        => $options->password === null ? null : ($ageWrap ? $this->requireEncryptor()->name() : self::ENCRYPTION_ZIP_AES),
+                'encrypted'         => $options->password instanceof ArchivePassword,
+                'encryption'        => $options->password instanceof ArchivePassword ? ($ageWrap ? $this->requireEncryptor()->name() : self::ENCRYPTION_ZIP_AES) : null,
                 'key_id'            => $options->keyId,
                 'table_rules'       => $options->tableRuleValues(),
-                'bundle_version'    => self::bundleVersion(),
+                'bundle_version'    => $this->bundleVersion(),
                 'manifest_version'  => self::MANIFEST_VERSION,
             ];
             if ($options->extraMeta !== []) {
@@ -385,7 +386,7 @@ final class BackupArchiver
             if ($reserved > 0) {
                 $warnings[] = sprintf('%d file(s) at a path the archive reserves (MANIFEST.json, database/dump.sql, .nowo-site-backup/) skipped.', $reserved);
             }
-            if ($options->password !== null && !$ageWrap && $options->password->estimatedBits() < ArchivePassword::WEAK_ZIP_BITS) {
+            if ($options->password instanceof ArchivePassword && !$ageWrap && $options->password->estimatedBits() < ArchivePassword::WEAK_ZIP_BITS) {
                 $warnings[] = 'The archive password looks weak for zip AES (PBKDF2-SHA1 x 1000): prefer a generated password of 20+ characters.';
             }
             $meta['warnings'] = $warnings;
@@ -513,7 +514,7 @@ final class BackupArchiver
                 'encryption'        => null,
                 'key_id'            => null,
                 'table_rules'       => is_array($original['table_rules'] ?? null) ? $original['table_rules'] : [],
-                'bundle_version'    => self::bundleVersion(),
+                'bundle_version'    => $this->bundleVersion(),
                 'manifest_version'  => self::MANIFEST_VERSION,
                 'content'           => match (true) {
                     $hasDump && $files !== [] => 'database_files',
@@ -703,8 +704,8 @@ final class BackupArchiver
         $this->filesystem->mkdir($payloadDir, 0o700);
         $encryption = null;
         $plainPath  = $path;
-        if ($this->encryptor instanceof ArchiveEncryptorInterface && $this->encryptor->recognises(self::head($path))) {
-            if ($password === null) {
+        if ($this->encryptor instanceof ArchiveEncryptorInterface && $this->encryptor->recognises($this->head($path))) {
+            if (!$password instanceof ArchivePassword) {
                 throw new WrongPasswordException('This archive is encrypted: a password is needed.');
             }
             $plainPath = $workDir . '/decrypted';
@@ -720,8 +721,8 @@ final class BackupArchiver
             $encryption = self::ENCRYPTION_ZIP_AES;
         }
         // EO-M1: with a password, only a fully encrypted container is accepted (no plaintext or mixed downgrade).
-        if ($password !== null && $encryption === null && !$allowPlaintext) {
-            throw self::plaintextWithPassword();
+        if ($password instanceof ArchivePassword && $encryption === null && !$allowPlaintext) {
+            throw $this->plaintextWithPassword();
         }
         match ($source) {
             ArchiveFormat::Zip   => $this->extractZip($plainPath, $payloadDir, $password, $allowPlaintext),
@@ -738,7 +739,7 @@ final class BackupArchiver
         return ['source' => $source, 'encryption' => $encryption, 'dropped' => $dropped, 'checksums' => $checksums, 'original' => $original];
     }
 
-    private static function plaintextWithPassword(): CorruptArchiveException
+    private function plaintextWithPassword(): CorruptArchiveException
     {
         return new CorruptArchiveException('A password was given but the archive is not encrypted (possible downgrade); pass allowPlaintext to accept it.', CorruptArchiveException::NOT_ENCRYPTED);
     }
@@ -857,7 +858,7 @@ final class BackupArchiver
         return $this->encryptor;
     }
 
-    private static function head(string $path): string
+    private function head(string $path): string
     {
         $handle = @fopen($path, 'r');
         if ($handle === false) {
@@ -1021,7 +1022,7 @@ final class BackupArchiver
         $removed = 0;
         foreach (glob(rtrim($root, '/\\') . '/' . self::WORK_DIR_PREFIX . '*', GLOB_ONLYDIR) ?: [] as $dir) {
             $mtime = @filemtime($dir);
-            if (($mtime !== false && $mtime <= $limit) || self::ownerIsGone($dir)) {
+            if (($mtime !== false && $mtime <= $limit) || $this->ownerIsGone($dir)) {
                 $this->filesystem->remove($dir);
                 ++$removed;
             }
@@ -1199,15 +1200,15 @@ final class BackupArchiver
 
         $source    = $artifact->getAbsolutePath();
         $decrypted = null;
-        if (self::isAgeArtifact($artifact)) {
-            if ($password === null) {
+        if ($this->isAgeArtifact($artifact)) {
+            if (!$password instanceof ArchivePassword) {
                 throw new WrongPasswordException('This archive is encrypted: a password is needed.');
             }
             $decrypted = PrivateTempDirectory::create(self::WORK_DIR_PREFIX . 'decrypt-', $this->workRoot());
             $source    = $decrypted . '/plain';
             $this->requireEncryptor()->decrypt($artifact->getAbsolutePath(), $source, $password, $heartbeat);
-        } elseif ($password !== null && !$allowPlaintext && $artifact->getFormat() !== ArchiveFormat::Zip) {
-            throw self::plaintextWithPassword();
+        } elseif ($password instanceof ArchivePassword && !$allowPlaintext && $artifact->getFormat() !== ArchiveFormat::Zip) {
+            throw $this->plaintextWithPassword();
         }
 
         try {
@@ -1223,7 +1224,7 @@ final class BackupArchiver
         }
     }
 
-    private static function isAgeArtifact(BackupArtifact $artifact): bool
+    private function isAgeArtifact(BackupArtifact $artifact): bool
     {
         return ($artifact->getMeta()['encryption'] ?? null) === AgeBinaryEncryptor::NAME || str_ends_with($artifact->getFilename(), '.age');
     }
@@ -1260,7 +1261,7 @@ final class BackupArchiver
             throw new FormatUnavailableException('The zip format needs ext-zip.');
         }
 
-        if ($options->password !== null) {
+        if ($options->password instanceof ArchivePassword) {
             if ($options->format === ArchiveFormat::Zip) {
                 self::assertZipAesAvailable();
             } else {
@@ -1456,15 +1457,15 @@ final class BackupArchiver
         return $storage !== false && ($real === false ? str_starts_with($path, rtrim($this->storageDir, '/\\') . '/') : str_starts_with($real, $storage . '/'));
     }
 
-    private static function ownerTag(): string
+    private function ownerTag(): string
     {
-        return (string) gethostname() . ' ' . getmypid();
+        return gethostname() . ' ' . getmypid();
     }
 
     /**
      * True when the run directory was written by a process of this host that no longer exists.
      */
-    private static function ownerIsGone(string $dir): bool
+    private function ownerIsGone(string $dir): bool
     {
         $tag = @file_get_contents($dir . '/.owner');
         if (!is_string($tag) || preg_match('/^(\S+) (\d+)$/', $tag, $m) !== 1 || $m[1] !== (string) gethostname() || !is_dir('/proc/self')) {
@@ -1546,7 +1547,7 @@ final class BackupArchiver
         $phase = '';
 
         return static function (string $current = '') use ($heartbeat, &$last, &$phase): void {
-            if ($heartbeat === null) {
+            if (!$heartbeat instanceof Closure) {
                 return;
             }
             $now     = hrtime(true);
@@ -1977,7 +1978,7 @@ final class BackupArchiver
         $process = new Process([$this->tarBinary, '-cf', '-', '-C', $payloadDir, '.']);
         $process->setTimeout((float) $this->processTimeoutSeconds);
         $process->setIdleTimeout((float) $this->processTimeoutSeconds);
-        $deflate = self::deflateContext($level);
+        $deflate = $this->deflateContext($level);
 
         try {
             $process->start();
@@ -2024,7 +2025,7 @@ final class BackupArchiver
                 $zip->setCompressionName($name, ZipArchive::CM_DEFLATE, $level);
             }
             // WinZip AE-2 AES-256 per entry; never ZipCrypto.
-            if ($password !== null && !$zip->setEncryptionName($name, ZipArchive::EM_AES_256, $password->reveal())) {
+            if ($password instanceof ArchivePassword && !$zip->setEncryptionName($name, ZipArchive::EM_AES_256, $password->reveal())) {
                 $zip->close();
                 $this->filesystem->remove($target);
 
@@ -2058,7 +2059,7 @@ final class BackupArchiver
         $this->filesystem->chmod($target, 0o600);
 
         try {
-            $deflate = self::deflateContext($level);
+            $deflate = $this->deflateContext($level);
             while (!feof($in)) {
                 fwrite($out, (string) deflate_add($deflate, (string) fread($in, self::STREAM_CHUNK_BYTES), ZLIB_NO_FLUSH));
                 if ($tick !== null) {
@@ -2165,11 +2166,11 @@ final class BackupArchiver
                 throw new CorruptArchiveException('The zip mixes AES-256 and plaintext entries.', CorruptArchiveException::NOT_ENCRYPTED);
             }
             // EO-M1, on every path: with a password, only a fully encrypted container is accepted.
-            if ($password !== null && !$encrypted && !$allowPlaintext) {
-                throw self::plaintextWithPassword();
+            if ($password instanceof ArchivePassword && !$encrypted && !$allowPlaintext) {
+                throw $this->plaintextWithPassword();
             }
             if ($encrypted) {
-                if ($password === null) {
+                if (!$password instanceof ArchivePassword) {
                     throw new WrongPasswordException('This archive is encrypted: a password is needed.');
                 }
                 // Every entry's HMAC is checked first, before any byte is written.
@@ -2205,15 +2206,15 @@ final class BackupArchiver
                 $name     = $stat['name'];
                 $segments = array_values(array_filter(explode('/', $name), static fn (string $segment): bool => $segment !== '' && $segment !== '.'));
                 if (str_ends_with($name, '/')) {
-                    self::makeZipDirectories($destination, $segments, $created);
+                    $this->makeZipDirectories($destination, $segments, $created);
                     continue;
                 }
                 $file = array_pop($segments);
                 if ($file === null) {
                     throw new RuntimeException('zip extract failed.');
                 }
-                $directory = self::makeZipDirectories($destination, $segments, $created);
-                $written += self::writeZipEntry($zip, $i, $stat, $directory . '/' . $file, $limit - $written, $created);
+                $directory = $this->makeZipDirectories($destination, $segments, $created);
+                $written += $this->writeZipEntry($zip, $i, $stat, $directory . '/' . $file, $limit - $written, $created);
             }
         } catch (Throwable $e) {
             foreach (array_reverse(array_keys($created)) as $path) {
@@ -2231,7 +2232,7 @@ final class BackupArchiver
      *
      * @return int bytes written
      */
-    private static function writeZipEntry(ZipArchive $zip, int $index, array $stat, string $target, int $room, array &$created): int
+    private function writeZipEntry(ZipArchive $zip, int $index, array $stat, string $target, int $room, array &$created): int
     {
         // The default password set on $zip applies to the stream.
         $in = @$zip->getStreamIndex($index);
@@ -2263,7 +2264,7 @@ final class BackupArchiver
                     throw new UnsafeArchiveException('The decompressed size exceeds backup.extract_limits.');
                 }
                 $failed = @fwrite($out, $chunk) !== strlen($chunk) || $failed;
-                if ($crc !== null) {
+                if ($crc instanceof HashContext) {
                     hash_update($crc, $chunk);
                 }
             }
@@ -2272,7 +2273,7 @@ final class BackupArchiver
             fclose($out);
         }
 
-        if ($failed || ($crc !== null && (int) hexdec(hash_final($crc)) !== (int) $stat['crc'])) {
+        if ($failed || ($crc instanceof HashContext && (int) hexdec(hash_final($crc)) !== (int) $stat['crc'])) {
             throw new RuntimeException('zip extract failed.');
         }
         @touch($target, (int) $stat['mtime']);
@@ -2289,7 +2290,7 @@ final class BackupArchiver
      *
      * @return string the deepest directory
      */
-    private static function makeZipDirectories(string $destination, array $segments, array &$created): string
+    private function makeZipDirectories(string $destination, array $segments, array &$created): string
     {
         $path = $destination;
         foreach ($segments as $segment) {
@@ -2418,7 +2419,7 @@ final class BackupArchiver
             $partial .= $process->getIncrementalOutput();
             $process->clearOutput();
             $lines   = explode("\n", $partial);
-            $partial = (string) array_pop($lines);
+            $partial = array_pop($lines);
             foreach ($lines as $line) {
                 if ($line !== '') {
                     $onLine($line);
@@ -2488,12 +2489,12 @@ final class BackupArchiver
         return rtrim($this->storageDir, '/\\') . '/' . $id . '.meta.json';
     }
 
-    private static function deflateContext(int $level): DeflateContext
+    private function deflateContext(int $level): DeflateContext
     {
         return deflate_init(ZLIB_ENCODING_GZIP, ['level' => $level]) ?: throw new RuntimeException('gzip failed: zlib is not available.');
     }
 
-    private static function bundleVersion(): string
+    private function bundleVersion(): string
     {
         try {
             return (string) InstalledVersions::getPrettyVersion('nowo-tech/site-backup-bundle');

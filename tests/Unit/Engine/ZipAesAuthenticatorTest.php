@@ -60,7 +60,7 @@ final class ZipAesAuthenticatorTest extends TestCase
         $bytes    = (string) file_get_contents($zip->getAbsolutePath());
         self::assertSame(VerifyFileResult::OK, $archiver->verifyFile($zip->getAbsolutePath(), ArchivePassword::fromString(self::PHRASE))->status);
 
-        $entries = self::entries($bytes);
+        $entries = $this->entries($bytes);
         self::assertCount(2, $entries, 'MANIFEST.json and public/index.php');
         foreach ($entries as $name => [$data, $size]) {
             // salt (16) + password verifier (2) | ciphertext | HMAC (10)
@@ -93,11 +93,11 @@ final class ZipAesAuthenticatorTest extends TestCase
         $good  = ArchivePassword::fromString(self::PHRASE);
 
         ZipAesAuthenticator::verify($plain, $good);
-        $zip64 = self::toZip64($bytes);
+        $zip64 = $this->toZip64($bytes);
         file_put_contents($this->root . '/in/z64.zip', $zip64);
         ZipAesAuthenticator::verify($this->root . '/in/z64.zip', $good);
 
-        [$data, $size] = self::entries($bytes)['b.txt'];
+        [$data, $size] = $this->entries($bytes)['b.txt'];
         $flipped       = $zip64;
         $at            = $data + $size - 1;
         $flipped[$at]  = chr(ord($flipped[$at]) ^ 0x01);
@@ -113,19 +113,19 @@ final class ZipAesAuthenticatorTest extends TestCase
         $this->assertFails('not a zip at all', CorruptArchiveException::class, 'no end of central directory');
         $this->assertFails(substr($bytes, 0, $data + 20) . substr($bytes, $eocd), CorruptArchiveException::class, '');
         $lastEntry = (int) strrpos($bytes, "PK\x01\x02");
-        $this->assertFails(self::patch($bytes, $lastEntry + 20, pack('V', 0x7FFFFFF0)), CorruptArchiveException::class, '');
-        $this->assertFails(self::patch($bytes, $lastEntry + 20, pack('V', 5)), CorruptArchiveException::class, 'entry too short');
+        $this->assertFails($this->patch($bytes, $lastEntry + 20, pack('V', 0x7FFFFFF0)), CorruptArchiveException::class, '');
+        $this->assertFails($this->patch($bytes, $lastEntry + 20, pack('V', 5)), CorruptArchiveException::class, 'entry too short');
         $aesField = (int) strrpos($bytes, pack('v', 0x9901) . pack('v', 7));
-        $this->assertFails(self::patch($bytes, $aesField, pack('v', 0x9902)), CorruptArchiveException::class, '');
+        $this->assertFails($this->patch($bytes, $aesField, pack('v', 0x9902)), CorruptArchiveException::class, '');
         // The ZIP64 extra field of the last entry (b.txt) claims 8 bytes: the compressed size is missing.
         $zip64Entry = (int) strrpos($zip64, "PK\x01\x02");
-        $this->assertFails(self::patch($zip64, $zip64Entry + 46 + 5 + 2, pack('v', 8)), CorruptArchiveException::class, '');
+        $this->assertFails($this->patch($zip64, $zip64Entry + 46 + 5 + 2, pack('v', 8)), CorruptArchiveException::class, '');
         $record = (int) strrpos($zip64, "PK\x06\x06");
-        $this->assertFails(self::patch($zip64, $record, 'XXXX'), CorruptArchiveException::class, '');
-        $this->assertFails(self::patch($zip64, $record + 52, pack('V', 0x80000000)), CorruptArchiveException::class, '');
+        $this->assertFails($this->patch($zip64, $record, 'XXXX'), CorruptArchiveException::class, '');
+        $this->assertFails($this->patch($zip64, $record + 52, pack('V', 0x80000000)), CorruptArchiveException::class, '');
         $this->assertFails(substr($zip64, 0, -98) . substr($zip64, -22), CorruptArchiveException::class, '');
-        $this->assertFails(self::patch($bytes, $eocd + 16, pack('V', 0)), CorruptArchiveException::class, '');
-        $this->assertFails(self::patch($bytes, (int) strrpos($bytes, "PK\x01\x02") + 42, pack('V', 1)), CorruptArchiveException::class, '');
+        $this->assertFails($this->patch($bytes, $eocd + 16, pack('V', 0)), CorruptArchiveException::class, '');
+        $this->assertFails($this->patch($bytes, (int) strrpos($bytes, "PK\x01\x02") + 42, pack('V', 1)), CorruptArchiveException::class, '');
 
         $short = $this->root . '/in/short.zip';
         $zip   = new ZipArchive();
@@ -153,11 +153,11 @@ final class ZipAesAuthenticatorTest extends TestCase
         $zip->setEncryptionName('e.txt', ZipArchive::EM_AES_256, self::PHRASE);
         $zip->close();
         $bytes = (string) file_get_contents($plain);
-        $zip64 = self::toZip64($bytes);
+        $zip64 = $this->toZip64($bytes);
         file_put_contents($this->root . '/in/z.zip', $zip64);
         ZipAesAuthenticator::verify($this->root . '/in/z.zip', ArchivePassword::fromString(self::PHRASE));
 
-        [$data, $size]               = self::entries($bytes)['e.txt'];
+        [$data, $size]               = $this->entries($bytes)['e.txt'];
         $tampered                    = $zip64;
         $tampered[$data + $size - 1] = chr(ord($tampered[$data + $size - 1]) ^ 0x01);
         $this->assertFails($tampered, CorruptArchiveException::class, 'tampered or truncated');
@@ -183,7 +183,7 @@ final class ZipAesAuthenticatorTest extends TestCase
      *
      * @return array<string, array{0: int, 1: int}>
      */
-    private static function entries(string $bytes): array
+    private function entries(string $bytes): array
     {
         $entries = [];
         $offset  = 0;
@@ -202,7 +202,7 @@ final class ZipAesAuthenticatorTest extends TestCase
     /**
      * Rewrites the central directory in ZIP64 form (sizes and offsets in the 0x0001 extra field, ZIP64 end records).
      */
-    private static function toZip64(string $bytes): string
+    private function toZip64(string $bytes): string
     {
         $eocd = (int) strrpos($bytes, "PK\x05\x06");
         /** @var array{count: int, size: int, offset: int} $end */
@@ -226,7 +226,7 @@ final class ZipAesAuthenticatorTest extends TestCase
             . "PK\x05\x06" . pack('vvvvVVv', 0, 0, 0xFFFF, 0xFFFF, 0xFFFFFFFF, 0xFFFFFFFF, 0);
     }
 
-    private static function patch(string $bytes, int $at, string $with): string
+    private function patch(string $bytes, int $at, string $with): string
     {
         return substr($bytes, 0, $at) . $with . substr($bytes, $at + strlen($with));
     }

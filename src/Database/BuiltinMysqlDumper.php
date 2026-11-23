@@ -159,7 +159,7 @@ final class BuiltinMysqlDumper
         $coordinates = null;
         if ($recordBinlogCoordinates) {
             // PP-D2-H1: a chain's full must be a whole dump (mysqldump may exit 0 after an error with an empty file).
-            $incomplete = self::incompleteDump($target);
+            $incomplete = $this->incompleteDump($target);
             if ($incomplete !== null) {
                 throw new DumpFailedException($incomplete);
             }
@@ -301,7 +301,7 @@ final class BuiltinMysqlDumper
     /**
      * Why a coordinates dump cannot start a chain, or null: mysqldump's `-- Dump completed` trailer and a table.
      */
-    private static function incompleteDump(string $path): ?string
+    private function incompleteDump(string $path): ?string
     {
         $handle = @fopen($path, 'r');
         if ($handle === false) {

@@ -84,10 +84,10 @@ final class SigningVerifyFileTest extends TestCase
         self::assertTrue((new BackupSigner($full))->canSign());
 
         foreach ([
-            static fn () => new BackupSigner('short'),
-            static fn () => new BackupSigner(null, 'bad id'),
-            static fn () => new BackupSigner(null, 'k', ['k' => 'nope']),
-            static fn () => (new BackupSigner())->sign([]),
+            static fn (): BackupSigner => new BackupSigner('short'),
+            static fn (): BackupSigner => new BackupSigner(null, 'bad id'),
+            static fn (): BackupSigner => new BackupSigner(null, 'k', ['k' => 'nope']),
+            static fn (): array => (new BackupSigner())->sign([]),
         ] as $bad) {
             try {
                 $bad();

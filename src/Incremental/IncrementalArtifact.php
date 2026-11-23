@@ -46,7 +46,7 @@ final readonly class IncrementalArtifact
         if ($mode !== self::RAW && $mode !== self::FILTERED) {
             throw new InvalidArgumentException('The capture mode is raw or filtered.');
         }
-        if ($mode === self::FILTERED && $files !== [] && $events === null) {
+        if ($mode === self::FILTERED && $files !== [] && !$events instanceof CapturedBinlog) {
             throw new InvalidArgumentException('A filtered capture has an events file.');
         }
         if ($from->serverUuid !== $to->serverUuid) {

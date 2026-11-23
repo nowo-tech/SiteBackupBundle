@@ -187,7 +187,7 @@ final class PortableSetupDdlTest extends TestCase
     public function testLoadOrFailRefusesAnUnusableConnection(): void
     {
         $this->expectException(RuntimeException::class);
-        (new DoctrineDbalSetupProgressStorage(null))->loadOrFail();
+        (new DoctrineDbalSetupProgressStorage())->loadOrFail();
     }
 
     public function testChainWarnsOncePerRequestWithoutTheMessage(): void

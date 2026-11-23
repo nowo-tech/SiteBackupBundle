@@ -106,7 +106,7 @@ final class RemoteBackupPublisher
         try {
             $existing = $target->head($key);
         } catch (Throwable $e) {
-            throw self::wrap('head', $e);
+            throw $this->wrap('head', $e);
         }
         if ($existing instanceof RemoteObject) {
             throw new RemoteTargetException('The remote key already exists; publish each backup to a new key.');
@@ -122,7 +122,7 @@ final class RemoteBackupPublisher
         } catch (Throwable $e) {
             $this->deleteQuietly($target, $key);
 
-            throw self::wrap('upload', $e);
+            throw $this->wrap('upload', $e);
         } finally {
             fclose($stream);
         }
@@ -135,11 +135,11 @@ final class RemoteBackupPublisher
             throw $e;
         }
 
-        $sidecar = $this->openMemory(self::encode($this->sidecar($artifact)));
+        $sidecar = $this->openMemory($this->encode($this->sidecar($artifact)));
         try {
             $target->upload($sidecar['stream'], $key . self::SIDECAR_SUFFIX, $sidecar['size'], ['nowo-backup-id' => $artifact->getId()]);
         } catch (Throwable $e) {
-            throw self::wrap('sidecar upload', $e);
+            throw $this->wrap('sidecar upload', $e);
         } finally {
             fclose($sidecar['stream']);
         }
@@ -397,7 +397,7 @@ final class RemoteBackupPublisher
         try {
             $stored = $target->head($key);
         } catch (Throwable $e) {
-            throw self::wrap('head', $e);
+            throw $this->wrap('head', $e);
         }
 
         if (!$stored instanceof RemoteObject || $stored->sizeBytes !== $artifact->getSizeBytes()) {
@@ -421,7 +421,7 @@ final class RemoteBackupPublisher
         try {
             $stream = $target->openRead($key);
         } catch (Throwable $e) {
-            throw self::wrap('read', $e);
+            throw $this->wrap('read', $e);
         }
 
         try {
@@ -570,7 +570,7 @@ final class RemoteBackupPublisher
                 }
             }
         } catch (Throwable $e) {
-            throw self::wrap('list', $e);
+            throw $this->wrap('list', $e);
         }
     }
 
@@ -586,7 +586,7 @@ final class RemoteBackupPublisher
     /**
      * @param array<string, mixed> $data
      */
-    private static function encode(array $data): string
+    private function encode(array $data): string
     {
         try {
             return json_encode($data, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
@@ -610,7 +610,7 @@ final class RemoteBackupPublisher
         return ['stream' => $stream, 'size' => strlen($data)];
     }
 
-    private static function wrap(string $operation, Throwable $e): RemoteTargetException
+    private function wrap(string $operation, Throwable $e): RemoteTargetException
     {
         if ($e instanceof RemoteTargetException) {
             return $e;

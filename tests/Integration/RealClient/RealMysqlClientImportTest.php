@@ -132,7 +132,7 @@ final class RealMysqlClientImportTest extends TestCase
     {
         $parts   = (array) parse_url($url);
         $process = new Process(
-            [$client, '--host=' . (string) ($parts['host'] ?? '127.0.0.1'), '--port=' . (string) ($parts['port'] ?? 3306), '--user=' . rawurldecode((string) ($parts['user'] ?? '')), '--batch', '--skip-column-names', '--execute=' . $sql, '--', trim((string) ($parts['path'] ?? ''), '/')],
+            [$client, '--host=' . ($parts['host'] ?? '127.0.0.1'), '--port=' . ($parts['port'] ?? 3306), '--user=' . rawurldecode((string) ($parts['user'] ?? '')), '--batch', '--skip-column-names', '--execute=' . $sql, '--', trim((string) ($parts['path'] ?? ''), '/')],
             null,
             ['MYSQL_PWD' => rawurldecode((string) ($parts['pass'] ?? ''))],
         );
