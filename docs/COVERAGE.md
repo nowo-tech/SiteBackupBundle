@@ -16,7 +16,7 @@
 
 Run `make test-coverage` and read the summary from `coverage-php.txt` / Clover `coverage.xml`.
 
-Last remediation pass (2026-08-20): **~99.4%** Lines with 311 PHPUnit tests.
+CI Code Coverage job (2026-11-28): **99.10%** Lines (10557/10653) with 1821 PHPUnit tests.
 
 ## Justified residual branches
 
