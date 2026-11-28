@@ -31,7 +31,7 @@
         }
     ],
     "require": {
-        "php": ">=8.2 <8.6",
+        "php": ">=8.2 <8.7",
         "nowo-tech/form-kit-bundle": "^2.14",
         "nowo-tech/ui-kit-bundle": "^2.66",
         "psr/log": "^1.1 || ^2.0 || ^3.0",
