@@ -84,6 +84,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Documentation
+
+- README and `docs/COVERAGE.md` publish the CI coverage figure: 99.10% Lines (10557/10653), 1821 tests (was 99.4%).
+
 ### Changed
 
 - PHP 8.6: `composer.json` allows PHP below 8.7 (was below 8.6). CI adds a forward-compatibility workflow with a
